@@ -1,6 +1,8 @@
 # Core GameEngine code needs a game to compile, so g_googletest and z_googletest compile these sources.
 set(COREI_GOOGLETEST_SRC
     GoogleTestMain.cpp
+    GameEngine/AoC/AoCCostTest.cpp
+    GameEngine/AoC/AoCResourceBankTest.cpp
     GameEngine/Common/AsciiStringTest.cpp
     GameEngine/Common/INITest.cpp
     Libraries/Compression/CompressionManagerTest.cpp
