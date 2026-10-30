@@ -22,11 +22,14 @@
 #include "PreRTS.h"	// This must go first in EVERY cpp file in the GameEngine
 
 #include "AoC/AoCHarness.h"
+#include "AoC/AoCResourceBank.h"
+#include "AoC/AoCRules.h"
 #include "AoC/AoCSimRate.h"
 
 #include "Common/Energy.h"
 #include "Common/FileSystem.h"
 #include "Common/GameEngine.h"
+#include "Common/GameState.h"
 #include "Common/GlobalData.h"
 #include "Common/KindOf.h"
 #include "Common/MessageStream.h"
@@ -83,6 +86,11 @@ struct HarnessState
 
 	char aiLogDir[1024];
 	Bool aiLogDirCreated;
+
+	UnsignedInt saveAtFrame;	///< F1: 0 when unused
+	char saveName[256];
+	Bool saveRequested;
+	Bool saveDone;
 
 	Bool sawCRCMismatch;
 	UnsignedInt mismatchFrame;
@@ -357,6 +365,16 @@ void writeAiLog( UnsignedInt frame )
 		row.add("units_built", p->getScoreKeeper()->getTotalUnitsBuilt());
 		row.add("buildings_built", p->getScoreKeeper()->getTotalBuildingsBuilt());
 		row.add("last_structures", lastStructures);
+		// AoC F1: bank columns, one per defined resource type plus the cash equivalent; absent while the feature is off
+		if (AoCRules::enabled())
+		{
+			for (Int t = 0; t < TheAoCRules->getTypeCount(); ++t)
+			{
+				std::string column = "bank_" + std::string(TheAoCRules->getTypeName(t).str());
+				row.add(column.c_str(), p->getAoCBank()->count(t));
+			}
+			row.add("cash_equivalent", p->getAoCBank()->cashEquivalent());
+		}
 
 		std::string path = dir + fmt("ai_%d.csv", (int)p->getPlayerIndex());
 		FILE *f = fopen(path.c_str(), "a");
@@ -474,6 +492,19 @@ Int AoCHarness::parseAiLog( char *args[], int num )
 		copyArg(s.aiLogDir, sizeof(s.aiLogDir), args[1]);
 		s.anyFlag = TRUE;
 		return 2;
+	}
+	return 1;
+}
+
+Int AoCHarness::parseSaveAtFrame( char *args[], int num )
+{
+	if (num > 2)
+	{
+		HarnessState &s = state();
+		s.saveAtFrame = (UnsignedInt)strtoul(args[1], nullptr, 10);
+		copyArg(s.saveName, sizeof(s.saveName), args[2]);
+		s.anyFlag = TRUE;
+		return 3;
 	}
 	return 1;
 }
@@ -631,6 +662,12 @@ void AoCHarness::onLogicFrame( UnsignedInt frame, Bool crcGenerated, UnsignedInt
 		writeTimingLog(frame);
 	}
 
+	if (s.saveAtFrame != 0 && frame >= s.saveAtFrame && !s.saveRequested)
+	{
+		s.saveRequested = TRUE;	// the save itself happens in pollQuit, outside the logic update
+		logLine("saveAtFrame %u reached", frame);
+	}
+
 	if (s.quitAtFrame != 0 && frame >= s.quitAtFrame && !s.quitRequested)
 	{
 		s.quitRequested = TRUE;
@@ -698,6 +735,20 @@ void AoCHarness::pollQuit()
 		if (s.windowStartNs == 0)
 			s.windowStartNs = nowNs();
 	}
+
+	// F1: -saveAtFrame, through the save menu's path, between two logic frames like the menu does.
+	if (s.saveRequested && !s.saveDone && inRealGame() && TheGameState)
+	{
+		s.saveDone = TRUE;
+		AsciiString filename = s.saveName;
+		if (!filename.endsWithNoCase(".sav"))
+			filename.concat(".sav");
+		UnicodeString desc;
+		desc.format(L"AoC harness save at frame %u", TheGameLogic->getFrame());
+		SaveResult result = TheGameState->saveGame(filename, desc, SAVE_FILE_TYPE_NORMAL);
+		logLine("saveAtFrame: saveGame('%s') at logic frame %u returned %d", filename.str(), TheGameLogic->getFrame(), (int)result.saveCode);
+	}
+
 	if (s.quitAtFrame == 0 || s.quitDone)
 		return;
 

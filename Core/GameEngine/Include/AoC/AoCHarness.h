@@ -33,7 +33,12 @@
 //   -crcLog <file>                  Append one "frame,crc" line per logic CRC interval, from live games
 //                                   and replays alike (the stock GameLogic::getCRC values).
 //   -aiLog <dir>                    Every 900 logic frames write one CSV row per AI player to
-//                                   <dir>/ai_<playerIndex>.csv. Logic reads only.
+//                                   <dir>/ai_<playerIndex>.csv. Logic reads only. With resource types
+//                                   defined (F1) the row gains bank_<Type> columns and cash_equivalent.
+//   -saveAtFrame <N> <name>         F1: write the stock save game <name>.sav (the save menu's path,
+//                                   TheGameState->saveGame) once logic frame N has run, from the engine
+//                                   loop. Load it with the stock -loadsave <name>.sav at the same
+//                                   -simrate (a save made at the other rate is refused, exit code 5).
 //   -simrate <30|60>                Simulation rate for this process (D11 F15), overriding the
 //                                   Options.ini SimulationRate key. Any other value exits with code 3.
 //
@@ -57,6 +62,7 @@ public:
 	static Int parseCrcLog( char *args[], int num );
 	static Int parseAiLog( char *args[], int num );
 	static Int parseSimRate( char *args[], int num );
+	static Int parseSaveAtFrame( char *args[], int num );	// AoC F1
 
 	/// TRUE when any harness flag was given on the command line.
 	static Bool isActive();
@@ -68,7 +74,7 @@ public:
 	static void onLogicFrame( UnsignedInt frame, Bool crcGenerated, UnsignedInt crc );
 	/// RecorderClass::handleCRCMessage, where a replay CRC mismatch is reported.
 	static void onCRCMismatch( UnsignedInt frame, UnsignedInt inGameCRC, UnsignedInt replayCRC );
-	/// GameEngine::execute, after each update(): performs the clean quit requested by -quitAtFrame.
+	/// GameEngine::execute, after each update(): writes the save requested by -saveAtFrame, performs the clean quit requested by -quitAtFrame.
 	static void pollQuit();
 	/// GameMain, before returning: maps the harness state to the process exit code.
 	static int finalExitCode( int exitcode );
