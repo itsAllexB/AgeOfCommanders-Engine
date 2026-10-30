@@ -21,6 +21,7 @@
 #include "GameClient/InGameUI.h"
 #include "GameClient/MessageBox.h"
 #include "GameClient/SaveLoadFeedback.h"
+#include "AoC/AoCSimRate.h"
 
 static UnicodeString getUnicodeSavePath( const AsciiString &filename )
 {
@@ -64,5 +65,10 @@ void presentLoadResult( SaveCode result, const AsciiString &filename )
 		UnicodeString msg;
 		msg.format( TheGameText->fetch("GUI:ErrorLoadingGame"), getUnicodeSavePath(filename).str() );
 		MessageBoxOk( TheGameText->fetch("GUI:Error"), msg, nullptr );
+	}
+	else if( result == SC_AOC_SIMRATE_MISMATCH )
+	{
+		// AoC @hook 30/10/2026 The save was made at the other simulation rate (D11 F15).
+		MessageBoxOk( TheGameText->fetch("GUI:Error"), AoCSimRate::mismatchMessage("This saved game", AoCSimRate::lastSaveMismatchRate()), nullptr );
 	}
 }

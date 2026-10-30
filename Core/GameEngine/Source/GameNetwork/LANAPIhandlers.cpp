@@ -383,6 +383,18 @@ void LANAPI::handleRequestJoin( LANMessage *msg, UnsignedInt senderIP )
 			}
 #endif
 
+			// AoC @hook 30/10/2026 A client at the other simulation rate cannot share this lockstep game: refused like a CRC mismatch (D11 F15).
+			if (canJoin && msg->GameToJoin.aocSimRate != LOGICFRAMES_PER_SECOND)
+			{
+				DEBUG_LOG(("LANAPI::handleRequestJoin - join denied because of a simulation rate mismatch. Rates are them/us %d/%d",
+					msg->GameToJoin.aocSimRate, LOGICFRAMES_PER_SECOND));
+				reply.messageType = LANMessage::MSG_JOIN_DENY;
+				reply.GameNotJoined.reason = LANAPIInterface::RET_AOC_SIMRATE_MISMATCH;
+				reply.GameNotJoined.gameIP = replyGameIP;
+				reply.GameNotJoined.playerIP = senderIP;
+				canJoin = false;
+			}
+
 // TheSuperHackers @tweak Disables the duplicate serial check
 #if 0
 			// check for a duplicate serial

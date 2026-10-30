@@ -150,6 +150,7 @@ enum SaveCode CPP_11(: Int)
 	SC_UNKNOWN_BLOCK,
 	SC_INVALID_DATA,
 	SC_ERROR,
+	SC_AOC_SIMRATE_MISMATCH,	///< AoC F15: the save was made at the other simulation rate (Core SaveLoadFeedback.cpp names it)
 };
 
 struct SaveResult

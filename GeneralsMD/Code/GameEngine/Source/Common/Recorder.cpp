@@ -46,6 +46,7 @@
 #include "GameNetwork/networkutil.h"
 #include "GameLogic/GameLogic.h"
 #include "AoC/AoCHarness.h"
+#include "AoC/AoCSimRate.h"
 #include "Common/RandomValue.h"
 #include "Common/CRCDebug.h"
 #include "Common/OptionPreferences.h"
@@ -1220,6 +1221,15 @@ void RecorderClass::loadQueuedReplay()
 		return;
 	}
 
+	// AoC @hook 30/10/2026 Refuse a replay recorded at the other simulation rate before playbackFile reports a generic failure (D11 F15).
+	if (gameInfo.getAoCSimRate() != LOGICFRAMES_PER_SECOND)
+	{
+		AoCSimRate::logMismatch("This replay", gameInfo.getAoCSimRate());
+		MessageBoxOk(TheGameText->FETCH_OR_SUBSTITUTE("GUI:ReplayLoadFailedTitle", L"REPLAY CANNOT BE LOADED"), AoCSimRate::mismatchMessage("This replay", gameInfo.getAoCSimRate()), nullptr);
+		AoCHarness::onSimRateRefusal();
+		return;
+	}
+
 	if (!playbackFile(filename))
 	{
 		DEBUG_LOG(("Failed to play replay '%s'", filename.str()));
@@ -1245,6 +1255,21 @@ Bool RecorderClass::playbackFile(AsciiString filename)
 	Bool success = readReplayHeader( header, filename, TRUE );
 	if (!success)
 	{
+		return FALSE;
+	}
+
+	// AoC @hook 30/10/2026 A replay plays only at the simulation rate it was recorded at; the frame counts differ otherwise (D11 F15).
+	if (m_gameInfo.getAoCSimRate() != LOGICFRAMES_PER_SECOND)
+	{
+		const Int replayRate = m_gameInfo.getAoCSimRate();
+		AoCSimRate::logMismatch("This replay", replayRate);
+		m_gameInfo.endGame();
+		m_gameInfo.reset();
+		m_file->close();
+		m_file = nullptr;
+		if (!TheGlobalData->m_headless && TheGameText)
+			MessageBoxOk(TheGameText->FETCH_OR_SUBSTITUTE("GUI:ReplayLoadFailedTitle", L"REPLAY CANNOT BE LOADED"), AoCSimRate::mismatchMessage("This replay", replayRate), nullptr);
+		AoCHarness::onSimRateRefusal();
 		return FALSE;
 	}
 

@@ -60,13 +60,13 @@ FrameMetrics::~FrameMetrics() {
 }
 
 void FrameMetrics::init() {
-	m_averageFps = 30;
+	m_averageFps = LOGICFRAMES_PER_SECOND;	// AoC @tweak 30/10/2026 simulation rate, 30 or 60 (D11 F15)
 	m_averageLatency = (Real)0.2;
 	m_minimumCushion = -1;
 
 	UnsignedInt i = 0;
 	for (; i < TheGlobalData->m_networkFPSHistoryLength; ++i) {
-		m_fpsList[i] = 30.0;
+		m_fpsList[i] = (Real)LOGICFRAMES_PER_SECOND;
 	}
 	m_fpsListIndex = 0;
 	for (i = 0; i < TheGlobalData->m_networkLatencyHistoryLength; ++i) {

@@ -329,6 +329,7 @@ void GameInfo::reset()
 	m_mapSize = 0;
   m_superweaponRestriction = 0;
   m_startingCash = TheGlobalData->m_defaultStartingCash;
+	m_aocSimRate = LOGICFRAMES_PER_SECOND;	// AoC @feature 30/10/2026 this machine's rate until an options string says otherwise (D11 F15)
 
 	for (Int i=0; i<MAX_SLOTS; ++i)
 	{
@@ -999,13 +1000,14 @@ static AsciiString buildGameInfoAsciiString(const GameInfo& game, const AsciiStr
 	}
 
 	AsciiString optionsString;
+	// AoC @feature 30/10/2026 "AF=" carries the simulation rate next to the CRC interval (D11 F15); stock parsers ignore unknown keys.
 #if RTS_GENERALS
-	optionsString.format("M=%2.2x%s;MC=%X;MS=%d;SD=%d;C=%d;", game.getMapContentsMask(), percentEncodeMapName(newMapName).str(),
-		game.getMapCRC(), game.getMapSize(), game.getSeed(), game.getCRCInterval());
+	optionsString.format("M=%2.2x%s;MC=%X;MS=%d;SD=%d;C=%d;AF=%d;", game.getMapContentsMask(), percentEncodeMapName(newMapName).str(),
+		game.getMapCRC(), game.getMapSize(), game.getSeed(), game.getCRCInterval(), game.getAoCSimRate());
 #else
-	optionsString.format("US=%d;M=%2.2x%s;MC=%X;MS=%d;SD=%d;C=%d;SR=%u;SC=%u;O=%c;", game.getUseStats(), game.getMapContentsMask(), percentEncodeMapName(newMapName).str(),
+	optionsString.format("US=%d;M=%2.2x%s;MC=%X;MS=%d;SD=%d;C=%d;SR=%u;SC=%u;O=%c;AF=%d;", game.getUseStats(), game.getMapContentsMask(), percentEncodeMapName(newMapName).str(),
 		game.getMapCRC(), game.getMapSize(), game.getSeed(), game.getCRCInterval(), game.getSuperweaponRestriction(),
-		game.getStartingCash().countMoney(), game.oldFactionsOnly() ? 'Y' : 'N' );
+		game.getStartingCash().countMoney(), game.oldFactionsOnly() ? 'Y' : 'N', game.getAoCSimRate() );
 #endif
 
 	//add player info for each slot
@@ -1183,6 +1185,7 @@ Bool ParseAsciiStringToGameInfo(GameInfo *game, AsciiString options)
 	Int useStats = TRUE;
   Money startingCash = TheGlobalData->m_defaultStartingCash;
   UnsignedShort restriction = 0; // Always the default
+	Int simRate = BaseFps;	// AoC F15: a string without "AF=" is a stock 30 Hz game
 
 	Bool sawMap = FALSE;
 	Bool sawMapCRC = FALSE;
@@ -1318,6 +1321,11 @@ Bool ParseAsciiStringToGameInfo(GameInfo *game, AsciiString options)
       oldFactionsOnly = ( val.compareNoCase( "Y" ) == 0 );
       sawOldFactions = TRUE;
     }
+		else if (key.compare("AF") == 0)
+		{
+			// AoC @feature 30/10/2026 simulation rate (D11 F15)
+			simRate = atoi(val.str());
+		}
 		else if (key.getLength() == 1 && *key.str() == slotListID)
 		{
 			sawSlotlist = true;
@@ -1721,6 +1729,7 @@ Bool ParseAsciiStringToGameInfo(GameInfo *game, AsciiString options)
 		game->setSuperweaponRestriction(restriction);
 		game->setStartingCash(startingCash);
 		game->setOldFactionsOnly(oldFactionsOnly);
+		game->setAoCSimRate(simRate);
 
 		return true;
 	}

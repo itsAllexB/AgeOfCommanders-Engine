@@ -40,6 +40,7 @@
 #include "Common/AudioHandleSpecialValues.h"
 #include "Common/BuildAssistant.h"
 #include "AoC/AoCHarness.h"
+#include "AoC/AoCSimRate.h"
 #include "Common/CRCDebug.h"
 #include "Common/FramePacer.h"
 #include "Common/GameAudio.h"
@@ -5240,22 +5241,35 @@ void GameLogic::prepareLogicForObjectLoad()
 	* 9: Added m_rankPointsToAddAtGameStart, or else on a load game, your RestartGame button will forget your exp
   * 10: xfer m_superweaponRestriction
   * 11: TheSuperHackers @fix Save objects in reverse order so they load in correct order
+	* 12: AoC F15: the simulation rate the game was saved at (D11 F15); both the retail-compatible and the
+	*     reverse-order save now write version 12, the reverse order itself stays gated on RETAIL_COMPATIBLE_XFER_SAVE
 	*/
 // ------------------------------------------------------------------------------------------------
 void GameLogic::xfer( Xfer *xfer )
 {
 
 	// version
-#if RETAIL_COMPATIBLE_XFER_SAVE
-	const XferVersion currentVersion = 10;
-#else
-	const XferVersion currentVersion = 11;
-#endif
+	const XferVersion currentVersion = 12;
 	XferVersion version = currentVersion;
 	xfer->xferVersion( &version, currentVersion );
 
 	// logic frame number
 	xfer->xferUnsignedInt( &m_frame );
+
+	// AoC @feature 30/10/2026 Simulation rate of the saved game (D11 F15). The frame counts in every timer below are
+	// in frames of that rate, so a save loads only at the rate it was made at.
+	if (version >= 12)
+	{
+		Int simRate = LOGICFRAMES_PER_SECOND;
+		xfer->xferInt( &simRate );
+		if (xfer->getXferMode() == XFER_LOAD && simRate != LOGICFRAMES_PER_SECOND)
+		{
+			AoCSimRate::logMismatch("This saved game", simRate);
+			AoCSimRate::noteSaveMismatch(simRate);
+			AoCHarness::onSimRateRefusal();
+			throw XFER_INVALID_VERSION;
+		}
+	}
 
 	//
 	// note that we do not do the id counter here, we did it in the game state block because

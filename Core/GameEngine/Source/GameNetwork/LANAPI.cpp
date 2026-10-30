@@ -749,6 +749,7 @@ void LANAPI::RequestGameJoin( LANGameInfo *game, UnsignedInt ip /* = 0 */ )
 	msg.GameToJoin.gameIP = game->getSlot(0)->getIP();
 	msg.GameToJoin.exeCRC = TheGlobalData->m_exeCRC;
 	msg.GameToJoin.iniCRC = TheGlobalData->m_iniCRC;
+	msg.GameToJoin.aocSimRate = LOGICFRAMES_PER_SECOND;	// AoC @feature 30/10/2026 (D11 F15)
 
 	AsciiString s;
 	GetStringFromRegistry("\\ergc", "", s);

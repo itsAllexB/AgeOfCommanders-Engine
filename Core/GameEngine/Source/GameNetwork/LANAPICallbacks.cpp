@@ -89,6 +89,9 @@ UnicodeString LANAPIInterface::getErrorStringFromReturnType( ReturnType ret )
 			return TheGameText->fetch("LAN:ErrorBusy");
 		case RET_SERIAL_DUPE:
 			return TheGameText->fetch("WOL:ChatErrorSerialDup");
+		case RET_AOC_SIMRATE_MISMATCH:
+			// AoC @feature 30/10/2026 (D11 F15)
+			return TheGameText->FETCH_OR_SUBSTITUTE("LAN:ErrorAoCSimRateMismatch", L"The host runs the simulation at a different rate (30 or 60 Hz). Set SimulationRate in Options.ini to the host's rate and restart.");
 		default:
 			return TheGameText->fetch("LAN:ErrorUnknown");
 	}

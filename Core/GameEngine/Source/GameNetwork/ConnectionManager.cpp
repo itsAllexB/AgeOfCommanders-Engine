@@ -1381,7 +1381,8 @@ void ConnectionManager::updateRunAhead(Int oldRunAhead, Int frameRate, Bool didS
 			}
 
 			// TheSuperHackers @info this clamps the logic time scale fps in network games
-			minFps = clamp<Int>(MIN_LOGIC_FRAMES, minFps, TheGlobalData->m_framesPerSecondLimit);
+			// AoC @tweak 30/10/2026 The render cap can sit below a 60 Hz simulation rate; the logic rate still goes up to the rate (D11 F15).
+			minFps = clamp<Int>(MIN_LOGIC_FRAMES, minFps, max(TheGlobalData->m_framesPerSecondLimit, LOGICFRAMES_PER_SECOND));
 			DEBUG_LOG_LEVEL(DEBUG_LEVEL_NET, ("ConnectionManager::updateRunAhead - minFps after adjustment is %d", minFps));
 
 			// TheSuperHackers @bugfix Mauller 21/08/2025 calculate the runahead so it always follows the latency
@@ -1454,8 +1455,8 @@ void ConnectionManager::updateRunAhead(Int oldRunAhead, Int frameRate, Bool didS
 			if (newMinFps == minFps) {
 				newMinFps = minFps + 1;
 			}
-			if (newMinFps > 30) {
-				newMinFps = 30; // Cap FPS to 30.
+			if (newMinFps > LOGICFRAMES_PER_SECOND) {
+				newMinFps = LOGICFRAMES_PER_SECOND; // Cap FPS to the simulation rate (AoC F15: 30 or 60).
 			}
 			msg2->setRunAhead(newRunAhead);
 			msg2->setFrameRate(newMinFps);
