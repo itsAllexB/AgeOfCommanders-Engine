@@ -34,6 +34,7 @@
 #include "WWMath/wwmath.h"
 #include "Common/INI.h"
 #include "Common/INIException.h"
+#include "AoC/AoCRules.h"	// AoC @hook F1: the AoCResourceType block
 
 #include "Common/DamageFX.h"
 #include "Common/file.h"
@@ -96,6 +97,7 @@ static const BlockParse theTypeTable[] =
 {
 	{ "AIData",                         INI::parseAIDataDefinition },
 	{ "Animation",                      INI::parseAnim2DDefinition },
+	{ "AoCResourceType",                AoCRules::parseResourceTypeDefinition },	// AoC @feature F1
 	{ "Armor",                          INI::parseArmorDefinition },
 	{ "AudioEvent",                     INI::parseAudioEventDefinition },
 	{ "AudioSettings",                  INI::parseAudioSettingsDefinition },

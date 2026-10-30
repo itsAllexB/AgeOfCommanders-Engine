@@ -119,6 +119,7 @@ const FieldParse UpgradeTemplate::m_upgradeFieldParseTable[] =
 	{ "Type",								INI::parseIndexList,			TheUpgradeTypeNames, offsetof( UpgradeTemplate, m_type ) },
 	{ "BuildTime",					INI::parseReal,						nullptr, offsetof( UpgradeTemplate, m_buildTime ) },
 	{ "BuildCost",					INI::parseInt,						nullptr, offsetof( UpgradeTemplate, m_cost ) },
+	{ "AoCCost",						UpgradeTemplate::parseAoCCost,	nullptr, offsetof( UpgradeTemplate, m_aocCost ) },	// AoC @feature F1
 	{ "ButtonImage",				INI::parseAsciiString,		nullptr, offsetof( UpgradeTemplate, m_buttonImageName ) },
 	{ "ResearchSound",			INI::parseAudioEventRTS,	nullptr, offsetof( UpgradeTemplate, m_researchSound ) },
 	{ "UnitSpecificSound",	INI::parseAudioEventRTS,	nullptr, offsetof( UpgradeTemplate, m_unitSpecificSound ) },
@@ -175,6 +176,31 @@ Int UpgradeTemplate::calcCostToBuild( Player *player ) const
 	///@todo modify this by any player handicaps
 	return m_cost;
 
+}
+
+//-------------------------------------------------------------------------------------------------
+// AoC @feature F1: the full cost vector; cash is calcCostToBuild
+//-------------------------------------------------------------------------------------------------
+void UpgradeTemplate::calcAoCCost( Player *player, AoCCost& cost ) const
+{
+	cost = m_aocCost;
+	cost.amount[AOC_RESOURCE_CASH] = (UnsignedInt)calcCostToBuild( player );
+}
+
+//-------------------------------------------------------------------------------------------------
+// AoC @feature F1: "AoCCost = Steel:50 Cash:250"; Cash:n writes BuildCost (m_cost), the one cash store
+//-------------------------------------------------------------------------------------------------
+/*static*/ void UpgradeTemplate::parseAoCCost( INI* ini, void *instance, void *store, const void* /*userData*/ )
+{
+	UpgradeTemplate* self = (UpgradeTemplate*)instance;
+	AoCCost* cost = (AoCCost*)store;
+	UnsignedInt present = 0;
+	AoCCost::parseFromINI( ini, *cost, &present );
+	if (present & (1u << AOC_RESOURCE_CASH))
+	{
+		self->m_cost = (Int)cost->amount[AOC_RESOURCE_CASH];
+		cost->amount[AOC_RESOURCE_CASH] = 0;
+	}
 }
 
 //-------------------------------------------------------------------------------------------------
@@ -441,9 +467,10 @@ Bool UpgradeCenter::canAffordUpgrade( Player *player, const UpgradeTemplate *upg
 	if( player == nullptr || upgradeTemplate == nullptr )
 		return FALSE;
 
-	// money check
-	Money *money = player->getMoney();
-	if( money->countMoney() < upgradeTemplate->calcCostToBuild( player ) )
+	// money check (AoC @hook F1: the whole cost vector; a cash-only upgrade compares as before)
+	AoCCost cost;
+	upgradeTemplate->calcAoCCost( player, cost );
+	if( !player->getAoCBank()->canAfford( cost ) )
 	{
 		//Post reason why we can't make upgrade!
 		if( displayReason )

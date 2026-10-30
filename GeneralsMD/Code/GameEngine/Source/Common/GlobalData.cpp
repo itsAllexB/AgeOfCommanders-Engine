@@ -523,6 +523,8 @@ GlobalData* GlobalData::m_theOriginal = nullptr;
 	{ "StandardPublicBone", INI::parseAsciiStringVectorAppend, nullptr, offsetof(GlobalData, m_standardPublicBones) },
 	{ "ShowMetrics",								INI::parseBool,				   nullptr,		offsetof( GlobalData, m_showMetrics ) },
   { "DefaultStartingCash",				Money::parseMoneyAmount, nullptr,		offsetof( GlobalData, m_defaultStartingCash ) },
+  { "AoCStartingStock",						AoCCost::parseAoCCostField, nullptr, offsetof( GlobalData, m_aocStartingStock ) },	// AoC @feature F1
+  { "AoCRefundPerMille",					INI::parseInt,					nullptr,		offsetof( GlobalData, m_aocRefundPerMille ) },	// AoC @feature F1
 
 // NOTE: m_doubleClickTimeMS is still in use, but we disallow setting it from the GameData.ini file. It is now set in the constructor according to the windows parameter.
 //	{ "DoubleClickTimeMS",									INI::parseUnsignedInt,			nullptr, offsetof( GlobalData, m_doubleClickTimeMS ) },
@@ -980,6 +982,7 @@ GlobalData::GlobalData()
 	m_maxShakeRange = 150.f;
 
 	m_sellPercentage = 1.0f;
+	m_aocRefundPerMille = 500;	// AoC @feature F1
 	m_baseRegenHealthPercentPerSecond = 0.0f;
 	m_baseRegenDelay = 0;
 

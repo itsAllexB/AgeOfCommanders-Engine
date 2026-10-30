@@ -37,6 +37,7 @@
 #include "GameClient/Color.h"
 #include "Common/STLTypedefs.h"
 #include "Common/Money.h"
+#include "AoC/AoCCost.h"	// AoC @feature F1
 
 // FORWARD DECLARATIONS ///////////////////////////////////////////////////////////////////////////
 struct FieldParse;
@@ -520,6 +521,8 @@ public:
 
 	Bool  m_showMetrics;								///< whether or not to show the metrics.
 	Money m_defaultStartingCash;				///< The amount of cash a player starts with by default.
+	AoCCost m_aocStartingStock;					///< AoC @feature F1: AoCStartingStock, deposited with the lobby starting cash
+	Int m_aocRefundPerMille;						///< AoC @feature F1: AoCRefundPerMille, share of the non-cash cost refunded on sell (default 500)
 
 	Bool m_debugShowGraphicalFramerate;		///< Whether or not to show the graphical framerate bar.
 

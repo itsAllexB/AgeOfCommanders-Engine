@@ -52,6 +52,7 @@
 #include "Common/KindOf.h"
 #include "Common/MissionStats.h"
 #include "Common/Money.h"
+#include "AoC/AoCResourceBank.h"	// AoC @feature F1
 #include "Common/Science.h"
 #include "Common/UnicodeString.h"
 #include "Common/NameKeyGenerator.h"
@@ -237,6 +238,10 @@ public:
 	/// return the Player's Money sub-object
 	Money *getMoney() { return &m_money; }
 	const Money *getMoney() const { return &m_money; }
+
+	/// AoC @feature F1: the resource bank; cash is proxied through getMoney()
+	AoCResourceBank *getAoCBank() { return &m_aocBank; }
+	const AoCResourceBank *getAoCBank() const { return &m_aocBank; }
 
 	UnsignedInt getSupplyBoxValue();///< Many things can affect the value of a crate, but at heart it is a GlobalData ratio.
 
@@ -751,6 +756,7 @@ private:
 	AsciiString									m_baseSide;											///< the base side, GLA, USA, or China
 	PlayerType									m_playerType;									///< human/computer control
 	Money												m_money;											///< Player's current wealth
+	AoCResourceBank							m_aocBank;										///< AoC @feature F1: typed resources; cash proxied through m_money
 	Upgrade*										m_upgradeList;								///< list of all upgrades this player has
 	Int													m_radarCount;									///< # of facilities that have a radar under the players control
 	Int													m_disableProofRadarCount;			///< # of disable proof radars.  A disable proof one will be in both refcounts

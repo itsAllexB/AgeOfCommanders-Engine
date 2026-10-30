@@ -58,6 +58,7 @@
 #include "Common/Science.h"
 #include "Common/FunctionLexicon.h"
 #include "AoC/AoCHarness.h"
+#include "AoC/AoCRules.h"
 #include "Common/CommandLine.h"
 #include "Common/DamageFX.h"
 #include "Common/MultiplayerSettings.h"
@@ -293,6 +294,7 @@ GameEngine::~GameEngine()
 	reset();
 
 	TheSubsystemList->shutdownAll();
+	TheAoCRules = nullptr;	// AoC @hook F1: deleted by shutdownAll
 	delete TheSubsystemList;
 	TheSubsystemList = nullptr;
 
@@ -478,6 +480,9 @@ void GameEngine::init()
 		TheArchiveFileSystem->loadMods();
 
 		DEBUG_ASSERTCRASH(TheWritableGlobalData,("TheWritableGlobalData expected to be created"));
+		// AoC @hook F1: resource types first, so GameData.ini (AoCStartingStock) and the templates (AoCCost) can name them
+		initSubsystem(TheAoCRules, "TheAoCRules", MSGNEW("GameEngineSubsystem") AoCRules, nullptr);
+		TheAoCRules->loadDefinitions(&xferCRC);
 	initSubsystem(TheWritableGlobalData, "TheWritableGlobalData", TheWritableGlobalData, &xferCRC, "Data\\INI\\Default\\GameData", "Data\\INI\\GameData");
 	TheWritableGlobalData->parseCustomDefinition();
 

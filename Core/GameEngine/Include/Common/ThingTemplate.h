@@ -31,6 +31,7 @@
 
 // INCLUDES ///////////////////////////////////////////////////////////////////////////////////////
 #include "Lib/BaseType.h"
+#include "AoC/AoCCost.h"	// AoC @feature F1
 
 #include "Common/AudioEventRTS.h"
 #include "Common/FileSystem.h"
@@ -590,6 +591,11 @@ public:
 	/// calculate how much money it will take the given player to build this unit
 	Int calcCostToBuild( const Player* player) const;
 
+	/// AoC @feature F1: the full cost vector; cash is calcCostToBuild, the other types take the same modifiers
+	void calcAoCCost( const Player* player, AoCCost& cost ) const;
+	/// AoC @feature F1: the AoCCost as written in INI, without player modifiers (tools and tests)
+	const AoCCost& friend_getAoCCost() const { return m_aocCost; }
+
 	/// Used only by Skirmish AI. Everyone else should call calcCostToBuild.
 	Int friend_getBuildCost() const { return m_buildCost; }
 
@@ -647,6 +653,7 @@ protected:
 	static void parseArmorTemplateSet( INI* ini, void *instance, void *store, const void* /*userData*/ );
 	static void parseWeaponTemplateSet( INI* ini, void *instance, void *store, const void* /*userData*/ );
 	static void parsePrerequisites( INI* ini, void *instance, void * /*store*/, const void* /*userData*/ );
+	static void parseAoCCost( INI* ini, void *instance, void *store, const void* /*userData*/ );	// AoC @feature F1
 	static void parseModuleName(INI* ini, void *instance, void* /*store*/, const void* userData);
 	static void parseIntList(INI* ini, void *instance, void* store, const void* userData);
 
@@ -751,6 +758,7 @@ private:
 	UnsignedShort		m_templateID;									///< id for net (etc.) transmission purposes
 	UnsignedShort		m_buildCost;									///< money to build (0 == not buildable)
 	UnsignedShort		m_refundValue;								///< custom resale value, if sold. (0 == use default)
+	AoCCost					m_aocCost;										///< AoC @feature F1: non-cash build cost (AoCCost key; Cash:n writes m_buildCost)
 	UnsignedShort		m_threatValue;								///< Threat map info
 	UnsignedShort		m_maxSimultaneousOfType;			///< max simultaneous of this unit we can have (per player) at one time. (0 == unlimited)
 

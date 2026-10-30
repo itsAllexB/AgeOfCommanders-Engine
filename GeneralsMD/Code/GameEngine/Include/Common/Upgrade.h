@@ -33,6 +33,7 @@
 #include "Common/AudioEventRTS.h"
 #include "Common/INI.h"
 #include "Common/Snapshot.h"
+#include "AoC/AoCCost.h"	// AoC @feature F1
 #include "Common/BitFlags.h"
 
 // FORWARD REFERENCES /////////////////////////////////////////////////////////////////////////////
@@ -168,6 +169,7 @@ public:
 
 	Int calcTimeToBuild( Player *player ) const;			///< time in logic frames it will take this player to "build" this UpgradeTemplate
 	Int calcCostToBuild( Player *player ) const;			///< calc the cost to build this upgrade
+	void calcAoCCost( Player *player, AoCCost& cost ) const;	///< AoC @feature F1: the full cost vector (cash = calcCostToBuild)
 
 	// field access
 	void setUpgradeName( const AsciiString& name ) { m_name = name; }
@@ -187,6 +189,7 @@ public:
 
 	/// INI parsing
 	const FieldParse *getFieldParse() const { return m_upgradeFieldParseTable; }
+	static void parseAoCCost( INI* ini, void *instance, void *store, const void* userData );	///< AoC @feature F1
 
 	// friend access methods for the UpgradeCenter ONLY
 	void friend_setNext( UpgradeTemplate *next ) { m_next = next; }
@@ -206,6 +209,7 @@ protected:
 	AsciiString m_displayNameLabel;			///< String manager label for UI display name
 	Real m_buildTime;										///< database # for how long it takes to "build" this
 	Int m_cost;													///< cost for production
+	AoCCost m_aocCost;									///< AoC @feature F1: non-cash cost (AoCCost key; Cash:n writes m_cost)
 	UpgradeMaskType m_upgradeMask;			///< Unique bitmask for this upgrade template
 	AudioEventRTS	m_researchSound;			///< Sound played when upgrade researched.
 	AudioEventRTS	m_unitSpecificSound;	///< Secondary sound played when upgrade researched.

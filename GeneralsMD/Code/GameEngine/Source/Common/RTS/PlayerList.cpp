@@ -45,6 +45,7 @@
 #include "PreRTS.h"	// This must go first in EVERY cpp file in the GameEngine
 
 #include "Common/Errors.h"
+#include "AoC/AoCRules.h"	// AoC @hook F1
 #include "Common/DataChunk.h"
 #include "Common/GameState.h"
 #include "Common/GlobalData.h"
@@ -466,15 +467,20 @@ void PlayerList::crc( Xfer *xfer )
 // ------------------------------------------------------------------------------------------------
 /** Xfer Method
 	* Version Info:
-	* 1: Initial version */
+	* 1: Initial version
+	* 2: AoC F1: TheAoCRules (the resource type names) ahead of the players, so bank amounts load by name */
 // ------------------------------------------------------------------------------------------------
 void PlayerList::xfer( Xfer *xfer )
 {
 
 	// version
-	XferVersion currentVersion = 1;
+	XferVersion currentVersion = 2;
 	XferVersion version = currentVersion;
 	xfer->xferVersion( &version, currentVersion );
+
+	// AoC @hook F1
+	if( version >= 2 && TheAoCRules )
+		xfer->xferSnapshot( TheAoCRules );
 
 	// xfer the player count
 	Int playerCount = m_playerCount;
