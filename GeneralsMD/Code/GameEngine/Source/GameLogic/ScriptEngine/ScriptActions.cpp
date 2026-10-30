@@ -30,6 +30,7 @@
 #include "PreRTS.h"	// This must go first in EVERY cpp file in the GameEngine
 
 #include "Common/AudioAffect.h"
+#include "AoC/AoCRules.h"	// AoC @hook F1
 #include "Common/AudioHandleSpecialValues.h"
 #include "Common/FramePacer.h"
 #include "Common/GameAudio.h"
@@ -4098,6 +4099,41 @@ void ScriptActions::doGiveMoney(const AsciiString& playerName, Int money)
 }
 
 //-------------------------------------------------------------------------------------------------
+/** doAoCGiveResource (AoC F1) */
+//-------------------------------------------------------------------------------------------------
+void ScriptActions::doAoCGiveResource(const AsciiString& playerName, const AsciiString& resourceName, Int amount)
+{
+	Player* player = TheScriptEngine->getPlayerFromAsciiString(playerName);
+	if (!player) {
+		return;
+	}
+	Int type = AoCRules::findTypeIndex(resourceName.str());
+	if (type < 0) {
+		return;
+	}
+	if (amount < 0)
+		player->getAoCBank()->withdrawType(type, -amount);
+	else
+		player->getAoCBank()->deposit(type, amount);
+}
+
+//-------------------------------------------------------------------------------------------------
+/** doAoCSetResource (AoC F1) */
+//-------------------------------------------------------------------------------------------------
+void ScriptActions::doAoCSetResource(const AsciiString& playerName, const AsciiString& resourceName, Int amount)
+{
+	Player* player = TheScriptEngine->getPlayerFromAsciiString(playerName);
+	if (!player) {
+		return;
+	}
+	Int type = AoCRules::findTypeIndex(resourceName.str());
+	if (type < 0) {
+		return;
+	}
+	player->getAoCBank()->setAmount(type, amount < 0 ? 0 : amount);
+}
+
+//-------------------------------------------------------------------------------------------------
 /** doDisplayCounter */
 //-------------------------------------------------------------------------------------------------
 void ScriptActions::doDisplayCounter(const AsciiString& counterName, const AsciiString& counterText)
@@ -7249,6 +7285,12 @@ void ScriptActions::executeAction( ScriptAction *pAction )
 			return;
 		case ScriptAction::PLAYER_GIVE_MONEY:
 			doGiveMoney(pAction->getParameter(0)->getString(), pAction->getParameter(1)->getInt());
+			return;
+		case ScriptAction::AOC_PLAYER_GIVE_RESOURCE:	// AoC F1
+			doAoCGiveResource(pAction->getParameter(0)->getString(), pAction->getParameter(1)->getString(), pAction->getParameter(2)->getInt());
+			return;
+		case ScriptAction::AOC_PLAYER_SET_RESOURCE:	// AoC F1
+			doAoCSetResource(pAction->getParameter(0)->getString(), pAction->getParameter(1)->getString(), pAction->getParameter(2)->getInt());
 			return;
 
 		case ScriptAction::DISPLAY_COUNTDOWN_TIMER:

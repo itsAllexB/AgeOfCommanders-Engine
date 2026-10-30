@@ -2747,6 +2747,31 @@ void ScriptEngine::init()
 	curTemplate->m_uiStrings[0] = " ";
 	curTemplate->m_uiStrings[1] = " gets $";
 
+	// AoC @feature F1
+	curTemplate = &m_actionTemplates[ScriptAction::AOC_PLAYER_GIVE_RESOURCE];
+	curTemplate->m_internalName = "AOC_PLAYER_GIVE_RESOURCE";
+	curTemplate->m_uiName = "Player_/ Gives/takes an amount of a resource type (AoC).";
+	curTemplate->m_numParameters = 3;
+	curTemplate->m_parameters[0] = Parameter::SIDE;
+	curTemplate->m_parameters[1] = Parameter::AOC_RESOURCE_TYPE;
+	curTemplate->m_parameters[2] = Parameter::INT;
+	curTemplate->m_numUiStrings = 3;
+	curTemplate->m_uiStrings[0] = " ";
+	curTemplate->m_uiStrings[1] = " gets ";
+	curTemplate->m_uiStrings[2] = " x ";
+
+	curTemplate = &m_actionTemplates[ScriptAction::AOC_PLAYER_SET_RESOURCE];
+	curTemplate->m_internalName = "AOC_PLAYER_SET_RESOURCE";
+	curTemplate->m_uiName = "Player_/ Set player's amount of a resource type (AoC).";
+	curTemplate->m_numParameters = 3;
+	curTemplate->m_parameters[0] = Parameter::SIDE;
+	curTemplate->m_parameters[1] = Parameter::AOC_RESOURCE_TYPE;
+	curTemplate->m_parameters[2] = Parameter::INT;
+	curTemplate->m_numUiStrings = 3;
+	curTemplate->m_uiStrings[0] = "Set ";
+	curTemplate->m_uiStrings[1] = "'s ";
+	curTemplate->m_uiStrings[2] = " to ";
+
 	curTemplate = &m_actionTemplates[ScriptAction::DISPLAY_COUNTER];
 	curTemplate->m_internalName = "DISPLAY_COUNTER";
 	curTemplate->m_uiName = "Scripting_/ Counter -- display an individual counter to the user.";
@@ -4431,6 +4456,21 @@ void ScriptEngine::init()
 	curTemplate->m_uiStrings[0] = " ";
 	curTemplate->m_uiStrings[1] = " is ";
 	curTemplate->m_uiStrings[2] = " the number of credits possessed by ";
+
+	// AoC @feature F1
+	curTemplate = &m_conditionTemplates[Condition::AOC_PLAYER_HAS_RESOURCE];
+	curTemplate->m_internalName = "AOC_PLAYER_HAS_RESOURCE";
+	curTemplate->m_uiName = "Player_/ Player has (comparison) to an amount of a resource type (AoC).";
+	curTemplate->m_numParameters = 4;
+	curTemplate->m_parameters[0] = Parameter::INT;
+	curTemplate->m_parameters[1] = Parameter::COMPARISON;
+	curTemplate->m_parameters[2] = Parameter::SIDE;
+	curTemplate->m_parameters[3] = Parameter::AOC_RESOURCE_TYPE;
+	curTemplate->m_numUiStrings = 4;
+	curTemplate->m_uiStrings[0] = " ";
+	curTemplate->m_uiStrings[1] = " is ";
+	curTemplate->m_uiStrings[2] = " the amount possessed by ";
+	curTemplate->m_uiStrings[3] = " of ";
 
 	curTemplate = &m_conditionTemplates[Condition::NAMED_DISCOVERED];
 	curTemplate->m_internalName = "NAMED_DISCOVERED";

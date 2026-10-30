@@ -30,6 +30,7 @@
 #include "PreRTS.h"	// This must go first in EVERY cpp file in the GameEngine
 
 #include "Common/GameEngine.h"
+#include "AoC/AoCRules.h"	// AoC @hook F1
 #include "Common/MapObject.h"
 #include "Common/PlayerList.h"
 #include "Common/Player.h"
@@ -972,16 +973,33 @@ Bool ScriptConditions::evaluatePlayerHasCredits(Parameter *pCreditsParm, Paramet
 	if (pPlayer && pPlayer->getMoney()) {
 		switch (pComparisonParm->getInt())
 		{
-			case Parameter::LESS_THAN :			return (pCreditsParm->getInt() < pPlayer->getMoney()->countMoney()); break;
-			case Parameter::LESS_EQUAL :		return (pCreditsParm->getInt() <= pPlayer->getMoney()->countMoney()); break;
-			case Parameter::EQUAL :					return (pCreditsParm->getInt() == pPlayer->getMoney()->countMoney()); break;
-			case Parameter::GREATER_EQUAL :	return (pCreditsParm->getInt() >= pPlayer->getMoney()->countMoney()); break;
-			case Parameter::GREATER :				return (pCreditsParm->getInt() > pPlayer->getMoney()->countMoney()); break;
-			case Parameter::NOT_EQUAL :			return (pCreditsParm->getInt() != pPlayer->getMoney()->countMoney()); break;
+			case Parameter::LESS_THAN :			return (pCreditsParm->getInt() < pPlayer->getAoCBank()->cashEquivalent()); break;
+			case Parameter::LESS_EQUAL :		return (pCreditsParm->getInt() <= pPlayer->getAoCBank()->cashEquivalent()); break;
+			case Parameter::EQUAL :					return (pCreditsParm->getInt() == pPlayer->getAoCBank()->cashEquivalent()); break;
+			case Parameter::GREATER_EQUAL :	return (pCreditsParm->getInt() >= pPlayer->getAoCBank()->cashEquivalent()); break;
+			case Parameter::GREATER :				return (pCreditsParm->getInt() > pPlayer->getAoCBank()->cashEquivalent()); break;
+			case Parameter::NOT_EQUAL :			return (pCreditsParm->getInt() != pPlayer->getAoCBank()->cashEquivalent()); break;
 		}
 	}
 
 	return false;
+}
+
+//-------------------------------------------------------------------------------------------------
+/** evaluateAoCPlayerHasResource (AoC F1): amount <comparison> the player's bank count of a resource type */
+//-------------------------------------------------------------------------------------------------
+Bool ScriptConditions::evaluateAoCPlayerHasResource(Parameter *pAmountParm, Parameter* pComparisonParm, Parameter *pPlayerParm, Parameter *pResourceParm)
+{
+	Player* pPlayer = playerFromParam(pPlayerParm);
+	if (!pPlayer) {
+		return false;
+	}
+	Int type = AoCRules::findTypeIndex(pResourceParm->getString().str());
+	if (type < 0) {
+		return false;
+	}
+	UnsignedInt have = pPlayer->getAoCBank()->count(type);
+	return AoCRules::compareInts(pComparisonParm->getInt(), pAmountParm->getInt(), (Int)have);
 }
 
 //-------------------------------------------------------------------------------------------------
@@ -2792,6 +2810,8 @@ Bool ScriptConditions::evaluateCondition( Condition *pCondition )
 			return evaluateTeamCreated(pCondition->getParameter(0));
 		case Condition::PLAYER_HAS_CREDITS:
 			return evaluatePlayerHasCredits(pCondition->getParameter(0), pCondition->getParameter(1), pCondition->getParameter(2));
+		case Condition::AOC_PLAYER_HAS_RESOURCE:	// AoC F1
+			return evaluateAoCPlayerHasResource(pCondition->getParameter(0), pCondition->getParameter(1), pCondition->getParameter(2), pCondition->getParameter(3));
 		case Condition::BRIDGE_REPAIRED:
 			return evaluateBridgeRepaired(pCondition->getParameter(0));
 		case Condition::BRIDGE_BROKEN:

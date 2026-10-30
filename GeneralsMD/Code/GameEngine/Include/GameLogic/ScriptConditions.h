@@ -105,6 +105,7 @@ protected:
 	Bool evaluateTeamStateIs(Parameter *pTeamParm, Parameter *pStateParm);
 	Bool evaluateTeamStateIsNot(Parameter *pTeamParm, Parameter *pStateParm);
 	Bool evaluatePlayerHasCredits(Parameter *pCreditsParm, Parameter* pComparisonParm, Parameter *pPlayerParm);
+	Bool evaluateAoCPlayerHasResource(Parameter *pAmountParm, Parameter* pComparisonParm, Parameter *pPlayerParm, Parameter *pResourceParm);	///< AoC F1
 	Bool evaluateNamedCreated(Parameter* pUnitParm);	///< Implemented as evaluateNamedExists(...)
 	Bool evaluateTeamCreated(Parameter* pTeamParm);		///< Implemented as evaluateTeamExists(...)
 	Bool evaluateNamedOwnedByPlayer(Parameter *pUnitParm, Parameter *pPlayerParm);
