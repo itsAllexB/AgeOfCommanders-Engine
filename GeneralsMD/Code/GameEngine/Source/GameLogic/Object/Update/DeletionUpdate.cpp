@@ -29,6 +29,7 @@
 
 // INCLUDES ///////////////////////////////////////////////////////////////////////////////////////
 #include "PreRTS.h"
+#include "AoC/AoCSimRate.h"
 #include "Common/RandomValue.h"
 #include "Common/Xfer.h"
 #include "GameLogic/GameLogic.h"
@@ -72,7 +73,9 @@ void DeletionUpdate::setLifetimeRange( UnsignedInt minFrames, UnsignedInt maxFra
 UnsignedInt DeletionUpdate::calcSleepDelay(UnsignedInt minFrames, UnsignedInt maxFrames)
 {
 	UnsignedInt delay = GameLogicRandomValue( minFrames, maxFrames );
-	if (delay < 1) delay = 1;
+	// AoC @tweak 30/10/2026 A one-frame object lives one retail frame at either rate, so it is drawn once (D11 F15 port list).
+	const UnsignedInt minDelay = (UnsignedInt)AoCSimRate::frameMultiplier();
+	if (delay < minDelay) delay = minDelay;
 	m_dieFrame = TheGameLogic->getFrame() + delay;
 	return delay;
 }

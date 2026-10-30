@@ -27,6 +27,7 @@
 // Author: John Ahlquist, Nov. 2001
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 #include "PreRTS.h"	// This must go first in EVERY cpp file in the GameEngine
+#include "AoC/AoCSimRate.h"
 
 #include "Common/DataChunk.h"
 #include "Common/file.h"
@@ -5489,7 +5490,7 @@ void ScriptEngine::newMap()
 	m_maxFade = 0.0f;
 	m_fadeFramesIncrease = 0;
 	m_fadeFramesHold = 0;
-	m_fadeFramesDecrease = FRAMES_TO_FADE_IN_AT_START;
+	m_fadeFramesDecrease = FRAMES_TO_FADE_IN_AT_START * AoCSimRate::frameMultiplier();	// AoC F15: constant in retail frames
 	m_curFadeValue = 0.0f;
 
 }
@@ -5563,7 +5564,10 @@ void ScriptEngine::update()
 	// Update any countdown timers.
 	Int i;
 	// Note - counters start at 1.  0 means not assigned.
-	for (i=1; i<m_numCounters; i++) {
+	// AoC @tweak 30/10/2026 Script counters are retail 30 Hz frame counts (map scripts author them), so they
+	// tick on the retail cadence; second-based timers are converted to retail frames in setCounter (D11 F15).
+	const Bool aocCountersTick = AoCSimRate::isLegacyFrameStep(TheGameLogic->getFrame());
+	for (i=1; aocCountersTick && i<m_numCounters; i++) {
 		if (m_counters[i].isCountdownTimer) {
 			// If counter has any time left, decrement.  Counters go to -1 and stop.
 			if (m_counters[i].value >= 0) {
@@ -5708,7 +5712,7 @@ void ScriptEngine::startQuickEndGameTimer()
 //-------------------------------------------------------------------------------------------------
 void ScriptEngine::startEndGameTimer()
 {
-	m_endGameTimer = FRAMES_TO_SHOW_WIN_LOSE_MESSAGE;
+	m_endGameTimer = FRAMES_TO_SHOW_WIN_LOSE_MESSAGE * AoCSimRate::frameMultiplier();	// AoC F15: constant in retail frames
 }
 
 //-------------------------------------------------------------------------------------------------
@@ -5716,7 +5720,7 @@ void ScriptEngine::startEndGameTimer()
 //-------------------------------------------------------------------------------------------------
 void ScriptEngine::startCloseWindowTimer()
 {
-	m_closeWindowTimer = FRAMES_TO_SHOW_WIN_LOSE_MESSAGE;
+	m_closeWindowTimer = FRAMES_TO_SHOW_WIN_LOSE_MESSAGE * AoCSimRate::frameMultiplier();	// AoC F15: constant in retail frames
 }
 
 //-------------------------------------------------------------------------------------------------
@@ -6746,7 +6750,7 @@ void ScriptEngine::setTimer( ScriptAction *pAction, Bool millisecondTimer, Bool 
 			Real randomValue = pAction->getParameter(2)->getReal();
 			value = GameLogicRandomValue(value, randomValue);
 		}
-		m_counters[counterNdx].value = REAL_TO_INT_CEIL(ConvertDurationFromMsecsToFrames(value*1000));
+		m_counters[counterNdx].value = REAL_TO_INT_CEIL(ConvertDurationFromMsecsToFrames(value*1000) / (Real)AoCSimRate::frameMultiplier());	// AoC F15: retail frames
 	} else {
 		Int value = pAction->getParameter(1)->getInt();
 		if (random) {
@@ -6803,7 +6807,7 @@ void ScriptEngine::adjustTimer( ScriptAction *pAction, Bool millisecondTimer, Bo
 		Real value = pAction->getParameter(0)->getReal();
 		if (!add)
 			value = -value;
-		m_counters[counterNdx].value += REAL_TO_INT_CEIL(ConvertDurationFromMsecsToFrames(value*1000));
+		m_counters[counterNdx].value += REAL_TO_INT_CEIL(ConvertDurationFromMsecsToFrames(value*1000) / (Real)AoCSimRate::frameMultiplier());	// AoC F15: retail frames
 	} else {
 		Int value = pAction->getParameter(0)->getInt();
 		if (!add)
@@ -9357,7 +9361,7 @@ void ScriptEngine::xfer( Xfer *xfer )
 			m_maxFade = 0.0f;
 			m_fadeFramesIncrease = 0;
 			m_fadeFramesHold = 0;
-			m_fadeFramesDecrease = FRAMES_TO_FADE_IN_AT_START;
+			m_fadeFramesDecrease = FRAMES_TO_FADE_IN_AT_START * AoCSimRate::frameMultiplier();	// AoC F15: constant in retail frames
 			m_curFadeValue = 0.0f;
 		}
 	}

@@ -31,6 +31,7 @@
 #include <stdexcept>
 #include <cstdio>
 #include "PreRTS.h"	// This must go first in EVERY cpp file in the GameEngine
+#include "AoC/AoCSimRate.h"
 #include "GameClient/GameClient.h"
 
 // USER INCLUDES //////////////////////////////////////////////////////////////
@@ -727,7 +728,9 @@ void GameClient::update()
 	// update all particle systems
 	// TheSuperHackers @info The particle update follows the display update, because that
 	// moves bone-attached particle systems to the current client bone transforms of their drawables.
-	if( !freezeTime && TheGameLogic->hasUpdated() )
+	// AoC @tweak 30/10/2026 Particle INI lifetimes and keyframes are retail 30 Hz frame counts, so the particle
+	// step keeps that cadence at 60 Hz (D11 F15, as the owner's fork does).
+	if( !freezeTime && TheGameLogic->hasUpdated() && AoCSimRate::isLegacyFrameStep(TheGameLogic->getFrame()) )
 	{
 		TheParticleSystemManager->setLocalPlayerIndex(localPlayerIndex);
 		TheParticleSystemManager->UPDATE();

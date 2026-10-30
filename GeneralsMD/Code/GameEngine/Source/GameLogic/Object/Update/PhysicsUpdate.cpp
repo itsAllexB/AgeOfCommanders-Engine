@@ -27,6 +27,7 @@
 // Author: Michael S. Booth, November 2001
 
 #include "PreRTS.h"	// This must go first in EVERY cpp file in the GameEngine
+#include "AoC/AoCSimRate.h"
 
 // please talk to MDC (x36804) before taking this out
 #define NO_DEBUG_CRC
@@ -68,7 +69,7 @@ const Real STUN_RELIEF_EPSILON = 0.5f;
 
 #include "Common/CRCDebug.h"
 
-const Int MOTIVE_FRAMES = static_cast<float>(LOGICFRAMES_PER_SECOND) / 3;
+#define MOTIVE_FRAMES ((Int)(static_cast<float>(LOGICFRAMES_PER_SECOND) / 3))	// AoC @tweak 30/10/2026 runtime simulation rate, not a static initializer (D11 F15)
 
 #define SLEEPY_PHYSICS
 
@@ -361,6 +362,9 @@ void PhysicsBehavior::applyShock( const Coord3D *force )
 {
 	Coord3D resistedForce = *force;
 	resistedForce.scale( 1.0f - min( 1.0f, max( 0.0f, getPhysicsBehaviorModuleData()->m_shockResistance ) ) );
+	// AoC @tweak 30/10/2026 A shock is a velocity per frame; at 60 Hz the same impulse covers the same distance per second (D11 F15).
+	if (AoCSimRate::frameMultiplier() > 1)
+		resistedForce.scale( 1.0f / (Real)AoCSimRate::frameMultiplier() );
 
 	// Apply the processed shock force to the object
 	applyForce(&resistedForce);
@@ -651,8 +655,12 @@ UpdateSleepTime PhysicsBehavior::update()
 
 		// when vel gets tiny, just clamp to zero
 		const Real THRESH = 0.001f;
-		if (fabsf(m_vel.x) < THRESH) m_vel.x = 0.0f;
-		if (fabsf(m_vel.y) < THRESH) m_vel.y = 0.0f;
+		// AoC @tweak 30/10/2026 At 60 Hz a motive acceleration per frame can start below THRESH and must accumulate (D11 F15).
+		if (AoCSimRate::frameMultiplier() == 1 || !isMotive())
+		{
+			if (fabsf(m_vel.x) < THRESH) m_vel.x = 0.0f;
+			if (fabsf(m_vel.y) < THRESH) m_vel.y = 0.0f;
+		}
 		if (fabsf(m_vel.z) < THRESH) m_vel.z = 0.0f;
 
 		m_velMag = INVALID_VEL_MAG;

@@ -29,6 +29,7 @@
 
 // INCLUDES ///////////////////////////////////////////////////////////////////////////////////////
 #include "PreRTS.h"	// This must go first in EVERY cpp file in the GameEngine
+#include "AoC/AoCSimRate.h"
 
 #include "Common/Thing.h"
 #include "Common/ThingTemplate.h"
@@ -136,7 +137,7 @@ UpdateSleepTime EMPUpdate::update()
 	Drawable *dr = obj->getDrawable();
 	UnsignedInt now = TheGameLogic->getFrame();
 
-	m_currentScale += ( m_targetScale - m_currentScale ) * 0.05f;
+	m_currentScale += ( m_targetScale - m_currentScale ) * (0.05f / (Real)AoCSimRate::frameMultiplier());	// AoC @tweak 30/10/2026 per retail frame (D11 F15)
 	dr->setInstanceScale( m_currentScale );
 
 	if ( now < m_tintEnvPlayFrame)
@@ -327,7 +328,8 @@ void EMPUpdate::doDisableAttack()
 
 							sys->attachToObject(curVictim);
 							sys->setPosition( &offs );
-							sys->setSystemLifetime(MAX(0, data->m_disabledDuration - 30));
+							// AoC @tweak 30/10/2026 Particle lifetimes count retail frames (D11 F15).
+							sys->setSystemLifetime(MAX(0, (data->m_disabledDuration / (UnsignedInt)AoCSimRate::frameMultiplier()) - 30));
 							sys->setInitialDelay(GameLogicRandomValue(1,100));
 						}
 					}

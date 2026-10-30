@@ -4056,7 +4056,8 @@ void InGameUI::postDraw()
 				UnsignedInt readyFrame = TheGameLogic->getFrame();
 				if (framesLeft > 0)
 					readyFrame += framesLeft;
-				Int readySecs = (Int)(SECONDS_PER_LOGICFRAME_REAL * (readyFrame - TheGameLogic->getFrame()));
+				// AoC @tweak 30/10/2026 Script counters are retail 30 Hz frame counts (D11 F15).
+				Int readySecs = (Int)((1.0f / (Real)BaseFps) * (readyFrame - TheGameLogic->getFrame()));
 				if ( (info->isCountdown && readySecs != info->timestamp) || (!info->isCountdown && framesLeft != info->timestamp) )
 				{
 					if (!readySecs && info->isCountdown)
@@ -5688,7 +5689,7 @@ void InGameUI::clearWorldAnimations()
 
 }
 
-static const UnsignedInt FRAMES_BEFORE_EXPIRE_TO_FADE = static_cast<float>(LOGICFRAMES_PER_SECOND) * 1;
+#define FRAMES_BEFORE_EXPIRE_TO_FADE ((UnsignedInt)(static_cast<float>(LOGICFRAMES_PER_SECOND) * 1))	// AoC @tweak 30/10/2026 runtime simulation rate, not a static initializer (D11 F15)
 // ------------------------------------------------------------------------------------------------
 /** Update all world animations and draw the visible ones */
 // ------------------------------------------------------------------------------------------------

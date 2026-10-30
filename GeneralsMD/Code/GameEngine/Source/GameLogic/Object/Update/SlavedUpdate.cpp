@@ -31,6 +31,7 @@
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 
 #include "PreRTS.h"	// This must go first in EVERY cpp file in the GameEngine
+#include "AoC/AoCSimRate.h"
 
 #include "Common/RandomValue.h"
 #include "Common/Xfer.h"
@@ -639,7 +640,8 @@ void SlavedUpdate::setRepairState( RepairStates repairState )
 							}
 
 							weldingSys->setPosition( &pos );
-							Real time = (Real)(m_framesToWait * static_cast<float>(LOGICFRAMES_PER_SECOND));
+							// AoC @tweak 30/10/2026 Particle lifetimes count retail frames; keep the stock real-time length (D11 F15).
+							Real time = (Real)(m_framesToWait * static_cast<float>(BaseFps)) / (Real)AoCSimRate::frameMultiplier();
 							weldingSys->setLifetimeRange( time, time );
 
 							AudioEventRTS soundToPlay = TheAudio->getMiscAudio()->m_repairSparks;
