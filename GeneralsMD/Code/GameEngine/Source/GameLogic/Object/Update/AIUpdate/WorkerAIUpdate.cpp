@@ -400,9 +400,10 @@ Object *WorkerAIUpdate::construct( const ThingTemplate *what,
 	// take the required money away from the player
 	if( isRebuild == FALSE )
 	{
-		Money *money = owningPlayer->getMoney();
-
-		money->withdraw( what->calcCostToBuild( owningPlayer ) );
+		// AoC @hook F1: the whole cost vector
+		AoCCost cost;
+		what->calcAoCCost( owningPlayer, cost );
+		owningPlayer->getAoCBank()->withdraw( cost );
 
 	}
 

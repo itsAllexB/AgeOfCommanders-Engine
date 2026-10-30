@@ -259,9 +259,9 @@ void AISkirmishPlayer::processBaseBuilding()
 
 				m_readyToBuildStructure = false;
 				m_structureTimer = TheAI->getAiData()->m_structureSeconds*static_cast<float>(LOGICFRAMES_PER_SECOND);
-				if (m_player->getMoney()->countMoney() < TheAI->getAiData()->m_resourcesPoor) {
+				if (m_player->getAoCBank()->cashEquivalent() < TheAI->getAiData()->m_resourcesPoor) {
 					m_structureTimer = m_structureTimer/TheAI->getAiData()->m_structuresPoorMod;
-				}	else if (m_player->getMoney()->countMoney() > TheAI->getAiData()->m_resourcesWealthy) {
+				}	else if (m_player->getAoCBank()->cashEquivalent() > TheAI->getAiData()->m_resourcesWealthy) {
 					m_structureTimer = m_structureTimer/TheAI->getAiData()->m_structuresWealthyMod;
 				}
 				m_frameLastBuildingBuilt = TheGameLogic->getFrame();
@@ -278,11 +278,12 @@ void AISkirmishPlayer::processBaseBuilding()
 			}	else {
 				// building is missing, (re)build it
 				// deduct money to build, if we have it
-				Int cost = bldgPlan->calcCostToBuild( m_player );
-				if (m_player->getMoney()->countMoney() >= cost)
+				AoCCost cost;	// AoC @hook F1: the whole cost vector
+				bldgPlan->calcAoCCost( m_player, cost );
+				if (m_player->getAoCBank()->canAfford( cost ))
 				{
 					// we have the money, deduct it
-					m_player->getMoney()->withdraw( cost );
+					m_player->getAoCBank()->withdraw( cost );
 
 					// inst-construct the building
 					bldg = buildStructureNow(bldgPlan, bldgInfo);
@@ -294,9 +295,9 @@ void AISkirmishPlayer::processBaseBuilding()
 
 						m_readyToBuildStructure = false;
 						m_structureTimer = TheAI->getAiData()->m_structureSeconds*LOGICFRAMES_PER_SECOND;
-						if (m_player->getMoney()->countMoney() < TheAI->getAiData()->m_resourcesPoor) {
+						if (m_player->getAoCBank()->cashEquivalent() < TheAI->getAiData()->m_resourcesPoor) {
 							m_structureTimer = m_structureTimer/TheAI->getAiData()->m_structuresPoorMod;
-						}	else if (m_player->getMoney()->countMoney() > TheAI->getAiData()->m_resourcesWealthy) {
+						}	else if (m_player->getAoCBank()->cashEquivalent() > TheAI->getAiData()->m_resourcesWealthy) {
 							m_structureTimer = m_structureTimer/TheAI->getAiData()->m_structuresWealthyMod;
 						}
 						m_frameLastBuildingBuilt = TheGameLogic->getFrame();

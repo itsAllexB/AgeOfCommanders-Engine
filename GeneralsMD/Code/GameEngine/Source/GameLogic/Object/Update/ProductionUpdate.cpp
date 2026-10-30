@@ -295,9 +295,10 @@ Bool ProductionUpdate::queueUpgrade( const UpgradeTemplate *upgrade )
 		return FALSE;
 	}
 
-	// take the cost for the build away from the player
-	Money *money = player->getMoney();
-	money->withdraw( upgrade->calcCostToBuild( player ) );
+	// take the cost for the build away from the player (AoC @hook F1: the whole cost vector)
+	AoCCost cost;
+	upgrade->calcAoCCost( player, cost );
+	player->getAoCBank()->withdraw( cost );
 
 	// allocate a new production entry
 	ProductionEntry *production = newInstance(ProductionEntry);
@@ -391,10 +392,11 @@ Bool ProductionUpdate::queueCreateUnit( const ThingTemplate *unitType, Productio
 		return FALSE;
 	}
 
-	// take the cost for the build away from the player
+	// take the cost for the build away from the player (AoC @hook F1: the whole cost vector)
 	Player *player = getObject()->getControllingPlayer();
-	Money *money = player->getMoney();
-	money->withdraw( unitType->calcCostToBuild( player ) );
+	AoCCost cost;
+	unitType->calcAoCCost( player, cost );
+	player->getAoCBank()->withdraw( cost );
 
 	// allocate a new production entry
 	ProductionEntry *production = newInstance(ProductionEntry);
@@ -851,8 +853,10 @@ UpdateSleepTime ProductionUpdate::update()
 		{
 			const UpgradeTemplate *upgrade = production->m_upgradeToResearch;
 
-			// we finished an upgrade, lets add that money spent on it to the scorekeeper
-			player->getScoreKeeper()->addMoneySpent(upgrade->calcCostToBuild(player));
+			// we finished an upgrade, lets add that money spent on it to the scorekeeper (AoC @hook F1: cash equivalent)
+			AoCCost spent;
+			upgrade->calcAoCCost(player, spent);
+			player->getScoreKeeper()->addMoneySpent(spent.cashEquivalent());
 
 			// notify the script engine
 			TheScriptEngine->notifyOfCompletedUpgrade(
@@ -1059,9 +1063,10 @@ Bool ProductionUpdate::cancelUpgrade( ProductionEntry *production )
 	if( upgrade->getUpgradeType() == UPGRADE_TYPE_PLAYER && player->hasUpgradeInProduction( upgrade ) == FALSE )
 		return FALSE;
 
-	// refund money back to the player
-	Money *money = player->getMoney();
-	money->deposit( production->m_upgradeToResearch->calcCostToBuild( player ), TRUE, FALSE );
+	// refund money back to the player (AoC @hook F1: the whole cost vector)
+	AoCCost refund;
+	production->m_upgradeToResearch->calcAoCCost( player, refund );
+	player->getAoCBank()->deposit( refund, TRUE, FALSE );
 
 	// remove this production from the queue
 	removeFromProductionQueue( production );
@@ -1093,9 +1098,10 @@ Bool ProductionUpdate::cancelUnitCreate( ProductionEntry *production )
 		return FALSE;
 #endif
 
-	// give the player the cost of the object back
-	Money *money = player->getMoney();
-	money->deposit( production->m_objectToProduce->calcCostToBuild( player ), TRUE, FALSE );
+	// give the player the cost of the object back (AoC @hook F1: the whole cost vector)
+	AoCCost refund;
+	production->m_objectToProduce->calcAoCCost( player, refund );
+	player->getAoCBank()->deposit( refund, TRUE, FALSE );
 
 	// remove from queue list
 	removeFromProductionQueue( production );

@@ -253,6 +253,16 @@ void BuildAssistant::update()
 				// this money shouldn't be scored since it wasn't really "earned."
 //				player->getScoreKeeper()->addMoneyEarned( sellValue );
 
+				// AoC @hook F1: refund AoCRefundPerMille of the non-cash cost (nothing for a cash-only template)
+				AoCCost aocRefund;
+				obj->getTemplate()->calcAoCCost( player, aocRefund );
+				if( aocRefund.hasNonCash() )
+				{
+					aocRefund.amount[AOC_RESOURCE_CASH] = 0;
+					aocRefund.scale( TheGlobalData->m_aocRefundPerMille );
+					player->getAoCBank()->deposit( aocRefund, FALSE, FALSE );
+				}
+
 			}
 
 			// cancel any of the production items and refund to the controlling player
@@ -1343,9 +1353,10 @@ CanMakeType BuildAssistant::canMakeUnit( Object *builder, const ThingTemplate *w
 			return cmt;
 	}
 
-	// make sure we have enough money to build this
-	Money *money = player->getMoney();
-	if( whatToBuild->calcCostToBuild( player ) > money->countMoney() )
+	// make sure we have enough money to build this (AoC @hook F1: the whole cost vector)
+	AoCCost cost;
+	whatToBuild->calcAoCCost( player, cost );
+	if( !player->getAoCBank()->canAfford( cost ) )
 		return CANMAKE_NO_MONEY;
 
 	// get the command set for the producer object

@@ -520,9 +520,10 @@ Object *AIPlayer::buildStructureWithDozer(const ThingTemplate *bldgPlan, BuildLi
 	if (dozer==nullptr) {
 		return nullptr;
 	}
-	// Check available funds.
-	Money *money = m_player->getMoney();
-	if (money->countMoney()<bldgPlan->calcCostToBuild(m_player)) {
+	// Check available funds (AoC @hook F1: the whole cost vector).
+	AoCCost cost;
+	bldgPlan->calcAoCCost(m_player, cost);
+	if (!m_player->getAoCBank()->canAfford(cost)) {
 		return nullptr;
 	}
 	// construct the building
@@ -802,9 +803,9 @@ void AIPlayer::processBaseBuilding()
 
 						m_readyToBuildStructure = false;
 						m_structureTimer = TheAI->getAiData()->m_structureSeconds*static_cast<float>(LOGICFRAMES_PER_SECOND);
-						if (m_player->getMoney()->countMoney() < TheAI->getAiData()->m_resourcesPoor) {
+						if (m_player->getAoCBank()->cashEquivalent() < TheAI->getAiData()->m_resourcesPoor) {
 							m_structureTimer = m_structureTimer/TheAI->getAiData()->m_structuresPoorMod;
-						}	else if (m_player->getMoney()->countMoney() > TheAI->getAiData()->m_resourcesWealthy) {
+						}	else if (m_player->getAoCBank()->cashEquivalent() > TheAI->getAiData()->m_resourcesWealthy) {
 							m_structureTimer = m_structureTimer/TheAI->getAiData()->m_structuresWealthyMod;
 						}
 						m_frameLastBuildingBuilt = TheGameLogic->getFrame();
@@ -822,11 +823,12 @@ void AIPlayer::processBaseBuilding()
 					}	else {
 						// building is missing, (re)build it
 						// deduct money to build, if we have it
-						Int cost = bldgPlan->calcCostToBuild( m_player );
-						if (m_player->getMoney()->countMoney() >= cost)
+						AoCCost cost;	// AoC @hook F1: the whole cost vector
+						bldgPlan->calcAoCCost( m_player, cost );
+						if (m_player->getAoCBank()->canAfford( cost ))
 						{
 							// we have the money, deduct it
-							m_player->getMoney()->withdraw( cost );
+							m_player->getAoCBank()->withdraw( cost );
 
 							// inst-construct the building
 							bldg = buildStructureNow(bldgPlan, info);
@@ -838,9 +840,9 @@ void AIPlayer::processBaseBuilding()
 
 								m_readyToBuildStructure = false;
 								m_structureTimer = TheAI->getAiData()->m_structureSeconds*LOGICFRAMES_PER_SECOND;
-								if (m_player->getMoney()->countMoney() < TheAI->getAiData()->m_resourcesPoor) {
+								if (m_player->getAoCBank()->cashEquivalent() < TheAI->getAiData()->m_resourcesPoor) {
 									m_structureTimer = m_structureTimer/TheAI->getAiData()->m_structuresPoorMod;
-								}	else if (m_player->getMoney()->countMoney() > TheAI->getAiData()->m_resourcesWealthy) {
+								}	else if (m_player->getAoCBank()->cashEquivalent() > TheAI->getAiData()->m_resourcesWealthy) {
 									m_structureTimer = m_structureTimer/TheAI->getAiData()->m_structuresWealthyMod;
 								}
 								m_frameLastBuildingBuilt = TheGameLogic->getFrame();
@@ -1487,6 +1489,7 @@ Bool AIPlayer::isPossibleToBuildTeam( TeamPrototype *proto, Bool requireIdleFact
 	/* Make sure we have at least one idle factory, and factories for all unit types. */
 	Bool anyIdle = false;
 	Int cost=0;
+	AoCCost aocCost;	// AoC @hook F1: the non-cash team cost, accumulated like cost
 	notEnoughMoney = false;
 	for( int i=0; i<proto->getTemplateInfo()->m_numUnitsInfo; i++ )
 	{
@@ -1503,12 +1506,29 @@ Bool AIPlayer::isPossibleToBuildTeam( TeamPrototype *proto, Bool requireIdleFact
 				anyIdle = true;
 			}
 			cost += thingCost * ((unitInfo[i].maxUnits+unitInfo[i].minUnits)/2.0f);
+			// AoC @hook F1: the non-cash components, accumulated like cost
+			AoCCost thingAoCCost;
+			thing->calcAoCCost(m_player, thingAoCCost);
+			for (Int t = AOC_RESOURCE_CASH + 1; t < AOC_MAX_RESOURCES; ++t)
+				thingAoCCost.amount[t] *= ((unitInfo[i].maxUnits+unitInfo[i].minUnits)/2.0f);
+			aocCost.add(thingAoCCost);
 		}
 	}
 	cost *= TheAI->getAiData()->m_teamResourcesToBuild;
 	if (m_player->getMoney()->countMoney() < cost)	{
 		notEnoughMoney = true;
 		return false; // too expensive
+	}
+	// AoC @hook F1: the non-cash components of the team cost, scaled like the cash above
+	if (aocCost.hasNonCash())
+	{
+		aocCost.amount[AOC_RESOURCE_CASH] = 0;
+		for (Int t = AOC_RESOURCE_CASH + 1; t < AOC_MAX_RESOURCES; ++t)
+			aocCost.amount[t] *= TheAI->getAiData()->m_teamResourcesToBuild;
+		if (!m_player->getAoCBank()->canAfford(aocCost)) {
+			notEnoughMoney = true;
+			return false; // too expensive
+		}
 	}
 	if (anyIdle)
 	{
@@ -1758,9 +1778,9 @@ Bool AIPlayer::selectTeamToBuild()
 		buildSpecificAITeam(teamProto, false);
 		m_readyToBuildTeam = false;
 		m_teamTimer = m_teamSeconds*LOGICFRAMES_PER_SECOND;
-		if (m_player->getMoney()->countMoney() < TheAI->getAiData()->m_resourcesPoor) {
+		if (m_player->getAoCBank()->cashEquivalent() < TheAI->getAiData()->m_resourcesPoor) {
 			m_teamTimer = m_teamTimer/TheAI->getAiData()->m_teamPoorMod;
-		}	else if (m_player->getMoney()->countMoney() > TheAI->getAiData()->m_resourcesWealthy) {
+		}	else if (m_player->getAoCBank()->cashEquivalent() > TheAI->getAiData()->m_resourcesWealthy) {
 			m_teamTimer = m_teamTimer/TheAI->getAiData()->m_teamWealthyMod;
 		}
 		return true;

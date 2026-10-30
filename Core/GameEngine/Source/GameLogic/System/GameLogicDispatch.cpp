@@ -1988,9 +1988,10 @@ bool GameLogic::onDozerCancelConstruct(MAYBE_UNUSED GameMessage *msg, AIGroupPtr
 	// OK, refund the money to the player, unless it is a rebuilding Hole.
 	if( !building->testStatus(OBJECT_STATUS_RECONSTRUCTING))
 	{
-		Money *money = msgPlayer->getMoney();
-		UnsignedInt amount = building->getTemplate()->calcCostToBuild( msgPlayer );
-		money->deposit( amount, TRUE, FALSE );
+		// AoC @hook F1: refund the whole cost vector; cash still goes through Money::deposit as before
+		AoCCost refund;
+		building->getTemplate()->calcAoCCost( msgPlayer, refund );
+		msgPlayer->getAoCBank()->deposit( refund, TRUE, FALSE );
 	}
 
 	//
