@@ -58,6 +58,10 @@ file(WRITE ${CMAKE_CURRENT_BINARY_DIR}/BuildVersion.h
 
 if(MSVC)
     target_link_options(z_generals PRIVATE "/NODEFAULTLIB:libci.lib")
+    # AoC @build 30/10/2026 Let the 32-bit game address up to 4 GB on 64-bit Windows (content-heavy maps peak near 1.4 GB).
+    if(CMAKE_SIZEOF_VOID_P EQUAL 4)
+        target_link_options(z_generals PRIVATE "/LARGEADDRESSAWARE")
+    endif()
 endif()
 
 target_include_directories(z_generals PRIVATE
