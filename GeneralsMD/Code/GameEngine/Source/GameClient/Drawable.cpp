@@ -257,7 +257,7 @@ static DrawableIconType drawableIconNameToIndex( const char *iconName )
 
 // ------------------------------------------------------------------------------------------------
 // constants
-const UnsignedInt HEALING_ICON_DISPLAY_TIME	= LOGICFRAMES_PER_SECOND * 3;
+#define HEALING_ICON_DISPLAY_TIME ((UnsignedInt)(LOGICFRAMES_PER_SECOND * 3))	// AoC @tweak 30/10/2026 runtime simulation rate, not a static initializer (D11 F15)
 const UnsignedInt DEFAULT_HEAL_ICON_WIDTH		= 32;
 const UnsignedInt DEFAULT_HEAL_ICON_HEIGHT	= 32;
 const RGBColor SICKLY_GREEN_POISONED_COLOR	= {-1.0f,  1.0f, -1.0f};

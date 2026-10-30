@@ -272,11 +272,9 @@ protected:
 private:
 	Int m_checkAirfield;
 
-	enum
-	{
-		// only recheck for new airfields every second or so
-		HOW_OFTEN_TO_CHECK = LOGICFRAMES_PER_SECOND
-	};
+	// only recheck for new airfields every second or so
+	// AoC @tweak 30/10/2026 Reads the runtime simulation rate (D11 F15); was an enum constant.
+#define HOW_OFTEN_TO_CHECK (LOGICFRAMES_PER_SECOND)
 
 public:
 	JetOrHeliCirclingDeadAirfieldState( StateMachine *machine ) :

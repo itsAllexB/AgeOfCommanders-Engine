@@ -284,7 +284,7 @@ enum TerrainDecalType CPP_11(: Int)
 
 constexpr const UnsignedInt InvalidShroudClearFrame = ~0u;
 
-const Int DRAWABLE_FRAMES_PER_FLASH = LOGICFRAMES_PER_SECOND / 2;
+#define DRAWABLE_FRAMES_PER_FLASH ((Int)(LOGICFRAMES_PER_SECOND / 2))	// AoC @tweak 30/10/2026 runtime simulation rate, not a static initializer (D11 F15)
 
 //-----------------------------------------------------------------------------
 /**

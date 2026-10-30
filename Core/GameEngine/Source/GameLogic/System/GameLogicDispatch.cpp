@@ -303,7 +303,8 @@ void GameLogic::clearGameData( Bool showScoreScreen )
 	// GeneralsX @feature felipebraz 17/09/2026 Reset simulation tick rate and FPS cap to global defaults (#281)
 	TheFramePacer->setLogicTimeScaleFps(LOGICFRAMES_PER_SECOND);
 	TheFramePacer->setFramesPerSecondLimit(TheGlobalData->m_framesPerSecondLimit);
-	TheFramePacer->enableLogicTimeScale(LOGICFRAMES_PER_SECOND < TheGlobalData->m_framesPerSecondLimit);
+	// AoC @tweak 30/10/2026 Also decouple when the render cap is off, or an uncapped render would run the 60 Hz logic faster than real time (D11 F15).
+	TheFramePacer->enableLogicTimeScale(LOGICFRAMES_PER_SECOND < TheGlobalData->m_framesPerSecondLimit || !TheGlobalData->m_useFpsLimit);
 //	m_background->bringForward();
 //	if(shellGame)
 
@@ -928,7 +929,8 @@ bool GameLogic::onNewGame(MAYBE_UNUSED GameMessage *msg)
 	else
 	{
 		TheFramePacer->setLogicTimeScaleFps(LOGICFRAMES_PER_SECOND);
-		TheFramePacer->enableLogicTimeScale(LOGICFRAMES_PER_SECOND < TheFramePacer->getFramesPerSecondLimit());
+		// AoC @tweak 30/10/2026 See onClearGameData: decoupled as well when the render cap is off (D11 F15).
+		TheFramePacer->enableLogicTimeScale(LOGICFRAMES_PER_SECOND < TheFramePacer->getFramesPerSecondLimit() || !TheGlobalData->m_useFpsLimit);
 	}
 
 	// prepare for new game

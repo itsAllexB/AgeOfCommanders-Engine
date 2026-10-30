@@ -981,6 +981,15 @@ Int OptionPreferences::getSkirmishTickRate() const
 	return clamp(5, rate, 120);
 }
 
+// AoC @feature 30/10/2026 Selectable simulation rate (D11 F15). Validation is AoCSimRate::set's.
+Int OptionPreferences::getSimulationRate() const
+{
+	OptionPreferences::const_iterator it = find("SimulationRate");
+	if (it == end())
+		return 0;
+	return atoi(it->second.str());
+}
+
 // GeneralsX @feature fbraz3 08/10/2026 Enhanced graphics & lighting options helpers
 static Bool parsePrefBool(OptionPreferences::const_iterator it, OptionPreferences::const_iterator endIt, Bool defaultVal)
 {

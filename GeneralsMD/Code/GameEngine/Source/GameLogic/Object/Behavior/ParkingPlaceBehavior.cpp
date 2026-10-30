@@ -589,7 +589,7 @@ void ParkingPlaceBehavior::releaseRunway(ObjectID id)
 
 //-------------------------------------------------------------------------------------------------
 // don't really need to autoheal every frame....
-const Int HEAL_RATE_FRAMES = LOGICFRAMES_PER_SECOND / 5;
+#define HEAL_RATE_FRAMES ((Int)(LOGICFRAMES_PER_SECOND / 5))	// AoC @tweak 30/10/2026 runtime simulation rate, not a static initializer (D11 F15)
 
 //-------------------------------------------------------------------------------------------------
 void ParkingPlaceBehavior::resetWakeFrame()

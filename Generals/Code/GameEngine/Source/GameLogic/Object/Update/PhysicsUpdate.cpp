@@ -60,7 +60,7 @@ const Real MAX_FRICTION = 0.99f;
 
 #include "Common/CRCDebug.h"
 
-const Int MOTIVE_FRAMES = LOGICFRAMES_PER_SECOND / 3;
+#define MOTIVE_FRAMES ((Int)(LOGICFRAMES_PER_SECOND / 3))	// AoC @tweak 30/10/2026 runtime simulation rate, not a static initializer (D11 F15)
 
 #define SLEEPY_PHYSICS
 

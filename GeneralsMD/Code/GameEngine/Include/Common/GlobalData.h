@@ -126,8 +126,8 @@ public:
 	// Run game without graphics, input or audio.
 	Bool m_headless;
 
-	// AoC @feature 30/10/2026 Logic frames per second, reserved for the selectable simulation rate (D11 F15).
-	// Set by -simrate; only LOGICFRAMES_PER_SECOND (30) is implemented and nothing reads it yet.
+	// AoC @feature 30/10/2026 Logic frames per second, 30 or 60 (D11 F15). A mirror of AoCSimRate::framesPerSecond(),
+	// which is what LOGICFRAMES_PER_SECOND reads; set from Options.ini SimulationRate or -simrate before any INI loads.
 	Int m_logicFramesPerSecond;
 
 	// GeneralsX @feature BenderAI 21/04/2026 Opt-out toggle for the in-game update checker.

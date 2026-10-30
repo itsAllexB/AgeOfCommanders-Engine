@@ -1240,7 +1240,7 @@ void W3DDisplay::reset()
 		TheWritableGlobalData->m_drawSkyBox =0;
 }
 
-const UnsignedInt START_CUMU_FRAME = LOGICFRAMES_PER_SECOND / 2;	// skip first half-sec
+#define START_CUMU_FRAME ((UnsignedInt)(LOGICFRAMES_PER_SECOND / 2)) // skip first half-sec	// AoC @tweak 30/10/2026 runtime simulation rate, not a static initializer (D11 F15)
 
 void W3DDisplay::updateAverageFPS()
 {

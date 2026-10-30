@@ -5553,7 +5553,7 @@ void InGameUI::clearWorldAnimations()
 
 }
 
-static const UnsignedInt FRAMES_BEFORE_EXPIRE_TO_FADE = LOGICFRAMES_PER_SECOND * 1;
+#define FRAMES_BEFORE_EXPIRE_TO_FADE ((UnsignedInt)(LOGICFRAMES_PER_SECOND * 1))	// AoC @tweak 30/10/2026 runtime simulation rate, not a static initializer (D11 F15)
 // ------------------------------------------------------------------------------------------------
 /** Update all world animations and draw the visible ones */
 // ------------------------------------------------------------------------------------------------

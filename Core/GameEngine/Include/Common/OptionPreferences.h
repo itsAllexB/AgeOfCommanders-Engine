@@ -137,6 +137,8 @@ public:
 	Real getGameWindowTransitionSpeedMultiplier() const;
 	// GeneralsX @feature felipebraz 17/09/2026 Skirmish simulation tick rate configuration (#281)
 	Int getSkirmishTickRate() const;
+	// AoC @feature 30/10/2026 Selectable simulation rate (D11 F15): "SimulationRate = 30|60"; 0 when the key is absent.
+	Int getSimulationRate() const;
 
 	// GeneralsX @feature fbraz3 08/10/2026 Enhanced graphics & lighting options
 	Bool getAdvancedShadows(Bool defaultVal = TRUE) const;

@@ -92,6 +92,9 @@ void FramePacer::reset()
 void FramePacer::setFramesPerSecondLimit( Int fps )
 {
 	DEBUG_LOG(("FramePacer::setFramesPerSecondLimit() - setting max fps to %d (TheGlobalData->m_useFpsLimit == %d)", fps, TheGlobalData->m_useFpsLimit));
+	// AoC @tweak 30/10/2026 The render cap never drops below the simulation rate, so the logic is not starved at 60 Hz (D11 F15).
+	if (fps < LOGICFRAMES_PER_SECOND)
+		fps = LOGICFRAMES_PER_SECOND;
 	m_maxFPS = fps;
 }
 

@@ -116,7 +116,7 @@ public:
 //-------------------------------------------------------------------------------------------------
 //-------------------------------------------------------------------------------------------------
 
-const Int DEFAULT_UPDATE_RATE = LOGICFRAMES_PER_SECOND;
+#define DEFAULT_UPDATE_RATE ((Int)(LOGICFRAMES_PER_SECOND))	// AoC @tweak 30/10/2026 runtime simulation rate, not a static initializer (D11 F15)
 
 //-------------------------------------------------------------------------------------------------
 HordeUpdateModuleData::HordeUpdateModuleData()

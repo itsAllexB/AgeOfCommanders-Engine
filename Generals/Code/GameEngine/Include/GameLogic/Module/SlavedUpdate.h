@@ -32,7 +32,7 @@
 
 #pragma once
 
-const Int SLAVED_UPDATE_RATE = LOGICFRAMES_PER_SECOND/4; ///< This is a low priority module that only needs to be called every this many frames
+#define SLAVED_UPDATE_RATE ((Int)(LOGICFRAMES_PER_SECOND/4)) ///< This is a low priority module that only needs to be called every this many frames	// AoC @tweak 30/10/2026 runtime simulation rate, not a static initializer (D11 F15)
 
 // INCLUDES ///////////////////////////////////////////////////////////////////////////////////////
 #include "Common/INI.h"
