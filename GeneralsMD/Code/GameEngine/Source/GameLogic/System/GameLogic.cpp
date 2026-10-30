@@ -39,6 +39,7 @@
 #include "Common/AudioAffect.h"
 #include "Common/AudioHandleSpecialValues.h"
 #include "Common/BuildAssistant.h"
+#include "AoC/AoCHarness.h"
 #include "Common/CRCDebug.h"
 #include "Common/FramePacer.h"
 #include "Common/GameAudio.h"
@@ -3991,6 +3992,9 @@ void GameLogic::update()
 
 		DEBUG_LOG(("Appended %sCRC on frame %d: %8.8X", isPlayback ? "Playback " : "", m_frame, m_CRC));
 	}
+
+	// AoC @hook 30/10/2026 Harness CRC log, AI log and -quitAtFrame; reads only (D11 F12).
+	AoCHarness::onLogicFrame(m_frame, generateForSolo || generateForMP, m_CRC);
 
 	// collect stats
 	if(TheStatsCollector)

@@ -57,6 +57,7 @@
 #include "Common/GameStateMap.h"
 #include "Common/Science.h"
 #include "Common/FunctionLexicon.h"
+#include "AoC/AoCHarness.h"
 #include "Common/CommandLine.h"
 #include "Common/DamageFX.h"
 #include "Common/MultiplayerSettings.h"
@@ -879,6 +880,9 @@ void GameEngine::init()
 			}
 		}
 
+		// AoC @hook 30/10/2026 -skirmish starts a game from the command line in Release builds (D11 F12), same place as -file.
+		AoCHarness::startSkirmishIfRequested();
+
 		//
 		if (TheMapCache && TheGlobalData->m_shellMapOn)
 		{
@@ -1167,6 +1171,9 @@ void GameEngine::execute()
 			// laggy (hard to click moving units) even though the fixed 30 Hz simulation is unchanged.
 			// See RenderFpsPreset::s_fpsValues in FrameRateLimit.cpp for the full explanation.
 			TheFramePacer->update();
+
+			// AoC @hook 30/10/2026 -quitAtFrame leaves the game cleanly from the engine loop (D11 F12).
+			AoCHarness::pollQuit();
 
 			// NOTE: TheDisplay->draw() is called via TheGameClient->UPDATE() above.
 			// GameClient::update() dispatches TheDisplay->DRAW() each frame.

@@ -28,6 +28,7 @@
 
 #include "PreRTS.h"	// This must go first in EVERY cpp file in the GameEngine
 
+#include "AoC/AoCHarness.h"
 #include "Common/FramePacer.h"
 #include "Common/GameEngine.h"
 #include "Common/ReplaySimulation.h"
@@ -54,6 +55,9 @@ Int GameMain()
 		// run it
 		TheGameEngine->execute();
 	}
+
+	// AoC @hook 30/10/2026 Harness exit codes: 2 on a replay CRC mismatch, 3 and 4 for its own errors (D11 F12).
+	exitcode = AoCHarness::finalExitCode(exitcode);
 
 	// since execute() returned, we are exiting the game
 	delete TheFramePacer;

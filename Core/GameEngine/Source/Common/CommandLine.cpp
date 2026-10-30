@@ -30,6 +30,7 @@
 	#define _S_IFDIR S_IFDIR
 #endif
 
+#include "AoC/AoCHarness.h"
 #include "Common/ArchiveFileSystem.h"
 #include "Common/CommandLine.h"
 #include "Common/CRCDebug.h"
@@ -1203,6 +1204,9 @@ static CommandLineParam paramsForStartup[] =
 	// The last successful selection wins; otherwise use the executable directory.
 	{ "-setCwd", parseSetCwd },
 	{ "-useCwd", parseUseCwd },
+
+	// AoC @feature 30/10/2026 Reserved for the selectable simulation rate (D11 F15). 30 is accepted, 60 exits with code 3.
+	{ "-simrate", AoCHarness::parseSimRate },
 };
 
 // Parsed on its own, before GameData.ini is loaded, so the mod's archives are mounted
@@ -1236,6 +1240,12 @@ static CommandLineParam paramsForEngineInit[] =
 
 	// TheSuperHackers @feature xezon 03/08/2025 Force full viewport for 'Control Bar Pro' Addons like GenTool did it.
 	{ "-forcefullviewport", parseFullViewport },
+
+	// AoC @feature 30/10/2026 Unattended-testing harness (D11 F12), see Include/AoC/AoCHarness.h.
+	{ "-skirmish", AoCHarness::parseSkirmish },
+	{ "-quitAtFrame", AoCHarness::parseQuitAtFrame },
+	{ "-crcLog", AoCHarness::parseCrcLog },
+	{ "-aiLog", AoCHarness::parseAiLog },
 
 #if defined(RTS_DEBUG)
 	{ "-noaudio", parseNoAudio },

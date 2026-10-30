@@ -45,6 +45,7 @@
 #include "GameNetwork/GameSpy/PeerDefs.h"
 #include "GameNetwork/networkutil.h"
 #include "GameLogic/GameLogic.h"
+#include "AoC/AoCHarness.h"
 #include "Common/RandomValue.h"
 #include "Common/CRCDebug.h"
 #include "Common/OptionPreferences.h"
@@ -1119,6 +1120,8 @@ void RecorderClass::handleCRCMessage(UnsignedInt newCRC, Int playerIndex, Bool f
 				mismatchFrame, playbackCRC, newCRC);
 			fprintf(stderr, "[GeneralsX] This replay is incompatible with the current map/game-code state.\n");
 			fflush(stderr);
+			// AoC @hook 30/10/2026 Release-mode mismatch flag for the harness exit code (D11 F12).
+			AoCHarness::onCRCMismatch(mismatchFrame, playbackCRC, newCRC);
 #if DEEP_CRC_TO_MEMORY
 			TheGameLogic->writeCRCBuffersToDisk(mismatchFrame);
 #endif
