@@ -1,0 +1,273 @@
+name: AoC CI
+
+# Age of Commanders build matrix. This file is additive: upstream's workflows (ci.yml, build-*.yml,
+# replay-tests*.yml) are not modified, so merges from GeneralsX stay clean. Linux and macOS call
+# upstream's reusable build workflows unchanged; Windows is our own job because it uses the local
+# recipe (Zero Hour only, unit tests on) and needs a longer timeout on a cold vcpkg cache.
+# Design and run notes: docs/build/B0-ci.md in the AoC workspace repository.
+
+on:
+  push:
+    branches:
+      - 'aoc-*'
+  pull_request:
+    branches:
+      - aoc-main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # Windows x86, MSVC: the same configure as tools/engine/build-zh.cmd (B0 build log section 5),
+  # plus RTS_BUILD_OPTION_TESTS=ON, which only adds the z_googletest target and does not change z_generals.
+  # Steps follow upstream's build-windows.yml (MSVC x86 dev shell, runner vcpkg, file binary cache).
+  # ---------------------------------------------------------------------------
+  windows:
+    name: Windows x86 (MSVC) build and unit tests
+    runs-on: windows-2022
+    timeout-minutes: 90
+    env:
+      VCPKG_DISABLE_METRICS: "1"
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+
+      - name: Configure MSVC x86
+        uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: x86
+
+      # The runner image version is part of the key: vcpkg's ABI hashes change when the image updates
+      # the compiler, so an exact hit from an older image would rebuild every port and never be saved.
+      - name: Compute vcpkg cache key
+        id: vcpkg_key
+        shell: pwsh
+        run: |
+          $prefix = "aoc-vcpkg-bincache-v1-${{ runner.os }}-x86-msvc-v143-${{ hashFiles('vcpkg.json', 'vcpkg-lock.json', 'cmake/ports/**', 'cmake/triplets/**') }}"
+          "prefix=$prefix" >> $env:GITHUB_OUTPUT
+          "key=$prefix-$($env:ImageOS)-$($env:ImageVersion)" >> $env:GITHUB_OUTPUT
+
+      - name: Restore vcpkg binary cache
+        id: vcpkg_cache
+        uses: actions/cache/restore@v4
+        with:
+          path: ${{ github.workspace }}/vcpkg-bincache
+          key: ${{ steps.vcpkg_key.outputs.key }}
+          restore-keys: |
+            ${{ steps.vcpkg_key.outputs.prefix }}-
+            aoc-vcpkg-bincache-v1-${{ runner.os }}-x86-msvc-v143-
+
+      - name: Configure vcpkg cache directory
+        shell: pwsh
+        run: |
+          $cacheDir = "${{ github.workspace }}/vcpkg-bincache"
+          New-Item -ItemType Directory -Force -Path $cacheDir | Out-Null
+          "VCPKG_DEFAULT_BINARY_CACHE=$cacheDir" >> $env:GITHUB_ENV
+          "VCPKG_BINARY_SOURCES=clear;files,$cacheDir,readwrite" >> $env:GITHUB_ENV
+          "VCPKG_OVERLAY_TRIPLETS=${{ github.workspace }}/cmake/triplets" >> $env:GITHUB_ENV
+          "VCPKG_OVERLAY_PORTS=${{ github.workspace }}/cmake/ports" >> $env:GITHUB_ENV
+
+      - name: Configure (win32-vcpkg, Zero Hour)
+        shell: pwsh
+        run: |
+          $env:VCPKG_ROOT = $env:VCPKG_INSTALLATION_ROOT
+          cmake --preset win32-vcpkg `
+            -DVCPKG_OVERLAY_PORTS="${{ github.workspace }}/cmake/ports" `
+            -DVCPKG_OVERLAY_TRIPLETS="${{ github.workspace }}/cmake/triplets" `
+            -DRTS_BUILD_GENERALS=OFF `
+            -DRTS_BUILD_ZEROHOUR=ON `
+            -DRTS_BUILD_CORE_TOOLS=OFF `
+            -DRTS_BUILD_ZEROHOUR_TOOLS=OFF `
+            -DRTS_BUILD_GENERALS_TOOLS=OFF `
+            -DRTS_BUILD_OPTION_SAGE_PATCH=OFF `
+            -DRTS_BUILD_OPTION_FFMPEG=OFF `
+            -DSAGE_USE_DX8=ON `
+            -DSAGE_USE_DETERMINISTIC_MATH=ON `
+            -DRTS_BUILD_OPTION_TESTS=ON
+
+      # Saved right after configure (where vcpkg builds the ports), so a later build failure still keeps the cache.
+      - name: Save vcpkg binary cache
+        if: ${{ steps.vcpkg_cache.outputs.cache-hit != 'true' }}
+        uses: actions/cache/save@v4
+        with:
+          path: ${{ github.workspace }}/vcpkg-bincache
+          key: ${{ steps.vcpkg_key.outputs.key }}
+
+      - name: Build GeneralsXZH.exe
+        shell: pwsh
+        run: cmake --build --preset win32-vcpkg --target z_generals
+
+      - name: Collect runtime
+        shell: pwsh
+        run: |
+          $out = "artifacts"
+          $rel = "build/win32-vcpkg/GeneralsMD/Release"
+          New-Item -ItemType Directory -Force $out | Out-Null
+          Copy-Item "$rel/GeneralsXZH.exe", "$rel/GeneralsXZH.pdb" $out
+
+          Get-ChildItem -Path @("vcpkg_installed/x86-windows/bin/*.dll", "build/win32-vcpkg/vcpkg_installed/x86-windows/bin/*.dll") -ErrorAction SilentlyContinue | ForEach-Object {
+            Write-Host "Collecting vcpkg DLL: $($_.FullName)"
+            Copy-Item $_.FullName $out
+          }
+
+          if (Test-Path "assets/fonts") {
+            New-Item -ItemType Directory -Force "$out/fonts" | Out-Null
+            Copy-Item assets/fonts/* "$out/fonts/"
+          }
+
+          # Desktop release CRT DLLs (msvcp140.dll, vcruntime140.dll), as upstream ships them.
+          $crt = Get-ChildItem "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Redist\MSVC" -Directory -Recurse |
+            Where-Object { $_.FullName -match "\\x86\\" -and $_.FullName -match "Microsoft\.VC143\.CRT$" -and $_.FullName -notmatch "onecore" } |
+            Select-Object -First 1
+          if ($crt) { Copy-Item (Join-Path $crt.FullName "*.dll") $out }
+
+          @"
+          Age of Commanders engine build (GeneralsX fork), Zero Hour, Windows x86 Release.
+          Commit ${{ github.sha }}, run ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          Copy these files into an existing licensed Zero Hour installation, or run GeneralsXZH.exe with
+          CNC_GENERALS_ZH_PATH pointing at one (path must end in a backslash). Keep the installation's
+          own binkw32.dll and mss32.dll.
+          "@ | Set-Content "$out/INSTALL.txt"
+          Get-ChildItem $out -Recurse | Select-Object Length, FullName | Format-Table -AutoSize
+
+      - name: Upload GeneralsXZH.exe
+        uses: actions/upload-artifact@v7
+        with:
+          name: aoc-windows-x86-GeneralsXZH
+          path: artifacts/
+          retention-days: 14
+          if-no-files-found: error
+
+      - name: Build unit tests
+        shell: pwsh
+        run: cmake --build --preset win32-vcpkg --target z_googletest
+
+      # Known fork failure, excluded until fixed upstream: GeneralsX made INI::scanInt saturate oversized
+      # integers (#297, INI.cpp around line 1760), while TheSuperHackers' test pins the retail sscanf result.
+      - name: Run unit tests
+        shell: pwsh
+        env:
+          GTEST_FILTER: "-INI.OversizedIntegersMatchLegacyParser"
+        run: ctest --preset win32-vcpkg --output-on-failure
+
+  # ---------------------------------------------------------------------------
+  # Linux x86_64: upstream's CI path (Flatpak SDK 25.08, linux64-deploy options), called unchanged.
+  # Builds Zero Hour and base Generals; Core edits must keep g_generals compiling.
+  # ---------------------------------------------------------------------------
+  linux:
+    name: Linux
+    uses: ./.github/workflows/build-linux-flatpak.yml
+    with:
+      preset: linux64-deploy
+
+  # ---------------------------------------------------------------------------
+  # macOS arm64: upstream's build (macos-vulkan preset, DXVK + MoltenVK), called unchanged.
+  # ---------------------------------------------------------------------------
+  macos:
+    name: macOS
+    permissions:
+      contents: read
+      pull-requests: read
+    uses: ./.github/workflows/build-macos.yml
+    with:
+      preset: macos-vulkan
+
+  # ---------------------------------------------------------------------------
+  # PLACEHOLDER, skipped: stock replay tests need Zero Hour game data.
+  # Upstream's replay jobs decrypt generalszh.7z from generalsx-test-files with the ASSETS_KEY secret,
+  # which this fork does not have (and must not redistribute). The job below runs upstream's six
+  # Linux and macOS captures headless on the Windows build, on a self-hosted runner that has a licensed
+  # Zero Hour install. It stays skipped until such a runner (labels: self-hosted, Windows, aoc-zh-data)
+  # is registered and the repository variable AOC_ZH_DATA_RUNNER is set to 'true'. Not yet exercised.
+  # ---------------------------------------------------------------------------
+  replay-tests:
+    name: Stock replay tests (needs game data; placeholder)
+    needs: windows
+    if: ${{ vars.AOC_ZH_DATA_RUNNER == 'true' }}
+    runs-on: [self-hosted, Windows, aoc-zh-data]
+    timeout-minutes: 45
+    steps:
+      - name: Download GeneralsXZH.exe
+        uses: actions/download-artifact@v8
+        with:
+          name: aoc-windows-x86-GeneralsXZH
+          path: ${{ runner.temp }}/game-artifact
+
+      - name: Download replay files (public)
+        shell: pwsh
+        run: |
+          # AOC_ZH_GAME_DIR is set in the runner's environment (.env file) to the licensed install.
+          if (!$env:AOC_ZH_GAME_DIR -or !(Get-ChildItem $env:AOC_ZH_GAME_DIR -Filter *.big -ErrorAction SilentlyContinue)) {
+            throw "AOC_ZH_GAME_DIR must point at a Zero Hour install on this runner"
+          }
+          $repo = Join-Path $env:RUNNER_TEMP "ci-replays-repo"
+          Remove-Item $repo -Recurse -Force -ErrorAction SilentlyContinue
+          git clone --depth 1 https://gitlab.com/fbraz3/generalsx-replays.git $repo
+          if ($LASTEXITCODE -ne 0) { git clone --depth 1 https://github.com/generalsx-project/GeneralsXReplays.git $repo }
+          if ($LASTEXITCODE -ne 0) { throw "Unable to download replay files" }
+          $userData = Join-Path ([Environment]::GetFolderPath("MyDocuments")) "Command and Conquer Generals Zero Hour Data"
+          New-Item -ItemType Directory -Force (Join-Path $userData "Maps"), (Join-Path $userData "Replays") | Out-Null
+          Copy-Item (Join-Path $repo "GeneralsXZH\Maps\*") (Join-Path $userData "Maps") -Recurse -Force
+          Copy-Item (Join-Path $repo "GeneralsXZH\Replays\*.rep") (Join-Path $userData "Replays") -Force
+          "REPLAYS_DIR=$(Join-Path $userData 'Replays')" >> $env:GITHUB_ENV
+
+      - name: Run replays headless
+        shell: pwsh
+        run: |
+          $game = $env:AOC_ZH_GAME_DIR.TrimEnd('\')
+          # Trailing backslashes are required (B0 build log section 11).
+          $env:CNC_GENERALS_ZH_PATH = "$game\"
+          $env:CNC_GENERALS_PATH = "$game\ZH_Generals\"
+          $env:PATH = "$game;$env:PATH"
+          $exe = Join-Path $env:RUNNER_TEMP "game-artifact\GeneralsXZH.exe"
+          $failed = 0
+          $replays = @(Get-ChildItem $env:REPLAYS_DIR -Filter "*.rep" | Where-Object { $_.Name -match '^(linux|macos)_' } | Sort-Object Name)
+          if ($replays.Count -eq 0) { throw "No replay files found" }
+          foreach ($rep in $replays) {
+            $log = Join-Path $env:RUNNER_TEMP "$($rep.BaseName)-stdout.log"
+            $p = Start-Process -FilePath $exe -ArgumentList "-headless -replay `"$($rep.FullName)`" -setCwd `"$game`"" `
+                 -WorkingDirectory $game -RedirectStandardOutput $log -RedirectStandardError "$log.err" -PassThru
+            if (!$p.WaitForExit(180000)) { Stop-Process -Id $p.Id -Force; $code = "timeout" } else { $p.WaitForExit(); $code = $p.ExitCode }
+            # The engine compares its per-frame CRC with the CRCs recorded in the replay and exits 1 on a mismatch.
+            $done = Select-String -Path $log -Pattern '^Elapsed Time: \d{2}:\d{2} Game Time: (\d{2}:\d{2})/\1$' -Quiet
+            if ($code -eq 0 -and $done) { "PASS $($rep.Name)" } else { "FAIL $($rep.Name) (exit $code)"; Get-Content $log -Tail 20; $failed++ }
+          }
+          if ($failed -gt 0) { throw "$failed replay(s) failed" }
+
+  # Later (D11 section 4): the AoC desync suite (one recorded AI versus AI skirmish per B5 map, played back
+  # headless with -crcLog on every platform, logs diffed byte for byte, exit code 2 fails) and the save
+  # round trip go here, next to replay-tests, under the same game-data condition.
+
+  result:
+    name: AoC CI result
+    needs: [windows, linux, macos, replay-tests]
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Summarise
+        run: |
+          {
+            echo "### AoC CI"
+            echo ""
+            echo "| Job | Result |"
+            echo "|-----|--------|"
+            echo "| Windows x86 build and unit tests | ${{ needs.windows.result }} |"
+            echo "| Linux (Flatpak, linux64-deploy) | ${{ needs.linux.result }} |"
+            echo "| macOS (macos-vulkan) | ${{ needs.macos.result }} |"
+            echo "| Stock replay tests (needs game data) | ${{ needs.replay-tests.result }} |"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Fail if a job failed
+        if: ${{ contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled') }}
+        run: exit 1
