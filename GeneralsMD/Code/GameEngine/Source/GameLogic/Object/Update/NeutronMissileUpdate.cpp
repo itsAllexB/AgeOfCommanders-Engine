@@ -351,7 +351,9 @@ void NeutronMissileUpdate::doAttack()
 			//
 			// Orient toward destination
 			//
-			Real relAngle = calcTransform(getObject(), m_reachedIntermediatePos ? &m_targetPos : &m_intermedPos, getNeutronMissileUpdateModuleData()->m_maxTurnRate, &mx);
+			// AoC @hook 31/10/2026 MaxTurnRate is converted per live frame at parse time but this update steps once per
+			// retail frame, so one step turns by the rate of frameMultiplier() live frames (D11 F15).
+			Real relAngle = calcTransform(getObject(), m_reachedIntermediatePos ? &m_targetPos : &m_intermedPos, getNeutronMissileUpdateModuleData()->m_maxTurnRate * (Real)AoCSimRate::frameMultiplier(), &mx);
 
 			//
 			// Modulate speed according to turning. The more we have to turn, the slower we go
