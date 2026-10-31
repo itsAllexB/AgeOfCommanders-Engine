@@ -664,6 +664,16 @@ CBCommandStatus ControlBar::processCommandUI( GameWindow *control,
 		}
 
 		//---------------------------------------------------------------------------------------------
+		// AoC @hook 31/10/2026 command bar folders: swap the shown set, no GameMessage, UI marked dirty (D11 F5).
+		case GUI_COMMAND_AOC_FOLDER:
+			aocOpenFolder( commandButton, obj );
+			break;
+
+		case GUI_COMMAND_AOC_FOLDER_BACK:
+			aocFolderBack();
+			break;
+
+		//---------------------------------------------------------------------------------------------
 		case GUI_COMMAND_WAYPOINTS:
 			break;
 

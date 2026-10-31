@@ -1248,6 +1248,7 @@ static CommandLineParam paramsForEngineInit[] =
 	{ "-crcLog", AoCHarness::parseCrcLog },
 	{ "-aiLog", AoCHarness::parseAiLog },
 	{ "-saveAtFrame", AoCHarness::parseSaveAtFrame },	// AoC @feature F1
+	{ "-aocUiScript", AoCHarness::parseAocUiScript },	// AoC @feature F5
 
 #if defined(RTS_DEBUG)
 	{ "-noaudio", parseNoAudio },

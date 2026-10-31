@@ -354,6 +354,7 @@ static const LookupListRec GameMessageMetaTypeNames[] =
 	{ "DEMO_PERFORM_STATISTICAL_DUMP",						GameMessage::MSG_META_DEMO_PERFORM_STATISTICAL_DUMP },
 #endif//DUMP_PERF_STATS
 
+	{ "AOC_FOLDER_BACK",													GameMessage::MSG_META_AOC_FOLDER_BACK },	// AoC @hook 31/10/2026 Back in command bar folders, Backspace in the mod's CommandMap.ini (D11 F5).
 
 	{ nullptr, 0	}
 };

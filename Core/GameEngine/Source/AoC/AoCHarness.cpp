@@ -41,6 +41,15 @@
 #include "Common/Recorder.h"
 #include "Common/ScoreKeeper.h"
 #include "Common/ThingTemplate.h"
+#include "GameClient/ControlBar.h"
+#include "GameClient/Display.h"
+#include "GameClient/Drawable.h"
+#include "GameClient/Gadget.h"
+#include "GameClient/GadgetPushButton.h"
+#include "GameClient/GameWindow.h"
+#include "GameClient/GameWindowManager.h"
+#include "GameClient/InGameUI.h"
+#include "GameClient/KeyDefs.h"
 #include "GameClient/MapUtil.h"
 #include "GameLogic/GameLogic.h"
 #include "GameLogic/Object.h"
@@ -49,6 +58,7 @@
 
 #include <algorithm>
 #include <chrono>
+#include <filesystem>
 #include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -107,6 +117,18 @@ struct HarnessState
 	UnsignedInt logicUpdates;	///< logic updates in the current window
 	UnsignedInt iterations;		///< engine loop iterations (rendered frames) in the current window
 	long long windowStartNs;
+
+	// F5 -aocUiScript: client UI steps, each run once its logic frame has run (see runUiScript).
+	struct UiLine { UnsignedInt frame; char cmd[12]; char arg[244]; };
+	UiLine uiLines[64];
+	Int uiLineCount;
+	Int uiNext;									///< next line to run
+	Int uiWait;									///< engine iterations left before the next line, so the UI catches up
+	Bool sawLogicFrame;
+	UnsignedInt lastLogicFrame;	///< the last logic frame that has run
+	char uiShotTarget[1024];		///< pending screenshot: where the engine's PNG goes
+	char uiShotBefore[64];			///< the newest engine screenshot name before the request
+	Int uiShotWait;							///< iterations left to find it, 0 when none is pending
 };
 
 long long nowNs()
@@ -435,6 +457,157 @@ void writeTimingLog( UnsignedInt frame )
 	s.iterations = 0;
 }
 
+// --- F5 -aocUiScript ----------------------------------------------------------------------------
+// Client UI steps through the paths a click or a key takes, never logic state. After select, press and back
+// the next line waits a few engine iterations: one client update re-evaluates the control bar, and injected
+// keys need one more to pass the message stream.
+
+const Int AOC_UI_SETTLE_ITERATIONS = 3;
+
+GameWindow *uiCommandWindow( Int slot )	// slot 1 to 14: the windows ControlBar::init looks up
+{
+	AsciiString name;
+	name.format("ControlBar.wnd:ButtonCommand%02d", slot);
+	return TheWindowManager->winGetWindowFromId(nullptr, TheNameKeyGenerator->nameToKey(name));
+}
+
+Bool uiShown( GameWindow *win )
+{
+	for (GameWindow *w = win; w; w = w->winGetParent())
+		if (w->winIsHidden())
+			return FALSE;
+	return win != nullptr;
+}
+
+std::filesystem::path uiScreenshotDir()	// where W3DScreenshot writes sshot_<local time>.png
+{
+	return std::filesystem::path(TheGlobalData->getPath_UserData().str()) / "Screenshots";
+}
+
+std::string uiNewestScreenshot()
+{
+	std::string newest;
+	std::error_code ec;
+	for (std::filesystem::directory_iterator it(uiScreenshotDir(), ec), end; !ec && it != end; it.increment(ec))
+	{
+		const std::string name = it->path().filename().string();
+		if (name.compare(0, 6, "sshot_") == 0 && it->path().extension() == ".png" && name > newest)
+			newest = name;
+	}
+	return newest;
+}
+
+void uiLog( UnsignedInt frame )
+{
+	std::string slots;
+	for (Int slot = 1; slot <= 14; ++slot)
+	{
+		GameWindow *win = uiCommandWindow(slot);
+		const CommandButton *button = uiShown(win) ? (const CommandButton *)GadgetButtonGetData(win) : nullptr;
+		slots += std::string(slot > 1 ? "," : "") + (button ? button->getName().str() : "-");
+	}
+	const AsciiString &set = TheControlBar->aocShownCommandSet();
+	const ThingTemplate *placing = TheInGameUI->getPendingPlaceType();
+	fprintf(stderr, "[AoC ui] frame %u set=%s slots=%s%s%s\n", frame, set.isEmpty() ? "-" : set.str(), slots.c_str(),
+		placing ? " place=" : "", placing ? placing->getName().str() : "");
+	fflush(stderr);
+}
+
+/// Runs one line; returns the engine iterations to wait before the next.
+Int uiRunLine( const HarnessState::UiLine &l )
+{
+	HarnessState &s = state();
+	if (strcmp(l.cmd, "log") == 0)
+	{
+		uiLog(l.frame);
+		return 0;
+	}
+	if (strcmp(l.cmd, "select") == 0)
+	{
+		// the local player's object of that template with the lowest id, selected as a left click selects it
+		Object *pick = nullptr;
+		for (Object *obj = TheGameLogic->getFirstObject(); obj; obj = obj->getNextObject())
+			if (obj->getControllingPlayer() == ThePlayerList->getLocalPlayer() && obj->getDrawable() && !obj->getContainedBy() &&
+					!obj->isEffectivelyDead() && obj->getTemplate()->getName().compareNoCase(l.arg) == 0 && (!pick || obj->getID() < pick->getID()))
+				pick = obj;
+		if (pick == nullptr)
+		{
+			logLine("uiScript: select %s: the local player has no such object", l.arg);
+			return 0;
+		}
+		TheInGameUI->deselectAllDrawables();
+		GameMessage *msg = TheMessageStream->appendMessage(GameMessage::MSG_CREATE_SELECTED_GROUP);
+		msg->appendBooleanArgument(TRUE);
+		msg->appendObjectIDArgument(pick->getID());
+		TheInGameUI->selectDrawable(pick->getDrawable());
+		return AOC_UI_SETTLE_ITERATIONS;
+	}
+	if (strcmp(l.cmd, "press") == 0)
+	{
+		GameWindow *win = uiCommandWindow(atoi(l.arg));
+		if (!uiShown(win) || !BitIsSet(win->winGetStatus(), WIN_STATUS_ENABLED))
+		{
+			logLine("uiScript: press %s: no visible enabled button in that slot, nothing pressed", l.arg);
+			return 0;
+		}
+		// what a hotkey sends (HotKeyManager::executeHotKey) and a left click ends in: GBM_SELECTED to the control bar
+		TheWindowManager->winSendSystemMsg(win->winGetParent(), GBM_SELECTED, (WindowMsgData)win, win->winGetWindowId());
+		return AOC_UI_SETTLE_ITERATIONS;
+	}
+	if (strcmp(l.cmd, "back") == 0)
+	{
+		// Backspace down and up into the message stream, as the keyboard posts them; CommandMap.ini maps the key
+		GameMessage *down = TheMessageStream->appendMessage(GameMessage::MSG_RAW_KEY_DOWN);
+		down->appendIntegerArgument(KEY_BACKSPACE);
+		down->appendIntegerArgument(KEY_STATE_DOWN);
+		GameMessage *up = TheMessageStream->appendMessage(GameMessage::MSG_RAW_KEY_UP);
+		up->appendIntegerArgument(KEY_BACKSPACE);
+		up->appendIntegerArgument(KEY_STATE_UP);
+		return AOC_UI_SETTLE_ITERATIONS;
+	}
+	// screenshot: the engine's own Release path (Ctrl+F12 PNG); its thread names the file, runUiScript moves it
+	copyArg(s.uiShotTarget, sizeof(s.uiShotTarget), l.arg);
+	copyArg(s.uiShotBefore, sizeof(s.uiShotBefore), uiNewestScreenshot().c_str());
+	TheDisplay->takeScreenShot(SCREENSHOT_PNG);
+	s.uiShotWait = 600;
+	return AOC_UI_SETTLE_ITERATIONS;
+}
+
+void runUiScript()
+{
+	HarnessState &s = state();
+	if (s.uiLineCount == 0 || !s.sawLogicFrame || !inRealGame() || TheControlBar == nullptr)
+		return;
+	if (s.uiShotWait > 0)
+	{
+		const std::string newest = uiNewestScreenshot();
+		std::error_code ec;
+		if (!newest.empty() && newest > std::string(s.uiShotBefore))
+			std::filesystem::rename(uiScreenshotDir() / newest, s.uiShotTarget, ec);	// fails while the writer still has it open
+		if (!newest.empty() && newest > std::string(s.uiShotBefore) && !ec)
+		{
+			logLine("uiScript: screenshot %s moved to %s", newest.c_str(), s.uiShotTarget);
+			s.uiShotWait = 0;
+		}
+		else if (--s.uiShotWait == 0)
+			logLine("uiScript: no new engine screenshot in %s for '%s'", uiScreenshotDir().string().c_str(), s.uiShotTarget);
+	}
+	if (s.uiWait > 0)
+	{
+		--s.uiWait;
+		return;
+	}
+	while (s.uiNext < s.uiLineCount && s.uiLines[s.uiNext].frame <= s.lastLogicFrame && s.uiWait == 0)
+	{
+		const HarnessState::UiLine &l = s.uiLines[s.uiNext++];
+		logLine("uiScript line %d at logic frame %u: %s %s", s.uiNext, s.lastLogicFrame, l.cmd, l.arg);
+		if (strcmp(l.cmd, "select") == 0 && s.lastLogicFrame > l.frame)
+			logLine("uiScript: warning: line %d (select, frame %u) runs late, at logic frame %u: its selection message lands on a "
+				"frame that depends on the render rate, so the CRC log is not reproducible; make a select the first line of its frame", s.uiNext, l.frame, s.lastLogicFrame);
+		s.uiWait = uiRunLine(l);
+	}
+}
+
 } // namespace
 
 // --- command line -------------------------------------------------------------------------------
@@ -528,6 +701,67 @@ Int AoCHarness::parseSimRate( char *args[], int num )
 		exit(3);
 	}
 	return 1;
+}
+
+Int AoCHarness::parseAocUiScript( char *args[], int num )
+{
+	if (num < 2)
+	{
+		logLine("usage: -aocUiScript <file>; flag ignored");
+		return 1;
+	}
+	HarnessState &s = state();
+	if (TheGlobalData && TheGlobalData->m_headless)
+	{
+		// the dummy window manager has no command buttons, but a select would still reach the logic
+		logLine("-aocUiScript needs a window and is ignored under -headless");
+		return 2;
+	}
+	FILE *f = fopen(args[1], "r");
+	if (f == nullptr)
+	{
+		logLine("-aocUiScript: cannot open '%s'; flag ignored", args[1]);
+		return 2;
+	}
+	static const char *const known[] = { "select", "press", "back", "log", "screenshot" };
+	char text[512];
+	Int lineNumber = 0;
+	Int dropped = 0;
+	while (fgets(text, sizeof(text), f))
+	{
+		++lineNumber;
+		int c = strchr(text, '\n') == nullptr ? fgetc(f) : '\n';
+		if (c != '\n' && c != EOF)
+		{
+			// longer than the buffer: skip the rest of it rather than read its tail as a line of its own
+			while ((c = fgetc(f)) != EOF && c != '\n') {}
+			logLine("-aocUiScript: line %d is longer than %d characters, skipped", lineNumber, (int)sizeof(text) - 1);
+			continue;
+		}
+		HarnessState::UiLine scratch;
+		HarnessState::UiLine &l = s.uiLineCount < (Int)ARRAY_SIZE(s.uiLines) ? s.uiLines[s.uiLineCount] : scratch;
+		l.arg[0] = '\0';
+		if (sscanf(text, "%u %11s %243[^\r\n]", &l.frame, l.cmd, l.arg) < 2)
+			continue;	// blank line or comment
+		if (s.uiLineCount >= (Int)ARRAY_SIZE(s.uiLines))
+		{
+			++dropped;
+			continue;
+		}
+		Bool ok = FALSE;
+		for (size_t k = 0; k < ARRAY_SIZE(known); ++k)
+			ok = ok || strcmp(l.cmd, known[k]) == 0;
+		if (ok)
+			s.uiLineCount++;
+		else
+			logLine("-aocUiScript: unknown command '%s' skipped (select, press, back, log, screenshot)", l.cmd);
+	}
+	fclose(f);
+	if (dropped > 0)
+		logLine("-aocUiScript: only %d lines are kept; %d more dropped", (int)ARRAY_SIZE(s.uiLines), dropped);
+	s.anyFlag = TRUE;
+	logLine("-aocUiScript: %d lines from '%s'", s.uiLineCount, args[1]);
+	return 2;
 }
 
 Bool AoCHarness::isActive()
@@ -646,6 +880,9 @@ void AoCHarness::onLogicFrame( UnsignedInt frame, Bool crcGenerated, UnsignedInt
 	if (!s.anyFlag || !inRealGame())
 		return;
 
+	s.sawLogicFrame = TRUE;	// F5 -aocUiScript runs a line once its frame has run
+	s.lastLogicFrame = frame;
+
 	if (crcGenerated && s.crcLogPath[0] != '\0')
 	{
 		if (s.crcLog == nullptr)
@@ -743,6 +980,9 @@ void AoCHarness::pollQuit()
 		if (s.windowStartNs == 0)
 			s.windowStartNs = nowNs();
 	}
+
+	// F5: -aocUiScript, client UI steps between two logic frames.
+	runUiScript();
 
 	// F1: -saveAtFrame, through the save menu's path, between two logic frames like the menu does.
 	if (s.saveRequested && !s.saveDone && inRealGame() && TheGameState)

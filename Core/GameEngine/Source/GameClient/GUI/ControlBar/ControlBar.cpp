@@ -124,6 +124,7 @@ const FieldParse CommandButton::s_commandButtonFieldParseTable[] =
 	{ "ButtonBorderType",			INI::parseLookupList,				 CommandButtonMappedBorderTypeNames, offsetof( CommandButton, m_commandButtonBorder ) },
 	{ "RadiusCursorType",			INI::parseIndexList,				 TheRadiusCursorNames, offsetof( CommandButton, m_radiusCursor ) },
 	{ "UnitSpecificSound",		INI::parseAudioEventRTS,		 nullptr, offsetof( CommandButton, m_unitSpecificSound ) },
+	{ "AoCFolderCommandSet",	INI::parseAsciiString,			 nullptr, offsetof( CommandButton, m_aocFolderSet ) },	// AoC @hook 31/10/2026 command bar folders: the set a folder shows (D11 F5).
 
 	{ nullptr,						nullptr,												 nullptr, 0 }
 
@@ -988,6 +989,8 @@ ControlBar::ControlBar()
 	m_consecutiveDirtyFrames = 0;
 #endif
 
+	aocCloseFolder();	// AoC @hook 31/10/2026 no folder open (D11 F5).
+
 }
 
 //-------------------------------------------------------------------------------------------------
@@ -1351,6 +1354,7 @@ void ControlBar::reset()
 
 	// go back to default context
 	switchToContext( CB_CONTEXT_NONE, nullptr );
+	aocCloseFolder();	// AoC @hook 31/10/2026 a new game starts with no folder open; object ids restart (D11 F5).
 	m_sideSelectAnimateDown = FALSE;
 	if(m_animateDownWindow)
 	{
@@ -1758,6 +1762,9 @@ void ControlBar::evaluateContextUI()
 	// information to the player
 	//
 	m_UIDirty = FALSE;
+
+	// AoC @hook 31/10/2026 a selection change closes the open folder (D11 F5).
+	aocCheckFolderOwner();
 
 	// if our purchase science window is up, we will want to update it by repopulating it.
 	if(!m_contextParent[ CP_PURCHASE_SCIENCE ]->winIsHidden())
@@ -2526,6 +2533,9 @@ void ControlBar::setControlCommand( GameWindow *button, const CommandButton *com
 	}
 	else
 		GadgetButtonSetText( button, L"" );
+
+	// AoC @hook 31/10/2026 caption over folder and Back cameos; clears a caption a folder left on this window (D11 F5).
+	aocSetCaption( button, commandButton );
 
 	// save the command in the user data of the window
 	GadgetButtonSetData(button, (void*)commandButton);

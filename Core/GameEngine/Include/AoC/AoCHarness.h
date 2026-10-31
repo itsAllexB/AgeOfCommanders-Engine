@@ -41,6 +41,27 @@
 //                                   -simrate (a save made at the other rate is refused, exit code 5).
 //   -simrate <30|60>                Simulation rate for this process (D11 F15), overriding the
 //                                   Options.ini SimulationRate key. Any other value exits with code 3.
+//   -aocUiScript <file>             F5: client UI steps for unattended UI tests. Lines "<frame> <command> [arg]"
+//                                   in frame order (others are comments), up to 64; each runs in the engine loop
+//                                   once logic frame <frame> has run, through the path a click or key takes:
+//                                     select <Template>  the local player's object of that template with the
+//                                                        lowest id, selected as a left click selects it
+//                                     press <slot>       the visible, enabled command button 1 to 14 (GBM_SELECTED,
+//                                                        as a click or its hotkey); a hidden or disabled one is not
+//                                     back               Backspace down and up into the message stream
+//                                     log                stderr "[AoC ui] frame <frame> set=<shown command set or
+//                                                        -> slots=<button per slot 1..14, - when not shown>"
+//                                                        plus " place=<template>" while a placement is pending
+//                                     screenshot <file>  the engine's Release PNG screenshot (Ctrl+F12 path),
+//                                                        moved from <user data>/Screenshots to <file>
+//                                   After select, press and back the next line waits 3 engine iterations so the
+//                                   control bar re-evaluates. Use absolute paths. select sends the stock selection
+//                                   message, as a click does, and so moves the CRC; press, back, log and screenshot
+//                                   send nothing. A select must be the first line of its frame and come after the
+//                                   lines before it have settled: a late select (warned on stderr) lands on a frame
+//                                   that depends on the render rate, and the CRC log is no longer reproducible.
+//                                   Refused under -headless (no windows). Over 64 lines or a line over 511
+//                                   characters is reported on stderr and skipped.
 //
 // Exit codes: 0 normal, 2 CRC mismatch seen, 3 unsupported -simrate, 4 -skirmish could not start,
 // 5 a replay or save made at the other simulation rate was refused.
@@ -63,6 +84,7 @@ public:
 	static Int parseAiLog( char *args[], int num );
 	static Int parseSimRate( char *args[], int num );
 	static Int parseSaveAtFrame( char *args[], int num );	// AoC F1
+	static Int parseAocUiScript( char *args[], int num );	// AoC F5
 
 	/// TRUE when any harness flag was given on the command line.
 	static Bool isActive();
@@ -74,7 +96,7 @@ public:
 	static void onLogicFrame( UnsignedInt frame, Bool crcGenerated, UnsignedInt crc );
 	/// RecorderClass::handleCRCMessage, where a replay CRC mismatch is reported.
 	static void onCRCMismatch( UnsignedInt frame, UnsignedInt inGameCRC, UnsignedInt replayCRC );
-	/// GameEngine::execute, after each update(): writes the save requested by -saveAtFrame, performs the clean quit requested by -quitAtFrame.
+	/// GameEngine::execute, after each update(): runs due -aocUiScript lines, writes the save requested by -saveAtFrame, performs the clean quit requested by -quitAtFrame.
 	static void pollQuit();
 	/// GameMain, before returning: maps the harness state to the process exit code.
 	static int finalExitCode( int exitcode );

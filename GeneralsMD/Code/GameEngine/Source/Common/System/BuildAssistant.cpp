@@ -31,6 +31,7 @@
 // USER INCLUDES //////////////////////////////////////////////////////////////////////////////////
 #include "PreRTS.h"	// This must go first in EVERY cpp file in the GameEngine
 
+#include "AoC/AoCFolder.h"	// AoC @feature F5
 #include "Common/BuildAssistant.h"
 #include "Common/GlobalData.h"
 #include "Common/Player.h"
@@ -1297,6 +1298,9 @@ Bool BuildAssistant::isPossibleToMakeUnit( Object *builder, const ThingTemplate 
 			foundCommand = commandButton;
 
 	}
+	// AoC @hook 31/10/2026 a build button inside one of the set's folders is the builder's own; INI data, no view state (D11 F5).
+	if( foundCommand == nullptr )
+		foundCommand = AoCFolder::findBuildCommandInFolders( commandSet, whatToBuild );
 	if( foundCommand == nullptr )
 		return FALSE;
 
