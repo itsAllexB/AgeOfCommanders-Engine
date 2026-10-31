@@ -60,6 +60,8 @@
 //                                   send nothing. A select must be the first line of its frame and come after the
 //                                   lines before it have settled: a late select (warned on stderr) lands on a frame
 //                                   that depends on the render rate, and the CRC log is no longer reproducible.
+//                                   Refused under -headless (no windows). Over 64 lines or a line over 511
+//                                   characters is reported on stderr and skipped.
 //
 // Exit codes: 0 normal, 2 CRC mismatch seen, 3 unsupported -simrate, 4 -skirmish could not start,
 // 5 a replay or save made at the other simulation rate was refused.
