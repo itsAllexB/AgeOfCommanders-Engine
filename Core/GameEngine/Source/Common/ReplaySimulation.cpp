@@ -70,7 +70,10 @@ int ReplaySimulation::simulateReplaysInThisProcess(const std::vector<AsciiString
 		// If we are not in headless mode, we need to run the replay in the engine.
 		for (; s_replayIndex < s_replayCount; ++s_replayIndex)
 		{
-			TheRecorder->playbackFile(filenames[s_replayIndex]);
+			// AoC @hook 31/10/2026 A replay that does not open (one refused for its simulation rate among them) counts as an
+			// error, as in the headless path below (D11 F15).
+			if (!TheRecorder->playbackFile(filenames[s_replayIndex]))
+				numErrors++;
 			TheGameEngine->execute();
 			if (TheRecorder->sawCRCMismatch())
 				numErrors++;

@@ -102,6 +102,11 @@ namespace AoCSimRate
 	void logMismatch( const char *what, Int otherRate );
 	UnicodeString mismatchMessage( const char *what, Int otherRate );
 
+	/// Replay playback (RecorderClass::playbackFile, every caller): TRUE when a replay recorded at replayRate cannot
+	/// play at this rate. The refusal is then reported once: stderr, a message box when there is a window, and exit
+	/// code 5 under the harness flags.
+	Bool refuseReplay( Int replayRate );
+
 	/// Save load: GameLogic::xfer notes the rate of a refused save; the save/load menu reads it once.
 	void noteSaveMismatch( Int savedRate );
 	Int consumeSaveMismatch();	///< 0 when the last load failure was not a rate mismatch; clears the pending note

@@ -23,8 +23,10 @@
 
 #include "AoC/AoCSimRate.h"
 
+#include "AoC/AoCHarness.h"
 #include "Common/crc.h"
 #include "GameClient/GameText.h"
+#include "GameClient/MessageBox.h"
 #include "Common/GlobalData.h"
 #include "Common/OptionPreferences.h"
 #include "Common/UnicodeString.h"
@@ -147,6 +149,17 @@ UnicodeString AoCSimRate::mismatchMessage( const char *what, Int otherRate )
 	UnicodeString msg;
 	msg.format(format.str(), whatW.str(), otherRate, g_framesPerSecond, otherRate, otherRate);
 	return msg;
+}
+
+Bool AoCSimRate::refuseReplay( Int replayRate )
+{
+	if (replayRate == g_framesPerSecond)
+		return FALSE;
+	logMismatch("This replay", replayRate);
+	if (TheGlobalData != nullptr && !TheGlobalData->m_headless && TheGameText != nullptr)
+		MessageBoxOk(TheGameText->FETCH_OR_SUBSTITUTE("GUI:ReplayLoadFailedTitle", L"REPLAY CANNOT BE LOADED"), mismatchMessage("This replay", replayRate), nullptr);
+	AoCHarness::onSimRateRefusal();
+	return TRUE;
 }
 
 void AoCSimRate::noteSaveMismatch( Int savedRate )
