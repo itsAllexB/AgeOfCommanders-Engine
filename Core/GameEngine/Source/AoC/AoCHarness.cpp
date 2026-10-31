@@ -601,6 +601,9 @@ void runUiScript()
 	{
 		const HarnessState::UiLine &l = s.uiLines[s.uiNext++];
 		logLine("uiScript line %d at logic frame %u: %s %s", s.uiNext, s.lastLogicFrame, l.cmd, l.arg);
+		if (strcmp(l.cmd, "select") == 0 && s.lastLogicFrame > l.frame)
+			logLine("uiScript: warning: line %d (select, frame %u) runs late, at logic frame %u: its selection message lands on a "
+				"frame that depends on the render rate, so the CRC log is not reproducible; make a select the first line of its frame", s.uiNext, l.frame, s.lastLogicFrame);
 		s.uiWait = uiRunLine(l);
 	}
 }

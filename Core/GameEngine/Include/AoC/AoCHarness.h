@@ -56,7 +56,10 @@
 //                                                        moved from <user data>/Screenshots to <file>
 //                                   After select, press and back the next line waits 3 engine iterations so the
 //                                   control bar re-evaluates. Use absolute paths. select sends the stock selection
-//                                   message, as a click does; press, back, log and screenshot send nothing.
+//                                   message, as a click does, and so moves the CRC; press, back, log and screenshot
+//                                   send nothing. A select must be the first line of its frame and come after the
+//                                   lines before it have settled: a late select (warned on stderr) lands on a frame
+//                                   that depends on the render rate, and the CRC log is no longer reproducible.
 //
 // Exit codes: 0 normal, 2 CRC mismatch seen, 3 unsupported -simrate, 4 -skirmish could not start,
 // 5 a replay or save made at the other simulation rate was refused.
