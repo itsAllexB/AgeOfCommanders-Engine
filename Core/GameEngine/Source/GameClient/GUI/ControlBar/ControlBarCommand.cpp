@@ -271,7 +271,8 @@ void ControlBar::populateCommand( Object *obj )
 	resetBuildQueueData();
 
 	// get command set
-	commandSet = findCommandSet( obj->getCommandSetString() );
+	// AoC @hook 31/10/2026 the open folder's set when obj owns it, else findCommandSet( obj->getCommandSetString() ) (D11 F5).
+	commandSet = aocCommandSetFor( obj );
 
 	// if no command set match is found hide all the buttons
 	if( commandSet == nullptr )
@@ -1043,6 +1044,10 @@ CommandAvailability ControlBar::getCommandAvailability( const CommandButton *com
  	{
  		return COMMAND_HIDDEN;
  	}
+
+	// AoC @hook 31/10/2026 folders and Back are always available, even when everything inside is locked (D11 F5, D6 3.2).
+	if( command->getCommandType() == GUI_COMMAND_AOC_FOLDER || command->getCommandType() == GUI_COMMAND_AOC_FOLDER_BACK )
+		return COMMAND_AVAILABLE;
 
 	//It's possible for command buttons to be a single use only type of a button -- like detonating a nuke from a convoy truck.
 	if( obj->hasSingleUseCommandBeenUsed() )

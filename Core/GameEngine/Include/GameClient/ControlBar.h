@@ -215,6 +215,10 @@ enum GUICommandType CPP_11(: Int)
 
 	GUI_COMMAND_SELECT_ALL_UNITS_OF_TYPE,
 
+	// AoC @hook 31/10/2026 command bar folders: show the button's FolderCommandSet, and Back to the object's own set (D11 F5).
+	GUI_COMMAND_AOC_FOLDER,
+	GUI_COMMAND_AOC_FOLDER_BACK,
+
 	// add more commands here, don't forget to update the string command list below too ...
 
 	GUI_COMMAND_NUM_COMMANDS
@@ -268,6 +272,8 @@ static const char *const TheGuiCommandNames[] =
 	"SPECIAL_POWER_CONSTRUCT",
 	"SPECIAL_POWER_CONSTRUCT_FROM_SHORTCUT",
 	"SELECT_ALL_UNITS_OF_TYPE",
+	"AOC_FOLDER",				// AoC @hook 31/10/2026 command bar folders (D11 F5).
+	"AOC_FOLDER_BACK",
 
 	nullptr
 };
@@ -346,6 +352,7 @@ public:
 	Int getMaxShotsToFire() const { return m_maxShotsToFire; }
 	const ScienceVec& getScienceVec() const { return m_science; }
 	CommandButtonMappedBorderType getCommandButtonMappedBorderType() const { return m_commandButtonBorder; }
+	const AsciiString& getAoCFolderSet() const { return m_aocFolderSet; }	// AoC @hook 31/10/2026 FolderCommandSet of an AOC_FOLDER button (D11 F5).
 	const Image* getButtonImage() const { return m_buttonImage;	}
 	void cacheButtonImage();
 
@@ -396,6 +403,7 @@ private:
 	AsciiString										m_buttonImageName;
 	GameWindow*										m_window;											///< used during the run-time assignment of a button to a gadget button window
 	AudioEventRTS									m_unitSpecificSound;					///< Unit sound played whenever button is clicked.
+	AsciiString										m_aocFolderSet;								///< AoC @hook 31/10/2026 the command set an AOC_FOLDER button shows (D11 F5).
 
 	// bleah. shouldn't be mutable, but is. sue me. (srj)
 	mutable const Image*					m_buttonImage;								///< button image
@@ -883,6 +891,24 @@ public:
 
 	// get method for list of commandbuttons
 	const CommandButton *getCommandButtons() { return m_commandButtons; }
+
+	// AoC @hook 31/10/2026 command bar folders, client view state only; implemented in Source/AoC/AoCFolder.cpp (D11 F5).
+	Bool aocFolderBack();																			///< Back button and Backspace: close the open folder; FALSE when none is open
+	Bool aocIsFolderOpen() const { return m_aocOpenFolder.isNotEmpty(); }
+	const AsciiString& aocShownCommandSet() const;							///< the set on the command buttons, empty outside the command context
+
+protected:
+	// AoC @hook 31/10/2026 command bar folders (D11 F5).
+	const CommandSet *aocCommandSetFor( Object *obj );					///< populateCommand: the open folder for its owner, else the object's own set
+	void aocCheckFolderOwner();																	///< evaluateContextUI: a selection other than the owner closes the folder
+	void aocOpenFolder( const CommandButton *folderButton, Object *obj );
+	void aocCloseFolder();
+	void aocSetCaption( GameWindow *button, const CommandButton *commandButton );	///< setControlCommand: caption over folder and Back cameos
+	AsciiString m_aocOpenFolder;																///< FolderCommandSet on the buttons; empty while the object's own set shows
+	ObjectID m_aocFolderOwner;																	///< the object the folder was opened for
+	AsciiString m_aocFolderBaseSet;															///< its command set then; a CommandSetUpgrade changes it and closes the folder
+	const CommandButton *m_aocFolderButton;											///< the folder button pressed; Back's caption names it
+	AsciiString m_aocShownSet;																	///< the set populateCommand put on the buttons
 
 protected:
 
