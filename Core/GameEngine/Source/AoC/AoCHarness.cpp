@@ -22,10 +22,12 @@
 #include "PreRTS.h"	// This must go first in EVERY cpp file in the GameEngine
 
 #include "AoC/AoCHarness.h"
+#include "AoC/AoCPopulation.h"
 #include "AoC/AoCResourceBank.h"
 #include "AoC/AoCRules.h"
 #include "AoC/AoCSimRate.h"
 
+#include "Common/BuildAssistant.h"
 #include "Common/Energy.h"
 #include "Common/FileSystem.h"
 #include "Common/GameEngine.h"
@@ -65,6 +67,9 @@ namespace
 const UnsignedInt AOC_AI_LOG_INTERVAL_SECONDS = 30;
 inline UnsignedInt aiLogIntervalFrames() { return AOC_AI_LOG_INTERVAL_SECONDS * (UnsignedInt)LOGICFRAMES_PER_SECOND; }
 
+// F4: CanMakeType values the blocked_build column can name (CANMAKE_OK .. CANMAKE_NO_HOUSING, room to grow).
+const Int AOC_HARNESS_CANMAKE_SLOTS = 16;
+
 // Fixed-size storage only: the options are set before the game memory manager owns the heap and are
 // read until after it has shut down, so nothing here may allocate.
 struct HarnessState
@@ -91,6 +96,10 @@ struct HarnessState
 	char saveName[256];
 	Bool saveRequested;
 	Bool saveDone;
+
+	// F4: unit queue refusals per player index and CanMakeType since the last -aiLog row
+	UnsignedInt queueRefusals[MAX_PLAYER_COUNT][AOC_HARNESS_CANMAKE_SLOTS];
+	Bool sawFirstLogicFrame;
 
 	Bool sawCRCMismatch;
 	UnsignedInt mismatchFrame;
@@ -257,6 +266,62 @@ bool newerObjectFirst( const std::pair<UnsignedInt, std::string> &a, const std::
 	return a.first > b.first;
 }
 
+// F4: the CanMakeType names of the blocked_build column
+const char *canMakeName( Int canMakeType )
+{
+	switch (canMakeType)
+	{
+		case CANMAKE_OK: return "OK";
+		case CANMAKE_NO_PREREQ: return "NO_PREREQ";
+		case CANMAKE_NO_MONEY: return "NO_MONEY";
+		case CANMAKE_FACTORY_IS_DISABLED: return "FACTORY_IS_DISABLED";
+		case CANMAKE_QUEUE_FULL: return "QUEUE_FULL";
+		case CANMAKE_PARKING_PLACES_FULL: return "PARKING_PLACES_FULL";
+		case CANMAKE_MAXED_OUT_FOR_PLAYER: return "MAXED_OUT_FOR_PLAYER";
+		case CANMAKE_NO_HOUSING: return "NO_HOUSING";
+	}
+	return "OTHER";
+}
+
+// F4: the objects that make up a player's population, by template, for the over-the-cap stderr line
+void populationByTemplate( Object *obj, void *userData )
+{
+	std::vector< std::pair<std::string, Int> > *list = (std::vector< std::pair<std::string, Int> > *)userData;
+	const Int cost = AoCPopulation::costOf(obj->getTemplate());
+	if (cost == 0)
+		return;
+	const std::string name = obj->getTemplate()->getName().str();
+	for (size_t i = 0; i < list->size(); ++i)
+	{
+		if ((*list)[i].first == name)
+		{
+			(*list)[i].second += cost;
+			return;
+		}
+	}
+	list->push_back(std::make_pair(name, cost));
+}
+
+// F4: "NO_HOUSING:12|NO_MONEY:1" for the refusals counted since the previous row, then reset
+std::string takeBlockedBuild( Int playerIndex )
+{
+	HarnessState &s = state();
+	std::string out;
+	if (playerIndex < 0 || playerIndex >= MAX_PLAYER_COUNT)
+		return out;
+	for (Int r = 0; r < AOC_HARNESS_CANMAKE_SLOTS; ++r)
+	{
+		UnsignedInt &n = s.queueRefusals[playerIndex][r];
+		if (n == 0)
+			continue;
+		if (!out.empty())
+			out += '|';
+		out += fmt("%s:%u", canMakeName(r), n);
+		n = 0;
+	}
+	return out;
+}
+
 // One CSV row and its header built from the same list, so a new field is one add() line.
 // D9 section 7.2 fields (bank per type, workers by type and idle, builders busy, population, houses,
 // fields, converters, army value, first-of frames, blocked-build reasons) slot in here as F1, F2 and
@@ -374,6 +439,24 @@ void writeAiLog( UnsignedInt frame )
 				row.add(column.c_str(), p->getAoCBank()->count(t));
 			}
 			row.add("cash_equivalent", p->getAoCBank()->cashEquivalent());
+			// AoC F4: population, then the unit queue refusals since the previous row
+			const AoCPopulation *pop = p->getAoCPopulation();
+			row.add("pop_used", pop->getUsed());
+			row.add("pop_capacity", pop->getCapacity());
+			row.add("pop_reserved", pop->getReserved());
+			row.add("pop_cap", pop->getCap());
+			row.add("blocked_build", takeBlockedBuild((Int)p->getPlayerIndex()));
+			if (pop->getUsed() + pop->getReserved() > pop->getCap())
+			{
+				std::vector< std::pair<std::string, Int> > parts;
+				p->iterateObjects(populationByTemplate, &parts);
+				std::sort(parts.begin(), parts.end());
+				std::string what;
+				for (size_t n = 0; n < parts.size(); ++n)
+					what += fmt(" %s:%d", parts[n].first.c_str(), (int)parts[n].second);
+				logLine("population over the cap, frame %u, player %d: used %d reserved %d cap %d; by template%s", frame,
+					(int)p->getPlayerIndex(), pop->getUsed(), pop->getReserved(), pop->getCap(), what.c_str());
+			}
 		}
 
 		std::string path = dir + fmt("ai_%d.csv", (int)p->getPlayerIndex());
@@ -393,6 +476,22 @@ void writeAiLog( UnsignedInt frame )
 			fprintf(f, "%s\n", row.header.c_str());
 		fprintf(f, "%s\n", row.values.c_str());
 		fclose(f);
+	}
+}
+
+// F4: one stderr line per AI player that takes part in the population rules (save and load checks)
+void logPopulation( const char *when, UnsignedInt frame )
+{
+	if (ThePlayerList == nullptr)
+		return;
+	for (Int i = 0; i < ThePlayerList->getPlayerCount(); ++i)
+	{
+		Player *p = ThePlayerList->getNthPlayer(i);
+		if (!isLoggedAIPlayer(p) || !p->getAoCPopulation()->isActive())
+			continue;
+		const AoCPopulation *pop = p->getAoCPopulation();
+		logLine("population %s, frame %u: player %d used %d capacity %d reserved %d cap %d headroom %d", when, frame,
+			(int)p->getPlayerIndex(), pop->getUsed(), pop->getCapacity(), pop->getReserved(), pop->getCap(), pop->getHeadroom());
 	}
 }
 
@@ -664,6 +763,14 @@ void AoCHarness::onLogicFrame( UnsignedInt frame, Bool crcGenerated, UnsignedInt
 		}
 	}
 
+	// F4: a game whose first logic frame is past 1 was loaded from a save
+	if (!s.sawFirstLogicFrame)
+	{
+		s.sawFirstLogicFrame = TRUE;
+		if (frame > 1 && s.aiLogDir[0] != '\0')
+			logPopulation("after load", frame);
+	}
+
 	if (s.aiLogDir[0] != '\0' && (frame % aiLogIntervalFrames()) == 0)
 	{
 		writeAiLog(frame);
@@ -723,6 +830,17 @@ void AoCHarness::logicUpdateEnd()
 	s.logicUpdates++;
 }
 
+void AoCHarness::onUnitQueueRefused( const Player *player, Int canMakeType )
+{
+	HarnessState &s = state();
+	if (!s.anyFlag || player == nullptr)
+		return;
+	const Int index = (Int)player->getPlayerIndex();
+	if (index < 0 || index >= MAX_PLAYER_COUNT || canMakeType < 0 || canMakeType >= AOC_HARNESS_CANMAKE_SLOTS)
+		return;
+	s.queueRefusals[index][canMakeType]++;
+}
+
 void AoCHarness::onSimRateRefusal()
 {
 	HarnessState &s = state();
@@ -751,6 +869,8 @@ void AoCHarness::pollQuit()
 		AsciiString filename = s.saveName;
 		if (!filename.endsWithNoCase(".sav"))
 			filename.concat(".sav");
+		if (s.aiLogDir[0] != '\0')
+			logPopulation("at save", TheGameLogic->getFrame());	// F4
 		UnicodeString desc;
 		desc.format(L"AoC harness save at frame %u", TheGameLogic->getFrame());
 		SaveResult result = TheGameState->saveGame(filename, desc, SAVE_FILE_TYPE_NORMAL);

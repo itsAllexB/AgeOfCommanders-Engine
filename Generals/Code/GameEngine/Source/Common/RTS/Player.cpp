@@ -302,6 +302,7 @@ Player::Player( Int playerIndex )
 
 	m_playerIndex = playerIndex;
 	m_aocBank.init( &m_money );	// AoC @hook F1: cash stays in m_money, the bank proxies it
+	m_aocPopulation.init( this );	// AoC @hook 31/10/2026 Mirror of Zero Hour so the shared Core code builds; dormant in Generals (D11 F4).
 
 	// allocate new relation map pools
 	m_playerRelations = newInstance(PlayerRelationMap);
@@ -358,6 +359,7 @@ void Player::init(const PlayerTemplate* pt)
 	m_skillPointsModifier = 1.0f;
 	m_attackedFrame = 0;
 	m_aocBank.reset();	// AoC @hook F1
+	m_aocPopulation.reset();	// AoC @hook 31/10/2026 Mirror of Zero Hour (D11 F4).
 
 	m_isPreorder = FALSE;
 	m_isPlayerDead = FALSE;
@@ -3106,6 +3108,13 @@ static void doPowerDisable( Object *obj, void *userData )
 
 //-------------------------------------------------------------------------------------------------
 //-------------------------------------------------------------------------------------------------
+void Player::onAoCPopulationBlockChange( Bool /*atCap*/ )
+{
+	// AoC @feature 31/10/2026 Mirror of Zero Hour for the shared Core code; Generals has no population hooks (D11 F4).
+}
+
+//-------------------------------------------------------------------------------------------------
+//-------------------------------------------------------------------------------------------------
 void Player::onPowerBrownOutChange( Bool brownOut )
 {
 	// Everything that changes due to Player's power supply goes in here.
@@ -3862,6 +3871,9 @@ void Player::crc( Xfer *xfer )
 	// AoC @hook F1: the bank writes nothing while no resource types are defined
 	xfer->xferSnapshot( &m_aocBank );
 
+	// AoC @hook 31/10/2026 Mirror of Zero Hour: the population writes nothing while every counter is zero (D11 F4).
+	xfer->xferSnapshot( &m_aocPopulation );
+
 }
 
 // ------------------------------------------------------------------------------------------------
@@ -3876,13 +3888,14 @@ void Player::crc( Xfer *xfer )
 	* 7: added Preorder flag
 	* 8: Save m_disabledSciences & m_hiddenSciences. jba.
 	* 9: AoC F1: the resource bank (count byte and non-cash amounts) at the end.
+	* 10: AoC F4: the population (used, capacity, reserved) after the bank, as in Zero Hour.
 	*/
 // ------------------------------------------------------------------------------------------------
 void Player::xfer( Xfer *xfer )
 {
 
 	// version
-	const XferVersion currentVersion = 9;	// AoC @hook F1: 8 to 9
+	const XferVersion currentVersion = 10;	// AoC @hook F1: 8 to 9; AoC @hook 31/10/2026 9 to 10, the population, as in Zero Hour (D11 F4).
 	XferVersion version = currentVersion;
 	xfer->xferVersion( &version, currentVersion );
 
@@ -4432,6 +4445,12 @@ void Player::xfer( Xfer *xfer )
 		xfer->xferSnapshot( &m_aocBank );
 	else if( xfer->getXferMode() == XFER_LOAD )
 		m_aocBank.reset();	// AoC @hook 31/10/2026 A pre-F1 save has no bank: drop the starting stock Player::init deposited (D11 F1).
+
+	// AoC @hook 31/10/2026 Mirror of Zero Hour: the population after the bank (D11 F4).
+	if (version >= 10)
+		xfer->xferSnapshot( &m_aocPopulation );
+	else if( xfer->getXferMode() == XFER_LOAD )
+		m_aocPopulation.reset();
 
 }
 

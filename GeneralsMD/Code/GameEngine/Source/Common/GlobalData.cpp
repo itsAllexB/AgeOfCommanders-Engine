@@ -525,6 +525,7 @@ GlobalData* GlobalData::m_theOriginal = nullptr;
   { "DefaultStartingCash",				Money::parseMoneyAmount, nullptr,		offsetof( GlobalData, m_defaultStartingCash ) },
   { "AoCStartingStock",						AoCCost::parseAoCCostField, nullptr, offsetof( GlobalData, m_aocStartingStock ) },	// AoC @feature F1
   { "AoCRefundPerMille",					INI::parseInt,					nullptr,		offsetof( GlobalData, m_aocRefundPerMille ) },	// AoC @feature F1
+  { "AoCDefaultPopulationCap",		INI::parseInt,					nullptr,		offsetof( GlobalData, m_aocDefaultPopulationCap ) },	// AoC @feature 31/10/2026 New game's population cap, 0 = none (D11 F4).
 
 // NOTE: m_doubleClickTimeMS is still in use, but we disallow setting it from the GameData.ini file. It is now set in the constructor according to the windows parameter.
 //	{ "DoubleClickTimeMS",									INI::parseUnsignedInt,			nullptr, offsetof( GlobalData, m_doubleClickTimeMS ) },
@@ -983,6 +984,7 @@ GlobalData::GlobalData()
 
 	m_sellPercentage = 1.0f;
 	m_aocRefundPerMille = 500;	// AoC @feature F1
+	m_aocDefaultPopulationCap = 0;	// AoC @feature 31/10/2026 No population cap by default (D11 F4).
 	m_baseRegenHealthPercentPerSecond = 0.0f;
 	m_baseRegenDelay = 0;
 
