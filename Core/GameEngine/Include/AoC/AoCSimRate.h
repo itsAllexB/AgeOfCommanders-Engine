@@ -70,6 +70,14 @@ namespace AoCSimRate
 	/// Convert a frame count authored at 30 Hz to frames at the live rate.
 	inline Int legacyFramesToFrames( Int legacyFrames ) { return legacyFrames * frameMultiplier(); }
 
+	// Stock update intervals of one second or a fraction of it that were compile-time constants (an enum or a
+	// namespace-scope const). They read the live rate, so they keep their real-time length, and at 30 Hz they are
+	// the stock values. Functions rather than macros, so the stock names do not leak into every including file.
+	inline Int enemyScanFrames() { return framesPerSecond(); }			///< AIHuntState, AIAttackAreaState (was ENEMY_SCAN_RATE)
+	inline Int airfieldCheckFrames() { return framesPerSecond(); }		///< JetOrHeliCirclingDeadAirfieldState (was HOW_OFTEN_TO_CHECK)
+	inline Int slavedUpdateFrames() { return framesPerSecond() / 4; }	///< SlavedUpdate (was SLAVED_UPDATE_RATE)
+	inline Int spawnUpdateFrames() { return framesPerSecond() / 2; }	///< SpawnBehavior (was SPAWN_UPDATE_RATE)
+
 	/// Set the rate; returns FALSE (and keeps the old value) when the rate is not 30 or 60. 'source' is for the log line.
 	Bool set( Int rate, const char *source );
 

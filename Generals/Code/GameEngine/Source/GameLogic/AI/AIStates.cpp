@@ -26,6 +26,7 @@
 // Implementation of AI behavior states
 // Author: Michael S. Booth, January 2002
 #include "PreRTS.h"	// This must go first in EVERY cpp file in the GameEngine
+#include "AoC/AoCSimRate.h"
 
 
 #include "Common/ActionManager.h"
@@ -6659,7 +6660,7 @@ StateReturnType AIHuntState::onEnter()
 
 	// first time thru, use a random amount so that everyone doesn't scan on the same frame,
 	// to avoid "spikes".
-	UnsignedInt sleepTime = GameLogicRandomValue(0, ENEMY_SCAN_RATE);
+	UnsignedInt sleepTime = GameLogicRandomValue(0, AoCSimRate::enemyScanFrames());	// AoC @hook 31/10/2026 runtime rate (D11 F15)
 	UnsignedInt now = TheGameLogic->getFrame();
 	m_nextEnemyScanTime = now + sleepTime;
 
@@ -6718,7 +6719,7 @@ StateReturnType AIHuntState::update()
 			return STATE_CONTINUE;
 		}
 
-		m_nextEnemyScanTime = now + ENEMY_SCAN_RATE;
+		m_nextEnemyScanTime = now + AoCSimRate::enemyScanFrames();	// AoC @hook 31/10/2026 runtime rate (D11 F15)
 
 		const AttackPriorityInfo *info = nullptr;
 		info = ai->getAttackInfo();
@@ -6865,7 +6866,7 @@ StateReturnType AIAttackAreaState::onEnter()
 	// first time thru, use a random amount so that everyone doesn't scan on the same frame,
 	// to avoid "spikes".
 	UnsignedInt now = TheGameLogic->getFrame();
-	m_nextEnemyScanTime = now + GameLogicRandomValue(0, ENEMY_SCAN_RATE);
+	m_nextEnemyScanTime = now + GameLogicRandomValue(0, AoCSimRate::enemyScanFrames());	// AoC @hook 31/10/2026 runtime rate (D11 F15)
 
 	// initial state of hunt state machine
 	return m_attackMachine->initDefaultState();
@@ -6897,7 +6898,7 @@ StateReturnType AIAttackAreaState::update()
 		// to avoid "spikes". Note that this implementation ensures that this unit checks immediately
 		// upon entering this state, then wait a possibly-longer-than-usual time (due to randomness),
 		// then settle into a regular schedule.
-		m_nextEnemyScanTime = now + ENEMY_SCAN_RATE;
+		m_nextEnemyScanTime = now + AoCSimRate::enemyScanFrames();	// AoC @hook 31/10/2026 runtime rate (D11 F15)
 
 		AIUpdateInterface *ai = owner->getAI();
 		if (ai->getAreaToGuard() == nullptr)

@@ -25,6 +25,7 @@
 // JetAIUpdate.cpp //////////
 
 #include "PreRTS.h"	// This must go first in EVERY cpp file in the GameEngine
+#include "AoC/AoCSimRate.h"
 
 #define DEFINE_LOCOMOTORSET_NAMES
 
@@ -273,8 +274,7 @@ private:
 	Int m_checkAirfield;
 
 	// only recheck for new airfields every second or so
-	// AoC @tweak 30/10/2026 Reads the runtime simulation rate (D11 F15); was an enum constant.
-#define HOW_OFTEN_TO_CHECK (LOGICFRAMES_PER_SECOND)
+	// AoC @hook 31/10/2026 The interval (stock enum HOW_OFTEN_TO_CHECK) is AoCSimRate::airfieldCheckFrames() (D11 F15).
 
 public:
 	JetOrHeliCirclingDeadAirfieldState( StateMachine *machine ) :
@@ -302,7 +302,7 @@ public:
 		// just stay where we are.
 		jetAI->setLocomotorGoalNone();
 
-		m_checkAirfield = HOW_OFTEN_TO_CHECK;
+		m_checkAirfield = AoCSimRate::airfieldCheckFrames();	// AoC @hook 31/10/2026 runtime rate (D11 F15)
 
 		//Play the "low fuel" voice whenever the craft is circling above the airfield.
 		AudioEventRTS soundToPlay = *jet->getTemplate()->getPerUnitSound( "VoiceLowFuel" );
@@ -342,7 +342,7 @@ public:
 
 		if (--m_checkAirfield <= 0)
 		{
-			m_checkAirfield = HOW_OFTEN_TO_CHECK;
+			m_checkAirfield = AoCSimRate::airfieldCheckFrames();	// AoC @hook 31/10/2026 runtime rate (D11 F15)
 			Object* airfield = findSuitableAirfield( jet );
 			if (airfield)
 			{

@@ -30,7 +30,8 @@
 
 #pragma once
 
-#define SPAWN_UPDATE_RATE ((Int)(LOGICFRAMES_PER_SECOND/2)) ///< This is a low priority module that only needs to be called every this many frames	// AoC @tweak 30/10/2026 runtime simulation rate, not a static initializer (D11 F15)
+// AoC @hook 31/10/2026 The update interval of this low priority module (stock constant SPAWN_UPDATE_RATE) is
+// AoCSimRate::spawnUpdateFrames(), read at the runtime simulation rate (D11 F15).
 
 // INCLUDES ///////////////////////////////////////////////////////////////////////////////////////
 #include "Common/INI.h"
