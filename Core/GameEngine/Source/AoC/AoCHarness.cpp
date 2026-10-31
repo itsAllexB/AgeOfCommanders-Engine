@@ -498,15 +498,23 @@ Int AoCHarness::parseAiLog( char *args[], int num )
 
 Int AoCHarness::parseSaveAtFrame( char *args[], int num )
 {
-	if (num > 2)
+	if (num < 3)
 	{
-		HarnessState &s = state();
-		s.saveAtFrame = (UnsignedInt)strtoul(args[1], nullptr, 10);
-		copyArg(s.saveName, sizeof(s.saveName), args[2]);
-		s.anyFlag = TRUE;
+		logLine("usage: -saveAtFrame <N> <name> (N at least 1); flag ignored");
+		return 1;
+	}
+	const UnsignedInt frame = (UnsignedInt)strtoul(args[1], nullptr, 10);
+	if (frame == 0 || args[2][0] == '\0')
+	{
+		// 0 is the "unused" value of saveAtFrame: say so instead of dropping the flag silently.
+		logLine("-saveAtFrame needs a frame of at least 1 and a name, not '%s' '%s'; no save will be written", args[1], args[2]);
 		return 3;
 	}
-	return 1;
+	HarnessState &s = state();
+	s.saveAtFrame = frame;
+	copyArg(s.saveName, sizeof(s.saveName), args[2]);
+	s.anyFlag = TRUE;
+	return 3;
 }
 
 Int AoCHarness::parseSimRate( char *args[], int num )

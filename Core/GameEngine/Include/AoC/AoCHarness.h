@@ -36,8 +36,8 @@
 //                                   <dir>/ai_<playerIndex>.csv. Logic reads only. With resource types
 //                                   defined (F1) the row gains bank_<Type> columns and cash_equivalent.
 //   -saveAtFrame <N> <name>         F1: write the stock save game <name>.sav (the save menu's path,
-//                                   TheGameState->saveGame) once logic frame N has run, from the engine
-//                                   loop. Load it with the stock -loadsave <name>.sav at the same
+//                                   TheGameState->saveGame) once logic frame N (1 or more) has run, from the
+//                                   engine loop. Load it with the stock -loadsave <name>.sav at the same
 //                                   -simrate (a save made at the other rate is refused, exit code 5).
 //   -simrate <30|60>                Simulation rate for this process (D11 F15), overriding the
 //                                   Options.ini SimulationRate key. Any other value exits with code 3.
