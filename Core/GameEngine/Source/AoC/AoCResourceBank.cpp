@@ -71,18 +71,21 @@ Bool AoCResourceBank::canAfford( const AoCCost &cost ) const
 // ------------------------------------------------------------------------------------------------
 Bool AoCResourceBank::withdraw( const AoCCost &cost, Bool playSound )
 {
-	// Non-cash components are all or nothing: a short one leaves the bank untouched.
-	for (Int i = AOC_RESOURCE_CASH + 1; i < AOC_MAX_RESOURCES; ++i)
-		if (cost.amount[i] > m_amount[i])
-			return FALSE;
+	// A cash-only vector is the stock payment: Money::withdraw with the stock clamp (Money never goes
+	// into debt). This is every payment while the feature is off.
+	if (!cost.hasNonCash())
+		return withdrawType(AOC_RESOURCE_CASH, cost.amount[AOC_RESOURCE_CASH], playSound) == cost.amount[AOC_RESOURCE_CASH];
 
-	// Cash goes through the stock path, with the stock clamp (Money never goes into debt).
-	const UnsignedInt cashTaken = withdrawType(AOC_RESOURCE_CASH, cost.amount[AOC_RESOURCE_CASH], playSound);
+	// A vector with typed components is all or nothing across every component, cash included: one
+	// short component leaves the bank untouched.
+	if (!canAfford(cost))
+		return FALSE;
 
+	withdrawType(AOC_RESOURCE_CASH, cost.amount[AOC_RESOURCE_CASH], playSound);
 	for (Int i = AOC_RESOURCE_CASH + 1; i < AOC_MAX_RESOURCES; ++i)
 		m_amount[i] -= cost.amount[i];
 
-	return cashTaken == cost.amount[AOC_RESOURCE_CASH];
+	return TRUE;
 }
 
 // ------------------------------------------------------------------------------------------------

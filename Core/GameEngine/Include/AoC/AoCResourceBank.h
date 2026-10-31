@@ -22,9 +22,10 @@
 // the 21 stock cash paths and the bank see one value and every stock path stays byte-identical when
 // no resource types are defined. Bound to no Money (unit tests) it keeps cash in its own slot.
 //
-// Semantics: canAfford compares every component; withdraw is all-or-nothing for the non-cash
-// components and then takes cash through Money::withdraw exactly as the stock sites did (callers
-// check canAfford first, as stock does); deposit adds. cashEquivalent() weighs every type by its
+// Semantics: canAfford compares every component; withdraw of a vector with typed components is
+// all-or-nothing across every component, cash included, while a cash-only vector goes through
+// Money::withdraw with the stock clamp exactly as the stock sites did (callers check canAfford first,
+// as stock does); deposit adds. cashEquivalent() weighs every type by its
 // CashEquivalent per mille for the stock wealth checks (AI timers, PLAYER_HAS_CREDITS).
 
 #pragma once
@@ -47,7 +48,8 @@ public:
 
 	UnsignedInt count( Int type ) const;
 	Bool canAfford( const AoCCost &cost ) const;
-	/// All-or-nothing for the non-cash components, then cash through Money::withdraw. TRUE when fully covered.
+	/// Typed components present: all-or-nothing across every component, cash included. Cash only: the
+	/// stock Money::withdraw clamp. TRUE when fully covered.
 	Bool withdraw( const AoCCost &cost, Bool playSound = TRUE );
 	/// Withdraw from one type; returns the amount actually taken (never below zero, like Money).
 	UnsignedInt withdrawType( Int type, UnsignedInt amount, Bool playSound = TRUE );

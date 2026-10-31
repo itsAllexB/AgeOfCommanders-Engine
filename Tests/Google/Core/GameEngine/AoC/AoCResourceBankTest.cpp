@@ -132,14 +132,40 @@ TEST_F(AoCResourceBankTest, WithdrawIsAllOrNothingForNonCash)
 	EXPECT_EQ(m_bank.count(AOC_RESOURCE_CASH), 400u);
 }
 
-TEST_F(AoCResourceBankTest, CashKeepsTheStockClamp)
+TEST_F(AoCResourceBankTest, WithdrawTakesNothingWhenOnlyCashIsShort)
+{
+	// Review finding 1: the typed components are covered but cash is not. The whole vector is refused,
+	// so a caller that does not check canAfford can never get the typed part for free or a clamped cash.
+	defineStandardTypes();
+	m_bank.deposit(cost("Food:50 Wood:300 Cash:100"), FALSE, FALSE);
+	EXPECT_FALSE(m_bank.withdraw(cost("Wood:250 Cash:150"), FALSE));
+	EXPECT_EQ(m_bank.count(WOOD), 300u) << "the wood stays";
+	EXPECT_EQ(m_bank.count(AOC_RESOURCE_CASH), 100u) << "the cash is not clamped";
+	EXPECT_EQ(m_bank.count(FOOD), 50u);
+
+	EXPECT_FALSE(m_bank.withdraw(cost("Wood:250 Food:51 Cash:100"), FALSE)) << "any one short component refuses";
+	EXPECT_EQ(m_bank.count(WOOD), 300u);
+	EXPECT_EQ(m_bank.count(AOC_RESOURCE_CASH), 100u);
+
+	EXPECT_TRUE(m_bank.withdraw(cost("Wood:250 Food:50 Cash:100"), FALSE)) << "exactly enough of everything";
+	EXPECT_EQ(m_bank.count(WOOD), 50u);
+	EXPECT_EQ(m_bank.count(FOOD), 0u);
+	EXPECT_EQ(m_bank.count(AOC_RESOURCE_CASH), 0u);
+}
+
+TEST_F(AoCResourceBankTest, CashOnlyVectorKeepsTheStockClamp)
 {
 	defineStandardTypes();
 	m_bank.deposit(cost("Wood:100 Cash:100"), FALSE, FALSE);
-	// Stock Money::withdraw never goes into debt and takes what is there; the bank keeps that for cash.
-	EXPECT_FALSE(m_bank.withdraw(cost("Wood:100 Cash:150"), FALSE));
+	// Stock Money::withdraw never goes into debt and takes what is there; a cash-only vector (every cost
+	// while the feature is off) keeps exactly that, so the stock construct path is unchanged.
+	EXPECT_FALSE(m_bank.withdraw(cost("Cash:150"), FALSE));
+	EXPECT_EQ(m_bank.count(AOC_RESOURCE_CASH), 0u) << "clamped, as Money::withdraw does";
+	EXPECT_EQ(m_bank.count(WOOD), 100u) << "the typed amounts are not touched";
+	m_bank.deposit(AOC_RESOURCE_CASH, 40, FALSE, FALSE);
+	EXPECT_TRUE(m_bank.withdraw(cost("Cash:40"), FALSE));
 	EXPECT_EQ(m_bank.count(AOC_RESOURCE_CASH), 0u);
-	EXPECT_EQ(m_bank.count(WOOD), 0u);
+	m_bank.withdrawType(WOOD, 100, FALSE);
 	EXPECT_EQ(m_bank.withdrawType(WOOD, 10, FALSE), 0u);
 	m_bank.deposit(WOOD, 30);
 	EXPECT_EQ(m_bank.withdrawType(WOOD, 100, FALSE), 30u) << "returns the amount actually taken";
