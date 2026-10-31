@@ -4472,6 +4472,19 @@ void ScriptEngine::init()
 	curTemplate->m_uiStrings[2] = " the amount possessed by ";
 	curTemplate->m_uiStrings[3] = " of ";
 
+	// AoC @feature 31/10/2026 Population headroom: cap minus used minus reserved, negative over the cap (D11 F4)
+	curTemplate = &m_conditionTemplates[Condition::AOC_PLAYER_POPULATION_HEADROOM];
+	curTemplate->m_internalName = "AOC_PLAYER_POPULATION_HEADROOM";
+	curTemplate->m_uiName = "Player_/ Player's population headroom is (comparison) to a number (AoC).";
+	curTemplate->m_numParameters = 3;
+	curTemplate->m_parameters[0] = Parameter::SIDE;
+	curTemplate->m_parameters[1] = Parameter::COMPARISON;
+	curTemplate->m_parameters[2] = Parameter::INT;
+	curTemplate->m_numUiStrings = 3;
+	curTemplate->m_uiStrings[0] = "The population headroom of ";
+	curTemplate->m_uiStrings[1] = " is ";
+	curTemplate->m_uiStrings[2] = " ";
+
 	curTemplate = &m_conditionTemplates[Condition::NAMED_DISCOVERED];
 	curTemplate->m_internalName = "NAMED_DISCOVERED";
 	curTemplate->m_uiName = "Player_/ Player has discovered a specific unit.";
