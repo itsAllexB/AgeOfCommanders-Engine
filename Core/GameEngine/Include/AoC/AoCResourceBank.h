@@ -69,6 +69,16 @@ public:
 	/// Asset transfer: move every non-cash amount from 'that' to this bank (the stock lines move cash).
 	void transferNonCashFrom( AoCResourceBank &that );
 
+	// The script handlers after their player lookup (ScriptConditions AOC_PLAYER_HAS_RESOURCE, ScriptActions
+	// AOC_PLAYER_GIVE_RESOURCE and AOC_PLAYER_SET_RESOURCE), here so the unit tests run the same code. The
+	// type is named as in the script; an unknown name is FALSE or no effect, never an error.
+	/// amount <comparison> count(type), the PLAYER_HAS_CREDITS orientation.
+	Bool scriptHasResource( const char *typeName, Int comparison, Int amount ) const;
+	/// A positive amount deposits, a negative one withdraws (clamped at zero, like Money).
+	void scriptGiveResource( const char *typeName, Int amount );
+	/// Sets the type to the amount; a negative amount sets zero.
+	void scriptSetResource( const char *typeName, Int amount );
+
 	Money *getCash() { return m_cash; }
 
 protected:

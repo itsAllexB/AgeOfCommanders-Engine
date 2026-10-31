@@ -268,72 +268,49 @@ TEST_F(AoCResourceBankTest, DeathAndTransfer)
 	EXPECT_EQ(other.count(AOC_RESOURCE_CASH), 1u);
 }
 
-// --- script handler logic: AOC_PLAYER_HAS_RESOURCE (int, comparison, side, resource) ----------------
-
-static Bool playerHasResource(const AoCResourceBank &bank, Int amount, Int comparison, const char *resourceName)
-{
-	// The same steps as ScriptConditions::evaluateAoCPlayerHasResource after the player lookup.
-	Int type = AoCRules::findTypeIndex(resourceName);
-	if (type < 0)
-		return FALSE;
-	return AoCRules::compareInts(comparison, amount, (Int)bank.count(type));
-}
+// --- script handlers: AOC_PLAYER_HAS_RESOURCE (int, comparison, side, resource) ---------------------
+// ScriptConditions::evaluateAoCPlayerHasResource looks the player up and calls scriptHasResource; the
+// tests call the same method.
 
 TEST_F(AoCResourceBankTest, ScriptConditionHasResource)
 {
 	defineStandardTypes();
 	m_bank.deposit(cost("Wood:150 Cash:40"), FALSE, FALSE);
 	// "X is <comparison> the amount possessed by <player> of <resource>", the PLAYER_HAS_CREDITS orientation
-	EXPECT_TRUE(playerHasResource(m_bank, 100, Parameter::LESS_THAN, "Wood"));
-	EXPECT_FALSE(playerHasResource(m_bank, 200, Parameter::LESS_THAN, "Wood"));
-	EXPECT_TRUE(playerHasResource(m_bank, 150, Parameter::EQUAL, "wood"));
-	EXPECT_TRUE(playerHasResource(m_bank, 200, Parameter::GREATER, "Wood"));
-	EXPECT_TRUE(playerHasResource(m_bank, 40, Parameter::GREATER_EQUAL, "Cash"));
-	EXPECT_TRUE(playerHasResource(m_bank, 0, Parameter::EQUAL, "Steel"));
-	EXPECT_FALSE(playerHasResource(m_bank, 0, Parameter::EQUAL, "Gold")) << "an unknown type is false, never a crash";
+	EXPECT_TRUE(m_bank.scriptHasResource("Wood", Parameter::LESS_THAN, 100));
+	EXPECT_FALSE(m_bank.scriptHasResource("Wood", Parameter::LESS_THAN, 200));
+	EXPECT_TRUE(m_bank.scriptHasResource("wood", Parameter::EQUAL, 150));
+	EXPECT_TRUE(m_bank.scriptHasResource("Wood", Parameter::GREATER, 200));
+	EXPECT_TRUE(m_bank.scriptHasResource("Cash", Parameter::GREATER_EQUAL, 40));
+	EXPECT_TRUE(m_bank.scriptHasResource("Steel", Parameter::EQUAL, 0));
+	EXPECT_FALSE(m_bank.scriptHasResource("Gold", Parameter::EQUAL, 0)) << "an unknown type is false, never a crash";
 }
 
-// --- script handler logic: AOC_PLAYER_GIVE_RESOURCE and AOC_PLAYER_SET_RESOURCE (side, resource, int) ---
-
-static void giveResource(AoCResourceBank &bank, const char *resourceName, Int amount)
-{
-	Int type = AoCRules::findTypeIndex(resourceName);
-	if (type < 0)
-		return;
-	if (amount < 0)
-		bank.withdrawType(type, -amount, FALSE);
-	else
-		bank.deposit(type, amount, FALSE, FALSE);
-}
-
-static void setResource(AoCResourceBank &bank, const char *resourceName, Int amount)
-{
-	Int type = AoCRules::findTypeIndex(resourceName);
-	if (type < 0)
-		return;
-	bank.setAmount(type, amount < 0 ? 0 : amount);
-}
+// --- script handlers: AOC_PLAYER_GIVE_RESOURCE and AOC_PLAYER_SET_RESOURCE (side, resource, int) -------
+// ScriptActions::doAoCGiveResource and doAoCSetResource look the player up and call these methods.
 
 TEST_F(AoCResourceBankTest, ScriptActionsGiveAndSet)
 {
 	defineStandardTypes();
-	giveResource(m_bank, "Wood", 300);
+	m_bank.scriptGiveResource("Wood", 300);
 	EXPECT_EQ(m_bank.count(WOOD), 300u);
-	giveResource(m_bank, "Wood", -100);
+	m_bank.scriptGiveResource("Wood", -100);
 	EXPECT_EQ(m_bank.count(WOOD), 200u);
-	giveResource(m_bank, "Wood", -1000);
+	m_bank.scriptGiveResource("Wood", -1000);
 	EXPECT_EQ(m_bank.count(WOOD), 0u) << "taking more than there is empties the type, like Money";
-	giveResource(m_bank, "Gold", 50);	// unknown: no effect
+	m_bank.scriptGiveResource("Gold", 50);	// unknown: no effect
 	for (Int i = 0; i < AOC_MAX_RESOURCES; ++i)
 		EXPECT_EQ(m_bank.count(i), 0u);
 
-	giveResource(m_bank, "Cash", 70);
+	m_bank.scriptGiveResource("Cash", 70);
 	EXPECT_EQ(m_bank.count(AOC_RESOURCE_CASH), 70u);
-	setResource(m_bank, "Cash", 5);
+	m_bank.scriptSetResource("Cash", 5);
 	EXPECT_EQ(m_bank.count(AOC_RESOURCE_CASH), 5u);
-	setResource(m_bank, "Steel", 42);
+	m_bank.scriptSetResource("Steel", 42);
 	EXPECT_EQ(m_bank.count(STEEL), 42u);
-	setResource(m_bank, "Steel", -3);
+	m_bank.scriptSetResource("Steel", -3);
+	EXPECT_EQ(m_bank.count(STEEL), 0u);
+	m_bank.scriptSetResource("Gold", 9);	// unknown: no effect
 	EXPECT_EQ(m_bank.count(STEEL), 0u);
 }
 

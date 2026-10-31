@@ -30,7 +30,6 @@
 #include "PreRTS.h"	// This must go first in EVERY cpp file in the GameEngine
 
 #include "Common/GameEngine.h"
-#include "AoC/AoCRules.h"	// AoC @hook F1
 #include "Common/MapObject.h"
 #include "Common/PlayerList.h"
 #include "Common/Player.h"
@@ -994,12 +993,7 @@ Bool ScriptConditions::evaluateAoCPlayerHasResource(Parameter *pAmountParm, Para
 	if (!pPlayer) {
 		return false;
 	}
-	Int type = AoCRules::findTypeIndex(pResourceParm->getString().str());
-	if (type < 0) {
-		return false;
-	}
-	UnsignedInt have = pPlayer->getAoCBank()->count(type);
-	return AoCRules::compareInts(pComparisonParm->getInt(), pAmountParm->getInt(), (Int)have);
+	return pPlayer->getAoCBank()->scriptHasResource(pResourceParm->getString().str(), pComparisonParm->getInt(), pAmountParm->getInt());
 }
 
 //-------------------------------------------------------------------------------------------------

@@ -30,7 +30,6 @@
 #include "PreRTS.h"	// This must go first in EVERY cpp file in the GameEngine
 
 #include "Common/AudioAffect.h"
-#include "AoC/AoCRules.h"	// AoC @hook F1
 #include "Common/AudioHandleSpecialValues.h"
 #include "Common/FramePacer.h"
 #include "Common/GameAudio.h"
@@ -4107,14 +4106,7 @@ void ScriptActions::doAoCGiveResource(const AsciiString& playerName, const Ascii
 	if (!player) {
 		return;
 	}
-	Int type = AoCRules::findTypeIndex(resourceName.str());
-	if (type < 0) {
-		return;
-	}
-	if (amount < 0)
-		player->getAoCBank()->withdrawType(type, -amount);
-	else
-		player->getAoCBank()->deposit(type, amount);
+	player->getAoCBank()->scriptGiveResource(resourceName.str(), amount);
 }
 
 //-------------------------------------------------------------------------------------------------
@@ -4126,11 +4118,7 @@ void ScriptActions::doAoCSetResource(const AsciiString& playerName, const AsciiS
 	if (!player) {
 		return;
 	}
-	Int type = AoCRules::findTypeIndex(resourceName.str());
-	if (type < 0) {
-		return;
-	}
-	player->getAoCBank()->setAmount(type, amount < 0 ? 0 : amount);
+	player->getAoCBank()->scriptSetResource(resourceName.str(), amount);
 }
 
 //-------------------------------------------------------------------------------------------------

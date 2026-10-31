@@ -189,6 +189,36 @@ void AoCResourceBank::transferNonCashFrom( AoCResourceBank &that )
 }
 
 // ------------------------------------------------------------------------------------------------
+Bool AoCResourceBank::scriptHasResource( const char *typeName, Int comparison, Int amount ) const
+{
+	const Int type = AoCRules::findTypeIndex(typeName);
+	if (type < 0)
+		return FALSE;
+	return AoCRules::compareInts(comparison, amount, (Int)count(type));
+}
+
+// ------------------------------------------------------------------------------------------------
+void AoCResourceBank::scriptGiveResource( const char *typeName, Int amount )
+{
+	const Int type = AoCRules::findTypeIndex(typeName);
+	if (type < 0)
+		return;
+	if (amount < 0)
+		withdrawType(type, (UnsignedInt)(-amount));
+	else
+		deposit(type, (UnsignedInt)amount);
+}
+
+// ------------------------------------------------------------------------------------------------
+void AoCResourceBank::scriptSetResource( const char *typeName, Int amount )
+{
+	const Int type = AoCRules::findTypeIndex(typeName);
+	if (type < 0)
+		return;
+	setAmount(type, amount < 0 ? 0 : (UnsignedInt)amount);
+}
+
+// ------------------------------------------------------------------------------------------------
 /** CRC: every amount, cash included, once resource types are defined. Nothing when the feature is
 	* off, so stock per-frame CRCs are unchanged (the stock Money::crc is empty). */
 // ------------------------------------------------------------------------------------------------
