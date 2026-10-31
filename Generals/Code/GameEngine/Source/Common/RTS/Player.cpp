@@ -3882,7 +3882,7 @@ void Player::xfer( Xfer *xfer )
 {
 
 	// version
-	const XferVersion currentVersion = 9;
+	const XferVersion currentVersion = 9;	// AoC @hook F1: 8 to 9
 	XferVersion version = currentVersion;
 	xfer->xferVersion( &version, currentVersion );
 

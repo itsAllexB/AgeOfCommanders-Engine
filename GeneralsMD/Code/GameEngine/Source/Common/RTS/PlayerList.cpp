@@ -474,12 +474,12 @@ void PlayerList::xfer( Xfer *xfer )
 {
 
 	// version
-	XferVersion currentVersion = 2;
+	XferVersion currentVersion = 2;	// AoC @hook F1: 1 to 2
 	XferVersion version = currentVersion;
 	xfer->xferVersion( &version, currentVersion );
 
-	// AoC @hook F1
-	if( version >= 2 && TheAoCRules )
+	// AoC @hook F1: the layout depends on the version only; TheAoCRules exists from GameEngine::init on
+	if( version >= 2 )
 		xfer->xferSnapshot( TheAoCRules );
 
 	// xfer the player count

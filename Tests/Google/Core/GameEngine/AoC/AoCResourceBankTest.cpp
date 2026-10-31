@@ -17,15 +17,20 @@
 */
 
 // AoC F1: the resource bank's afford, withdraw and refund logic, the script handler logic behind
-// AOC_PLAYER_HAS_RESOURCE / AOC_PLAYER_GIVE_RESOURCE / AOC_PLAYER_SET_RESOURCE, and the CRC rule
-// (design D11 section 2.1). The bank runs standalone here (no Money bound), so cash is its own slot.
+// AOC_PLAYER_HAS_RESOURCE / AOC_PLAYER_GIVE_RESOURCE / AOC_PLAYER_SET_RESOURCE, the save round trip
+// with its remap by type name, and the CRC rule (design D11 section 2.1). The bank runs standalone
+// here (no Money bound), so cash is its own slot.
 
+#include <stdio.h>
+#include <string>
 #include <gtest/gtest.h>
 
 #include "AoC/AoCCost.h"
 #include "AoC/AoCResourceBank.h"
 #include "AoC/AoCRules.h"
 #include "Common/XferCRC.h"
+#include "Common/XferLoad.h"
+#include "Common/XferSave.h"
 #include "GameLogic/Scripts.h"
 
 namespace
@@ -63,6 +68,27 @@ protected:
 		AoCCost c;
 		AoCCost::parseText(text, c, nullptr);
 		return c;
+	}
+
+	// A save game in miniature: the rules, then a bank, in the order PlayerList::xfer (v2) writes them
+	// (TheAoCRules ahead of the players, each Player::xfer v9 ending with its bank).
+	static void saveTo(const std::string &path, AoCRules *rules, AoCResourceBank &bank)
+	{
+		XferSave save;
+		save.open(path.c_str());
+		save.xferSnapshot(rules);
+		save.xferSnapshot(&bank);
+		save.close();
+	}
+
+	static void loadFrom(const std::string &path, AoCRules *rules, AoCResourceBank &bank)
+	{
+		XferLoad load;
+		load.setOptions(XO_NO_POST_PROCESSING);	// no TheGameState to queue post-processing on
+		load.open(path.c_str());
+		load.xferSnapshot(rules);
+		load.xferSnapshot(&bank);
+		load.close();
 	}
 
 	// The light CRC of one bank, as Player::crc computes it through xferSnapshot.
@@ -309,6 +335,64 @@ TEST_F(AoCResourceBankTest, ScriptActionsGiveAndSet)
 	EXPECT_EQ(m_bank.count(STEEL), 42u);
 	setResource(m_bank, "Steel", -3);
 	EXPECT_EQ(m_bank.count(STEEL), 0u);
+}
+
+// --- save and load: the bank round-trips, remapped by type name ------------------------------------
+
+TEST_F(AoCResourceBankTest, XferRoundTripRemapsTypesByName)
+{
+	defineStandardTypes();	// Cash 0, Food 1, Wood 2, Iron 3, Steel 4
+	m_bank.deposit(cost("Food:10 Wood:20 Iron:30 Steel:40 Cash:999"), FALSE, FALSE);
+	const std::string path = ::testing::TempDir() + "AoCBankXferRoundTrip.sav";
+	saveTo(path, m_rules, m_bank);
+
+	// The same type set: every typed amount comes back.
+	AoCResourceBank same;
+	same.init(nullptr);
+	loadFrom(path, m_rules, same);
+	EXPECT_EQ(same.count(FOOD), 10u);
+	EXPECT_EQ(same.count(WOOD), 20u);
+	EXPECT_EQ(same.count(IRON), 30u);
+	EXPECT_EQ(same.count(STEEL), 40u);
+	EXPECT_EQ(same.count(AOC_RESOURCE_CASH), 0u) << "cash is the owner's Money, saved by the stock code";
+
+	// A later data set: Iron removed, the order changed, Stone added. Amounts follow their names.
+	AoCRules later;
+	later.init();
+	later.defineType("Steel", "", "", 4000, FALSE, -1);	// 1
+	later.defineType("Stone", "", "", 1000, FALSE, -1);	// 2
+	later.defineType("Wood", "", "", 1000, FALSE, -1);	// 3
+	later.defineType("Food", "", "", 1000, FALSE, -1);	// 4
+	TheAoCRules = &later;
+	AoCResourceBank loaded;
+	loaded.init(nullptr);
+	loaded.deposit(2, 5, FALSE, FALSE);	// whatever the bank held before the load is cleared
+	loadFrom(path, &later, loaded);
+	EXPECT_EQ(loaded.count(1), 40u) << "Steel";
+	EXPECT_EQ(loaded.count(2), 0u) << "Stone is not in the save";
+	EXPECT_EQ(loaded.count(3), 20u) << "Wood";
+	EXPECT_EQ(loaded.count(4), 10u) << "Food";
+	EXPECT_EQ(later.remapLoadedType(IRON), -1) << "Iron no longer exists and is dropped";
+	TheAoCRules = m_rules;
+	remove(path.c_str());
+}
+
+TEST_F(AoCResourceBankTest, XferWithTheFeatureOffCarriesNoAmounts)
+{
+	m_bank.deposit(AOC_RESOURCE_CASH, 500, FALSE, FALSE);
+	const std::string path = ::testing::TempDir() + "AoCBankXferFeatureOff.sav";
+	saveTo(path, m_rules, m_bank);	// count byte 1 (cash only), no amounts
+
+	// Loaded where types are defined: the bank holds no typed amounts.
+	defineStandardTypes();
+	AoCResourceBank loaded;
+	loaded.init(nullptr);
+	loaded.deposit(cost("Wood:7 Steel:3"), FALSE, FALSE);
+	loadFrom(path, m_rules, loaded);
+	for (Int i = AOC_RESOURCE_CASH + 1; i < AOC_MAX_RESOURCES; ++i)
+		EXPECT_EQ(loaded.count(i), 0u) << "type " << i;
+	EXPECT_EQ(m_rules->remapLoadedType(AOC_RESOURCE_CASH), AOC_RESOURCE_CASH);
+	remove(path.c_str());
 }
 
 // --- CRC rule: nothing enters the per-frame CRC while the feature is off ---------------------------

@@ -58,7 +58,7 @@
 #include "Common/Science.h"
 #include "Common/FunctionLexicon.h"
 #include "AoC/AoCHarness.h"
-#include "AoC/AoCRules.h"
+#include "AoC/AoCRules.h"	// AoC @hook F1
 #include "Common/CommandLine.h"
 #include "Common/DamageFX.h"
 #include "Common/MultiplayerSettings.h"

@@ -29,6 +29,10 @@
 //   End
 //
 // A name that is not a defined AoCResourceType is an INI error (INI_INVALID_DATA), like an unknown KindOf.
+//
+// Cash has one store, the stock BuildCost field, so "BuildCost = n" and "AoCCost = ... Cash:n" in the same
+// Object or Upgrade block resolve as "last line wins", like any INI field written twice. A second AoCCost
+// line replaces the typed components; cash keeps whatever the last BuildCost or Cash:n line set.
 
 #pragma once
 

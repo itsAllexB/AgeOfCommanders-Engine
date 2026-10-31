@@ -443,7 +443,9 @@ void Player::init(const PlayerTemplate* pt)
 			{
 				m_money.deposit( TheGlobalData->m_defaultStartingCash.countMoney(), FALSE, FALSE );
 			}
-			// AoC @hook F1: GameData.ini AoCStartingStock, applied with the lobby starting cash (a zero vector in stock data)
+			// AoC @hook F1: GameData.ini AoCStartingStock, applied with the lobby starting cash (a zero vector in stock data).
+			// Inside the stock "no money yet" test, so a player template that carries cash gets no typed stock either;
+			// F7 (lobby starting stock) reworks this.
 			m_aocBank.deposit( TheGlobalData->m_aocStartingStock, FALSE, FALSE );
 		}
 
@@ -4057,7 +4059,7 @@ void Player::xfer( Xfer *xfer )
 {
 
 	// version
-	const XferVersion currentVersion = 9;
+	const XferVersion currentVersion = 9;	// AoC @hook F1: 8 to 9
 	XferVersion version = currentVersion;
 	xfer->xferVersion( &version, currentVersion );
 
