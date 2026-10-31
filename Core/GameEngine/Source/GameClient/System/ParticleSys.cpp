@@ -34,6 +34,7 @@
 
 #include "Common/FramePacer.h"
 #include "Common/GameState.h"
+#include "Common/GameUtility.h"
 #include "Common/INI.h"
 #include "Common/PerfTimer.h"
 #include "Common/ThingFactory.h"
@@ -1540,6 +1541,12 @@ void ParticleSystem::attachToDrawable( const Drawable *draw )
 		DEBUG_ASSERTCRASH( m_attachedToObjectID == INVALID_ID, ( "ParticleSystem is already attached to an Object" ) );
 		m_attachedToDrawableID = draw->getID();
 		m_attachedToObjectID = INVALID_ID;
+
+		// AoC @hook 31/10/2026 Particles step once per retail frame at 60 Hz, so a one-frame system attached to a drawable that
+		// is created and destroyed between two particle steps would lose its only burst; emit it now, as the owner's fork
+		// does (D11 F15). Client side only.
+		if (AoCSimRate::frameMultiplier() > 1 && m_systemLifetimeLeft == 1 && m_delayLeft == 0 && getParticleCount() == 0)
+			update(rts::getObservedOrLocalPlayerIndex_Safe());
 	}
 	else
 	{
