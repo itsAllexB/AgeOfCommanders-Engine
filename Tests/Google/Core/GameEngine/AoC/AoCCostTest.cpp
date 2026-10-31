@@ -116,6 +116,18 @@ TEST_F(AoCCostTest, IsCashRenamesIndexZero)
 	EXPECT_THROW(m_rules->defineType("Wood", "", "", 1000, TRUE, -1), decltype(INI_INVALID_DATA)) << "a non-cash type cannot become cash";
 }
 
+TEST_F(AoCCostTest, ASecondIsCashTypeIsAnError)
+{
+	defineStandardTypes();
+	EXPECT_EQ(m_rules->defineType("Credits", "GUI:Credits", "", 1000, TRUE, -1), AOC_RESOURCE_CASH);
+	EXPECT_EQ(m_rules->defineType("credits", "GUI:Money", "", 1000, TRUE, -1), AOC_RESOURCE_CASH) << "the same name again redefines cash";
+	EXPECT_STREQ(m_rules->getDisplayLabel(AOC_RESOURCE_CASH).str(), "GUI:Money");
+	EXPECT_THROW(m_rules->defineType("Gold", "", "", 1000, TRUE, -1), decltype(INI_INVALID_DATA)) << "exactly one type is cash";
+	EXPECT_EQ(m_rules->findType("Credits"), AOC_RESOURCE_CASH) << "the rejected block renames nothing";
+	EXPECT_EQ(m_rules->findType("Gold"), -1);
+	EXPECT_EQ(m_rules->getTypeCount(), 5);
+}
+
 TEST_F(AoCCostTest, AtMostEightTypes)
 {
 	for (Int i = 1; i < AOC_MAX_RESOURCES; ++i)

@@ -33,6 +33,7 @@ AoCRules::AoCRules()
 {
 	m_typeCount = 0;
 	m_definedByINI = FALSE;
+	m_cashNamedByINI = FALSE;
 	m_loadedTypeCount = 0;
 	for (Int i = 0; i < AOC_MAX_RESOURCES; ++i)
 		m_loadRemap[i] = -1;
@@ -147,6 +148,16 @@ Int AoCRules::defineType( const AsciiString &name, const AsciiString &displayLab
 			DEBUG_CRASH(("AoCResourceType '%s' is already a non-cash type and cannot become cash", name.str()));
 			throw INI_INVALID_DATA;
 		}
+		// Exactly one block declares cash (D11 2.1). A second IsCash block under another name would rename
+		// cash silently; the same name again (a later file redefining it) is an update in place.
+		if (isCash && m_cashNamedByINI && index < 0)
+		{
+			DEBUG_CRASH(("AoCResourceType '%s' says IsCash, but '%s' already does: exactly one type is cash",
+				name.str(), m_types[AOC_RESOURCE_CASH].name.str()));
+			throw INI_INVALID_DATA;
+		}
+		if (isCash)
+			m_cashNamedByINI = TRUE;
 		index = AOC_RESOURCE_CASH;
 		cashEquivalentPerMille = 1000;	// cash is the unit
 	}

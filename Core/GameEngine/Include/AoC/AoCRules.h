@@ -72,8 +72,10 @@ public:
 
 	/**
 		Define or redefine a type (INI blocks and unit tests). isCash names index 0 (its CashEquivalent
-		is always 1000). A new non-cash name is appended; an existing name is updated in place.
-		Returns the index, or throws INI_INVALID_DATA when AOC_MAX_RESOURCES is exceeded.
+		is always 1000); exactly one name may do so, so a second isCash type under another name throws
+		INI_INVALID_DATA (the same name again is a redefinition). A new non-cash name is appended; an
+		existing name is updated in place. Returns the index, or throws INI_INVALID_DATA when
+		AOC_MAX_RESOURCES is exceeded.
 	*/
 	Int defineType( const AsciiString &name, const AsciiString &displayLabel, const AsciiString &iconName,
 		Int cashEquivalentPerMille, Bool isCash, Int order );
@@ -117,6 +119,7 @@ private:
 	TypeInfo m_types[AOC_MAX_RESOURCES];
 	Int m_typeCount;
 	Bool m_definedByINI;
+	Bool m_cashNamedByINI;	///< an isCash type named index 0; INI parse state, not saved (the type set is INI data)
 
 	// set while a save game loads: how the file's type indices map onto the current set
 	Int m_loadedTypeCount;
