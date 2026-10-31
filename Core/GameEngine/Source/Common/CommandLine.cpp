@@ -1485,6 +1485,8 @@ void CommandLine::parseCommandLineForStartup()
 
 	parseCommandLine(paramsForStartup, ARRAY_SIZE(paramsForStartup),
 		TheWritableGlobalData->m_commandLineData.m_parsedArguments);
+	// AoC @hook 31/10/2026 Options.ini and -simrate have been read; the rate is final before any INI loads (D11 F15).
+	AoCSimRate::lock();
 
 	// GeneralsX @bugfix fbraz 15/09/2026 Restrict default executable working directory fallback to Windows
 	// On POSIX/Linux/Flatpak, binaries reside in system paths (/app/bin) while game assets reside in CWD/data dirs.

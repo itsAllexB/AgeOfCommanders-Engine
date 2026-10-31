@@ -68,6 +68,13 @@ namespace
 
 Bool AoCSimRate::set( Int rate, const char *source )
 {
+	if (isLocked())
+	{
+		// INI millisecond-to-frame conversions and the network frame constants already use the locked rate.
+		fprintf(stderr, "[AoC] %s: the simulation rate is fixed at %d Hz once startup has read it; ignoring %d\n", source ? source : "SimulationRate", g_framesPerSecond, rate);
+		fflush(stderr);
+		return FALSE;
+	}
 	if (!isValidRate(rate))
 	{
 		fprintf(stderr, "[AoC] %s: simulation rate must be 30 or 60, not %d; keeping %d Hz\n", source ? source : "SimulationRate", rate, g_framesPerSecond);
@@ -76,7 +83,6 @@ Bool AoCSimRate::set( Int rate, const char *source )
 	}
 	const Int oldRate = g_framesPerSecond;
 	g_framesPerSecond = rate;
-	s_locked = TRUE;
 	applyNetworkFrameConstants();
 	mirrorIntoGlobalData(oldRate, rate);
 	fprintf(stderr, "[AoC] simulation rate %d Hz (%s)\n", rate, source ? source : "default");
@@ -102,6 +108,11 @@ void AoCSimRate::readStartupOptions()
 	}
 	if (!set(rate, source))
 		set(DefaultRate, "default after invalid Options.ini SimulationRate");
+}
+
+void AoCSimRate::lock()
+{
+	s_locked = TRUE;
 }
 
 Bool AoCSimRate::isLocked()

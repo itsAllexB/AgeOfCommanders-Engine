@@ -78,14 +78,19 @@ namespace AoCSimRate
 	inline Int slavedUpdateFrames() { return framesPerSecond() / 4; }	///< SlavedUpdate (was SLAVED_UPDATE_RATE)
 	inline Int spawnUpdateFrames() { return framesPerSecond() / 2; }	///< SpawnBehavior (was SPAWN_UPDATE_RATE)
 
-	/// Set the rate; returns FALSE (and keeps the old value) when the rate is not 30 or 60. 'source' is for the log line.
+	/// Set the rate; returns FALSE (and keeps the old value) when the rate is not 30 or 60, or when the rate is
+	/// already locked. 'source' is for the log line.
 	Bool set( Int rate, const char *source );
 
 	/// Read "SimulationRate" from Options.ini. Needs TheGlobalData (user data path); called from
 	/// CommandLine::parseCommandLineForStartup right after the GlobalData is created, before -simrate is parsed.
 	void readStartupOptions();
 
-	/// TRUE once set() or readStartupOptions() has run; after that the rate is final for this process.
+	/// Fix the rate for the rest of the process. Called by CommandLine::parseCommandLineForStartup once Options.ini
+	/// and -simrate have been read, before any INI loads: every later set() is refused.
+	void lock();
+
+	/// TRUE once lock() has run; the rate is then final for this process.
 	Bool isLocked();
 
 	/// The executable CRC this process reports (lobbies, GameSpy staging rooms, GeneralsOnline login and
