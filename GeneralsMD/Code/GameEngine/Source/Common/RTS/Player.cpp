@@ -4596,6 +4596,8 @@ void Player::xfer( Xfer *xfer )
 	// AoC @hook F1: the resource bank; cash is already in m_money above
 	if (version >= 9)
 		xfer->xferSnapshot( &m_aocBank );
+	else if( xfer->getXferMode() == XFER_LOAD )
+		m_aocBank.reset();	// AoC @hook 31/10/2026 A pre-F1 save has no bank: drop the starting stock Player::init deposited (D11 F1).
 
 }
 
