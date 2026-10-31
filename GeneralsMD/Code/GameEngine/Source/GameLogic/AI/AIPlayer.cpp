@@ -1509,8 +1509,10 @@ Bool AIPlayer::isPossibleToBuildTeam( TeamPrototype *proto, Bool requireIdleFact
 			// AoC @hook F1: the non-cash components, accumulated like cost
 			AoCCost thingAoCCost;
 			thing->calcAoCCost(m_player, thingAoCCost);
+			// AoC @hook 31/10/2026 The average unit count in integers, as the integer economy asks (D11 F1).
+			const UnsignedInt unitCountTwice = (UnsignedInt)(unitInfo[i].maxUnits + unitInfo[i].minUnits);
 			for (Int t = AOC_RESOURCE_CASH + 1; t < AOC_MAX_RESOURCES; ++t)
-				thingAoCCost.amount[t] *= ((unitInfo[i].maxUnits+unitInfo[i].minUnits)/2.0f);
+				thingAoCCost.amount[t] = thingAoCCost.amount[t] * unitCountTwice / 2;
 			aocCost.add(thingAoCCost);
 		}
 	}
