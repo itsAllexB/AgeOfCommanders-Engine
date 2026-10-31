@@ -170,7 +170,7 @@ TEST_F(AoCPopulationTest, LobbyCapZeroIsUnlimitedAndOtherwiseClampsCapacity)
 	EXPECT_EQ(AoCPopulation::capFor(25, 0), 25) << "lobby cap 0: only housing limits";
 	EXPECT_EQ(AoCPopulation::capFor(25, 12), 12) << "the lobby cap binds below the housing";
 	EXPECT_EQ(AoCPopulation::capFor(8, 12), 8) << "housing binds below the lobby cap";
-	EXPECT_EQ(AoCPopulation::capFor(25, -1), 25) << "a negative cap is no cap";
+	EXPECT_EQ(AoCPopulation::capFor(25, -1), AOC_POPULATION_CAP_UNLIMITED) << "F7: -1 is the unlimited mode, not housing only";
 	EXPECT_EQ(AoCPopulation::headroomFor(10, 25, 2, 12), 0);
 
 	m_pop.addCapacity(20);
@@ -183,6 +183,41 @@ TEST_F(AoCPopulationTest, LobbyCapZeroIsUnlimitedAndOtherwiseClampsCapacity)
 	EXPECT_EQ(m_pop.getHeadroom(), 7);
 	EXPECT_TRUE(m_pop.canAfford(7));
 	EXPECT_FALSE(m_pop.canAfford(8));
+}
+
+// --- F7: the unlimited lobby cap (-1) turns the housing check off; the counters still count ---------
+
+TEST_F(AoCPopulationTest, UnlimitedCapTurnsTheCheckOffAndKeepsCounting)
+{
+	EXPECT_TRUE(AoCPopulation::isUnlimited(AOC_POPULATION_CAP_UNLIMITED));
+	EXPECT_FALSE(AoCPopulation::isUnlimited(0)) << "0 is no lobby clamp: housing still limits";
+	EXPECT_FALSE(AoCPopulation::isUnlimited(12));
+	EXPECT_EQ(AoCPopulation::capFor(10, -1), AOC_POPULATION_CAP_UNLIMITED);
+	EXPECT_EQ(AoCPopulation::capFor(0, -1), AOC_POPULATION_CAP_UNLIMITED) << "no housing at all and still no cap";
+	EXPECT_EQ(AoCPopulation::headroomFor(500, 10, 40, -1), (Int)AOC_POPULATION_UNLIMITED_HEADROOM);
+
+	AoCPopulation::setDetachedLobbyCap(AOC_POPULATION_CAP_UNLIMITED);
+	m_pop.addCapacity(10);
+	m_pop.addUsed(10);
+	EXPECT_EQ(m_pop.getCap(), AOC_POPULATION_CAP_UNLIMITED);
+	EXPECT_FALSE(m_pop.isAtCap()) << "full housing is not a cap any more";
+	EXPECT_TRUE(m_pop.canAfford(1));
+	EXPECT_TRUE(m_pop.canAfford(9)) << "a crawler with its payload fits";
+	m_pop.reserve(9);
+	m_pop.addUsed(25);
+	EXPECT_EQ(m_pop.getUsed(), 35) << "the counters still count for display";
+	EXPECT_EQ(m_pop.getCapacity(), 10);
+	EXPECT_EQ(m_pop.getReserved(), 9);
+	EXPECT_FALSE(m_pop.isAtCap());
+	EXPECT_TRUE(m_pop.canAfford(1000));
+	EXPECT_TRUE(m_pop.scriptHeadroomIs(Parameter::GREATER, 1000)) << "a script sees room to spare";
+
+	// The same counters under a real cap again: over it, blocked (the cap is a game setting, but the arithmetic is shared).
+	AoCPopulation::setDetachedLobbyCap(0);
+	m_pop.reserve(0);
+	EXPECT_EQ(m_pop.getCap(), 10);
+	EXPECT_EQ(m_pop.getHeadroom(), 10 - 35 - 9);
+	EXPECT_FALSE(m_pop.canAfford(1));
 }
 
 // --- going over the cap: allowed, nothing dies, production waits ------------------------------------
