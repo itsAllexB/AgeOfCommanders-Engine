@@ -51,6 +51,7 @@
 #include "GameClient/InGameUI.h"
 
 #include "GameLogic/GameLogic.h"
+#include "GameLogic/Module/ContainModule.h"	// AoC @feature 31/10/2026 A produced transport's payload at the door (D11 F4).
 #include "GameLogic/Module/CreateModule.h"
 #include "GameLogic/Module/ParkingPlaceBehavior.h"
 #include "GameLogic/Module/ProductionUpdate.h"
@@ -363,7 +364,7 @@ Bool ProductionUpdate::queueCreateUnit( const ThingTemplate *unitType, Productio
 	const CanMakeType aocCanMake = TheBuildAssistant->canMakeUnit( getObject(), unitType );
 	if( aocCanMake != CANMAKE_OK )
 	{
-		AoCHarness::onUnitQueueRefused( getObject()->getControllingPlayer(), (Int)aocCanMake );
+		AoCHarness::onUnitQueueRefused( getObject()->getControllingPlayer(), (Int)aocCanMake, unitType );
 		return FALSE;
 	}
 
@@ -431,7 +432,7 @@ Bool ProductionUpdate::queueCreateUnit( const ThingTemplate *unitType, Productio
 	production->m_exitDoor = exitDoor;
 
 	// AoC @hook 31/10/2026 Reserve the population of the whole batch now, as its cost is paid now; it is released unit by unit at the door or on removal (D11 F4).
-	player->getAoCPopulation()->reserve( AoCPopulation::costOf( unitType ) * production->m_productionQuantityTotal );
+	player->getAoCPopulation()->reserve( AoCPopulation::productionCostOf( unitType ) * production->m_productionQuantityTotal );
 
 	// tie to the end of the production queue
 	addToProductionQueue( production );
@@ -785,13 +786,16 @@ UpdateSleepTime ProductionUpdate::update()
 							Object *newObj = TheThingFactory->newObject( production->m_objectToProduce,
 																	creationBuilding->getControllingPlayer()->getDefaultTeam() );
 
-							// AoC @hook 31/10/2026 One unit of the batch is out of the door: its population moves from reserved to used (D11 F4).
-							creationBuilding->getControllingPlayer()->getAoCPopulation()->release( AoCPopulation::costOf( production->m_objectToProduce ) );
-
 							newObj->setProducer(creationBuilding);
 
 							// call the exit interface to do the rally point and position stuff
 							exitInterface->exitObjectViaDoor( newObj, exitDoor );
+
+							// AoC @hook 31/10/2026 One unit of the batch is out of the door: a transport with a priced initial payload creates it here (stock waits for
+							// the transport's first update), so the unit and its passengers move from reserved to used in one go (D11 F4).
+							if( AoCPopulation::payloadPopulationOf( production->m_objectToProduce ) > 0 && newObj->getContain() )
+								newObj->getContain()->aocCreateInitialPayloadNow();
+							creationBuilding->getControllingPlayer()->getAoCPopulation()->release( AoCPopulation::productionCostOf( production->m_objectToProduce ) );
 
 							// since we successfully exited via this door, we should NOT call unreserveDoorForExit
 							// when we toss this production entry. so set it back to an innocuous value.
@@ -1008,7 +1012,7 @@ void ProductionUpdate::removeFromProductionQueue( ProductionEntry *production )
 	{
 		Player *aocOwner = getObject()->getControllingPlayer();
 		if( aocOwner )
-			aocOwner->getAoCPopulation()->release( AoCPopulation::costOf( production->m_objectToProduce ) * production->getProductionQuantityRemaining() );
+			aocOwner->getAoCPopulation()->release( AoCPopulation::productionCostOf( production->m_objectToProduce ) * production->getProductionQuantityRemaining() );
 	}
 
 	if (production->m_type == PRODUCTION_UNIT &&

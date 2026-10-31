@@ -78,6 +78,10 @@ class ContainModuleInterface
 {
 public:
 
+	/// AoC @feature 31/10/2026 Create the initial payload now if it is still due: a produced transport at the factory door, so the
+	/// passengers join with it and its reservation moves to used at once (D11 F4). Nothing by default.
+	virtual void aocCreateInitialPayloadNow() { }
+
 	// we have a two basic container types that it is convenient to query and use
 	virtual OpenContain *asOpenContain() = 0;
 

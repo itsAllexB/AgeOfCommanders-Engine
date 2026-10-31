@@ -114,6 +114,9 @@ public:
 	virtual const W3DTreeDrawModuleData* getAsW3DTreeDrawModuleData() const { return nullptr; }
 	virtual StaticGameLODLevel getMinimumRequiredGameLOD() const { return (StaticGameLODLevel)0;}
 
+	/// AoC @feature 31/10/2026 Population of the units this module creates with its object (a transport's initial payload); 0 by default (D11 F4).
+	virtual Int getAoCInitialPayloadPopulation() const { return 0; }
+
 	static void buildFieldParse(MultiIniFieldParse& p)
 	{
 		// nothing

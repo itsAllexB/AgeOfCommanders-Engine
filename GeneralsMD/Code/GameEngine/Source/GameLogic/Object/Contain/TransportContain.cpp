@@ -30,6 +30,8 @@
 // USER INCLUDES //////////////////////////////////////////////////////////////////////////////////
 #include "PreRTS.h"	// This must go first in EVERY cpp file in the GameEngine
 
+#include "AoC/AoCPopulation.h"	// AoC @feature 31/10/2026 Payload population (D11 F4).
+
 #include "Common/Player.h"
 #include "Common/ThingTemplate.h"
 #include "Common/ThingFactory.h"
@@ -427,6 +429,17 @@ void TransportContain::onRemoving( Object *rider )
 		}
 	}
 
+}
+
+// ------------------------------------------------------------------------------------------------
+/** AoC @feature 31/10/2026 The population of the initial payload: what production must find room for
+	* and reserve with the transport (D11 F4). Template data only. */
+// ------------------------------------------------------------------------------------------------
+Int TransportContainModuleData::getAoCInitialPayloadPopulation() const
+{
+	if( m_initialPayload.count <= 0 || m_initialPayload.name.isEmpty() || TheThingFactory == nullptr )
+		return 0;
+	return AoCPopulation::costOf( TheThingFactory->findTemplate( m_initialPayload.name ) ) * m_initialPayload.count;
 }
 
 // ------------------------------------------------------------------------------------------------

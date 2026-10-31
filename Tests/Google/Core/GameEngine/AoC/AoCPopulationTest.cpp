@@ -27,6 +27,7 @@
 #include <gtest/gtest.h>
 
 #include "AoC/AoCPopulation.h"
+#include "Common/Module.h"
 #include "Common/XferCRC.h"
 #include "Common/XferLoad.h"
 #include "Common/XferSave.h"
@@ -34,6 +35,17 @@
 
 namespace
 {
+
+// A behaviour module whose object comes with units: what TransportContain, RiderChangeContain, OverlordContain and
+// HelixContain module data report from their payload (review of PR #5, finding 1).
+class FakePayloadModuleData : public ModuleData
+{
+public:
+	explicit FakePayloadModuleData( Int population ) : m_population(population) { }
+	virtual Int getAoCInitialPayloadPopulation() const override { return m_population; }
+private:
+	Int m_population;
+};
 
 class AoCPopulationTest : public ::testing::Test
 {
@@ -286,6 +298,43 @@ TEST_F(AoCPopulationTest, CrcIsSilentWhileInactiveAndCoversEveryCounter)
 	EXPECT_NE(reservedCRC, usedCRC) << "reserved enters the CRC";
 	AoCPopulation::setDetachedLobbyCap(12);
 	EXPECT_NE(crcOf(m_pop), reservedCRC) << "the lobby cap enters the CRC";
+}
+
+// --- a produced transport's initial payload counts with it (review of PR #5, finding 1) ---------------
+
+TEST_F(AoCPopulationTest, ProductionCostAddsTheInitialPayload)
+{
+	ModuleData otherModule;						// any module without a payload reports 0
+	FakePayloadModuleData redGuards(8);	// a Troop Crawler's eight Red Guards at 1 each
+	const ModuleData *crawler[] = { &otherModule, &redGuards, &otherModule };
+	const ModuleData *tank[] = { &otherModule, &otherModule };
+
+	EXPECT_EQ(AoCPopulation::productionCostOf(2, crawler, 3), 10) << "D3: a light vehicle at 2 plus its passengers";
+	EXPECT_EQ(AoCPopulation::productionCostOf(0, crawler, 3), 8) << "a transport without a cost still needs room for its passengers";
+	EXPECT_EQ(AoCPopulation::productionCostOf(3, tank, 2), 3) << "no payload: the template's own cost";
+	EXPECT_EQ(AoCPopulation::productionCostOf(1, nullptr, 0), 1);
+	EXPECT_EQ(AoCPopulation::productionCostOf(nullptr), 0);
+	EXPECT_EQ(AoCPopulation::payloadPopulationOf(nullptr), 0);
+
+	// The 60 Hz case of test e: one slot left, the crawler and its squad need 9 at test-overlay prices.
+	m_pop.addCapacity(10);
+	m_pop.addUsed(9);
+	const Int crawlerNeeds = AoCPopulation::productionCostOf(1, crawler, 3);
+	EXPECT_EQ(crawlerNeeds, 9);
+	EXPECT_FALSE(m_pop.canAfford(crawlerNeeds)) << "the squad does not fit, so production refuses the crawler";
+	EXPECT_TRUE(m_pop.canAfford(1)) << "a lone infantryman still fits";
+
+	// With room: the whole squad is reserved at the queue and released in one go at the door, when the
+	// passengers join with the transport.
+	m_pop.addCapacity(10);	// headroom 11
+	ASSERT_TRUE(m_pop.canAfford(crawlerNeeds));
+	m_pop.reserve(crawlerNeeds);
+	EXPECT_EQ(m_pop.getHeadroom(), 2);
+	m_pop.addUsed(crawlerNeeds);		// the crawler and its eight passengers join
+	m_pop.release(crawlerNeeds);		// the reservation leaves in the same frame
+	EXPECT_EQ(m_pop.getUsed(), 18);
+	EXPECT_EQ(m_pop.getReserved(), 0);
+	EXPECT_EQ(m_pop.getHeadroom(), 2) << "the door moves the squad from reserved to used without changing the headroom";
 }
 
 } // namespace

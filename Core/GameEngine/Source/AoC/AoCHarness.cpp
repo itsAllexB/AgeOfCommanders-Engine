@@ -79,6 +79,8 @@ inline UnsignedInt aiLogIntervalFrames() { return AOC_AI_LOG_INTERVAL_SECONDS * 
 
 // F4: CanMakeType values the blocked_build column can name (CANMAKE_OK .. CANMAKE_NO_HOUSING, room to grow).
 const Int AOC_HARNESS_CANMAKE_SLOTS = 16;
+// F4: distinct templates the blocked_units column remembers per player and row.
+const Int AOC_HARNESS_BLOCKED_UNITS = 8;
 
 // Fixed-size storage only: the options are set before the game memory manager owns the heap and are
 // read until after it has shut down, so nothing here may allocate.
@@ -109,6 +111,7 @@ struct HarnessState
 
 	// F4: unit queue refusals per player index and CanMakeType since the last -aiLog row
 	UnsignedInt queueRefusals[MAX_PLAYER_COUNT][AOC_HARNESS_CANMAKE_SLOTS];
+	const ThingTemplate *housingRefused[MAX_PLAYER_COUNT][AOC_HARNESS_BLOCKED_UNITS];
 	Bool sawFirstLogicFrame;
 
 	Bool sawCRCMismatch;
@@ -344,6 +347,27 @@ std::string takeBlockedBuild( Int playerIndex )
 	return out;
 }
 
+// F4: "ChinaVehicleTroopCrawler(9)|ChinaInfantryRedguard(2)" for the templates refused for housing since the previous
+// row, with the population each needs (AoCPopulation::productionCostOf, payload included), then reset
+std::string takeBlockedUnits( Int playerIndex )
+{
+	HarnessState &s = state();
+	std::string out;
+	if (playerIndex < 0 || playerIndex >= MAX_PLAYER_COUNT)
+		return out;
+	for (Int n = 0; n < AOC_HARNESS_BLOCKED_UNITS; ++n)
+	{
+		const ThingTemplate *t = s.housingRefused[playerIndex][n];
+		if (t == nullptr)
+			continue;
+		if (!out.empty())
+			out += '|';
+		out += fmt("%s(%d)", t->getName().str(), (int)AoCPopulation::productionCostOf(t));
+		s.housingRefused[playerIndex][n] = nullptr;
+	}
+	return out;
+}
+
 // One CSV row and its header built from the same list, so a new field is one add() line.
 // D9 section 7.2 fields (bank per type, workers by type and idle, builders busy, population, houses,
 // fields, converters, army value, first-of frames, blocked-build reasons) slot in here as F1, F2 and
@@ -468,6 +492,7 @@ void writeAiLog( UnsignedInt frame )
 			row.add("pop_reserved", pop->getReserved());
 			row.add("pop_cap", pop->getCap());
 			row.add("blocked_build", takeBlockedBuild((Int)p->getPlayerIndex()));
+			row.add("blocked_units", takeBlockedUnits((Int)p->getPlayerIndex()));
 			if (pop->getUsed() + pop->getReserved() > pop->getCap())
 			{
 				std::vector< std::pair<std::string, Int> > parts;
@@ -1067,7 +1092,7 @@ void AoCHarness::logicUpdateEnd()
 	s.logicUpdates++;
 }
 
-void AoCHarness::onUnitQueueRefused( const Player *player, Int canMakeType )
+void AoCHarness::onUnitQueueRefused( const Player *player, Int canMakeType, const ThingTemplate *unitType )
 {
 	HarnessState &s = state();
 	if (!s.anyFlag || player == nullptr)
@@ -1076,6 +1101,18 @@ void AoCHarness::onUnitQueueRefused( const Player *player, Int canMakeType )
 	if (index < 0 || index >= MAX_PLAYER_COUNT || canMakeType < 0 || canMakeType >= AOC_HARNESS_CANMAKE_SLOTS)
 		return;
 	s.queueRefusals[index][canMakeType]++;
+	if (canMakeType != CANMAKE_NO_HOUSING || unitType == nullptr)
+		return;
+	for (Int n = 0; n < AOC_HARNESS_BLOCKED_UNITS; ++n)
+	{
+		if (s.housingRefused[index][n] == unitType)
+			return;
+		if (s.housingRefused[index][n] == nullptr)
+		{
+			s.housingRefused[index][n] = unitType;
+			return;
+		}
+	}
 }
 
 void AoCHarness::onSimRateRefusal()

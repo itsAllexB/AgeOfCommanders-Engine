@@ -38,7 +38,10 @@
 //                                   then (F4) pop_used, pop_capacity, pop_reserved, pop_cap (capacity
 //                                   clamped to the lobby cap: what production is checked against) and
 //                                   blocked_build (unit queue refusals since the previous row, by reason,
-//                                   e.g. NO_HOUSING:12). With -aiLog, stderr also gets each AI player's
+//                                   e.g. NO_HOUSING:12) and blocked_units (the templates refused for
+//                                   housing since the previous row with the population each needs, its
+//                                   initial payload included, e.g. ChinaVehicleTroopCrawler(9), up to 8
+//                                   names, |-separated). With -aiLog, stderr also gets each AI player's
 //                                   population when -saveAtFrame saves and at the first frame of a loaded
 //                                   game, and, at a row where used + reserved is above the cap, what the
 //                                   population is made of (template x count).
@@ -80,6 +83,7 @@
 #pragma once
 
 class Player;
+class ThingTemplate;
 
 class AoCHarness
 {
@@ -120,5 +124,5 @@ public:
 
 	/// ProductionUpdate::queueCreateUnit refused a unit (a CanMakeType other than CANMAKE_OK): counted per player for
 	/// the -aiLog blocked_build column (D11 F4). Harness state only; the logic never reads it.
-	static void onUnitQueueRefused( const Player *player, Int canMakeType );
+	static void onUnitQueueRefused( const Player *player, Int canMakeType, const ThingTemplate *unitType );
 };

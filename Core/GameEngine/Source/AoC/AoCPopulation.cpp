@@ -23,6 +23,7 @@
 
 #include "AoC/AoCPopulation.h"
 #include "AoC/AoCRules.h"
+#include "Common/Module.h"
 #include "Common/Player.h"
 #include "Common/ThingTemplate.h"
 #include "Common/Xfer.h"
@@ -94,6 +95,40 @@ void AoCPopulation::reset()
 }
 
 // ------------------------------------------------------------------------------------------------
+/*static*/ Int AoCPopulation::payloadPopulationOf( const ThingTemplate *tmpl )
+{
+	if (tmpl == nullptr)
+		return 0;
+	const ModuleInfo &modules = tmpl->getBehaviorModuleInfo();
+	Int total = 0;
+	for (Int i = 0; i < modules.getCount(); ++i)
+	{
+		const ModuleData *data = modules.getNthData(i);
+		if (data)
+			total += data->getAoCInitialPayloadPopulation();
+	}
+	return total;
+}
+
+// ------------------------------------------------------------------------------------------------
+/*static*/ Int AoCPopulation::productionCostOf( const ThingTemplate *tmpl )
+{
+	return costOf(tmpl) + payloadPopulationOf(tmpl);
+}
+
+// ------------------------------------------------------------------------------------------------
+/*static*/ Int AoCPopulation::productionCostOf( Int ownCost, const ModuleData *const *modules, Int moduleCount )
+{
+	Int total = ownCost;
+	for (Int i = 0; i < moduleCount; ++i)
+	{
+		if (modules[i])
+			total += modules[i]->getAoCInitialPayloadPopulation();
+	}
+	return total;
+}
+
+// ------------------------------------------------------------------------------------------------
 /** The population still reserved by the unit entries queued in this object's factory: each entry
 	* reserved its population times its quantity when it was queued and releases one unit's worth as
 	* each unit leaves the door. Modules are not ready while the object is being constructed. */
@@ -109,7 +144,7 @@ Int AoCPopulation::queuedPopulationOf( Object *obj ) const
 	for (const ProductionEntry *entry = pu->firstProduction(); entry; entry = pu->nextProduction(entry))
 	{
 		if (entry->getProductionType() == PRODUCTION_UNIT)
-			total += costOf(entry->getProductionObject()) * entry->getProductionQuantityRemaining();
+			total += productionCostOf(entry->getProductionObject()) * entry->getProductionQuantityRemaining();
 	}
 	return total;
 }
@@ -239,7 +274,7 @@ static void countPopulation( Object *obj, void *userData )
 			for (const ProductionEntry *entry = pu->firstProduction(); entry; entry = pu->nextProduction(entry))
 			{
 				if (entry->getProductionType() == PRODUCTION_UNIT)
-					count->reserved += AoCPopulation::costOf(entry->getProductionObject()) * entry->getProductionQuantityRemaining();
+					count->reserved += AoCPopulation::productionCostOf(entry->getProductionObject()) * entry->getProductionQuantityRemaining();
 			}
 		}
 	}

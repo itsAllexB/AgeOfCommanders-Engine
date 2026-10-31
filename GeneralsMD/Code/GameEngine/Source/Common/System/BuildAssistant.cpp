@@ -1363,8 +1363,8 @@ CanMakeType BuildAssistant::canMakeUnit( Object *builder, const ThingTemplate *w
 	if( !player->getAoCBank()->canAfford( cost ) )
 		return CANMAKE_NO_MONEY;
 
-	// AoC @hook 31/10/2026 Population: the unit's population times the factory's batch size must fit the headroom (D11 F4).
-	const Int aocPopulation = AoCPopulation::costOf( whatToBuild );
+	// AoC @hook 31/10/2026 Population: the unit's population with its initial payload, times the factory's batch size, must fit the headroom (D11 F4).
+	const Int aocPopulation = AoCPopulation::productionCostOf( whatToBuild );
 	if( aocPopulation > 0 && !player->getAoCPopulation()->canAfford( aocPopulation * (pu ? pu->getAoCProductionQuantity( whatToBuild ) : 1) ) )
 		return CANMAKE_NO_HOUSING;
 

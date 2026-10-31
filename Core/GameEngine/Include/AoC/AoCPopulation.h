@@ -23,7 +23,8 @@
 //
 //   used      the AoCPopulationCost of every object the player owns, contained units included
 //   capacity  the AoCPopulationCapacity of every owned object that is not under construction
-//   reserved  the population of units queued in the player's factories and not yet out of the door
+//   reserved  the population of units queued in the player's factories and not yet out of the door, each with the
+//             units it is created with (a transport's initial payload)
 //   cap       capacity, clamped to the lobby cap (GameLogic::getAoCPopulationCap; 0 means no lobby clamp)
 //   headroom  cap - used - reserved; negative when the player is over the cap (destroyed houses, captures)
 //
@@ -38,6 +39,7 @@
 
 #include "Common/Snapshot.h"
 
+class ModuleData;
 class Object;
 class Player;
 class ThingTemplate;
@@ -56,6 +58,14 @@ public:
 	// Template data (0 for a null template).
 	static Int costOf( const ThingTemplate *tmpl );			///< AoCPopulationCost
 	static Int capacityOf( const ThingTemplate *tmpl );	///< AoCPopulationCapacity
+	/// The population one unit of this template takes when produced: its own cost plus the cost of the units it is created
+	/// with (a transport's initial payload, the Overlord and Helix payload lists). What production checks, reserves and
+	/// releases. Template data only, so the same on every machine.
+	static Int productionCostOf( const ThingTemplate *tmpl );
+	/// The payload part alone (what the door must create before the release).
+	static Int payloadPopulationOf( const ThingTemplate *tmpl );
+	/// The same sum from the parts (unit tests): own cost plus every module's payload population.
+	static Int productionCostOf( Int ownCost, const ModuleData *const *modules, Int moduleCount );
 
 	// Player hooks. The cost of an object counts while it belongs to the player; its capacity counts while it
 	// belongs to the player and is not under construction; the units queued in a factory stay reserved with
