@@ -777,19 +777,39 @@ void uiBank( UnsignedInt frame )
 	const Int typeCount = AoCRules::typeCount();
 	for (Int t = 0; t < typeCount && t < AOC_MAX_RESOURCES; ++t)
 		text += fmt(" %s=%u", TheAoCRules ? TheAoCRules->getTypeName(t).str() : "Cash", local ? local->getAoCBank()->count(t) : 0u);
-	Object *first = uiFirstSelected();
-	const SupplyTruckAIInterface *gatherer = (first && first->getAI()) ? first->getAI()->getSupplyTruckAIInterface() : nullptr;
-	if (gatherer)
+	// the first selected object (lowest id) first, then the rest of the selection in id order: cargo, position, AI
+	// state type and goal object, so a line shows where each gatherer is in its loop
+	std::vector<Object *> selected;
+	const DrawableList *list = TheInGameUI->getAllSelectedDrawables();
+	if (list)
+		for (DrawableListCIt it = list->begin(); it != list->end(); ++it)
+			if (*it && (*it)->getObject() && (*it)->getObject()->getControllingPlayer() == local)
+				selected.push_back((*it)->getObject());
+	std::sort(selected.begin(), selected.end(), [](const Object *a, const Object *b) { return a->getID() < b->getID(); });
+	if (selected.empty())
+		text += " cargo -";
+	for (size_t i = 0; i < selected.size(); ++i)
 	{
+		Object *obj = selected[i];
+		AIUpdateInterface *ai = obj->getAI();
+		const SupplyTruckAIInterface *gatherer = ai ? ai->getSupplyTruckAIInterface() : nullptr;
+		if (gatherer)
+		{
 #if RTS_ZEROHOUR
-		text += fmt(" cargo %u %s:%d/%d", (UnsignedInt)first->getID(), TheAoCRules ? TheAoCRules->getTypeName(gatherer->getCargoType()).str() : "Cash",
-			gatherer->getNumberBoxes(), gatherer->getMaxUnitsFor(gatherer->getCargoType()));
+			text += fmt(" cargo %u %s:%d/%d", (UnsignedInt)obj->getID(), TheAoCRules ? TheAoCRules->getTypeName(gatherer->getCargoType()).str() : "Cash",
+				gatherer->getNumberBoxes(), gatherer->getMaxUnitsFor(gatherer->getCargoType()));
 #else
-		text += fmt(" cargo %u boxes:%d", (UnsignedInt)first->getID(), gatherer->getNumberBoxes());	// base Generals: no typed cargo, no getMaxBoxes
+			text += fmt(" cargo %u boxes:%d", (UnsignedInt)obj->getID(), gatherer->getNumberBoxes());	// base Generals: no typed cargo, no getMaxBoxes
 #endif
+		}
+		else
+			text += fmt(" cargo %u -", (UnsignedInt)obj->getID());
+		const Object *goal = ai ? ai->getGoalObject() : nullptr;
+		const Coord3D *goalPos = ai ? ai->getGoalPosition() : nullptr;
+		text += fmt(" at %.0f,%.0f ai %d goal %u to %.0f,%.0f%s;", obj->getPosition()->x, obj->getPosition()->y, ai ? (int)ai->getAIStateType() : -1,
+			goal ? (UnsignedInt)goal->getID() : 0u, goalPos ? goalPos->x : 0.0f, goalPos ? goalPos->y : 0.0f,
+			(ai && ai->getCurLocomotor() == nullptr) ? " no-locomotor" : "");
 	}
-	else
-		text += first ? fmt(" cargo %u -", (UnsignedInt)first->getID()) : std::string(" cargo -");
 	fprintf(stderr, "%s\n", text.c_str());
 	fflush(stderr);
 }
