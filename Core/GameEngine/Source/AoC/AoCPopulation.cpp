@@ -25,6 +25,7 @@
 #include "AoC/AoCRules.h"
 #include "Common/Module.h"
 #include "Common/Player.h"
+#include "Common/Team.h"
 #include "Common/ThingTemplate.h"
 #include "Common/Xfer.h"
 #include "GameClient/GameText.h"
@@ -187,12 +188,44 @@ void AoCPopulation::objectLeavingInfluence( Object *obj )
 	m_used -= cost;
 	m_capacity -= capacity;
 	m_reserved -= queued;
+	DEBUG_ASSERTCRASH(m_used >= 0 && m_capacity >= 0, ("AoCPopulation: used %d or capacity %d went below zero", m_used, m_capacity));
 	if (m_reserved < 0)
 	{
 		DEBUG_CRASH(("AoCPopulation: reserved population went below zero"));
 		m_reserved = 0;
 	}
 	refreshBlockState();
+}
+
+// ------------------------------------------------------------------------------------------------
+/** Team::setControllingPlayer re-points a prototype's owner, which changes the owner of every
+	* instance's members without a team change (no becomingTeamMember). Review of PR #5, finding 2. */
+// ------------------------------------------------------------------------------------------------
+void AoCPopulation::teamPrototypeLeaving( TeamPrototype *proto )
+{
+	if (proto == nullptr)
+		return;
+	for (DLINK_ITERATOR<Team> team = proto->iterate_TeamInstanceList(); !team.done(); team.advance())
+	{
+		if (team.cur() == nullptr)
+			continue;
+		for (DLINK_ITERATOR<Object> member = team.cur()->iterate_TeamMemberList(); !member.done(); member.advance())
+			objectLeavingInfluence(member.cur());
+	}
+}
+
+// ------------------------------------------------------------------------------------------------
+void AoCPopulation::teamPrototypeEntering( TeamPrototype *proto )
+{
+	if (proto == nullptr)
+		return;
+	for (DLINK_ITERATOR<Team> team = proto->iterate_TeamInstanceList(); !team.done(); team.advance())
+	{
+		if (team.cur() == nullptr)
+			continue;
+		for (DLINK_ITERATOR<Object> member = team.cur()->iterate_TeamMemberList(); !member.done(); member.advance())
+			objectEnteringInfluence(member.cur());
+	}
 }
 
 // ------------------------------------------------------------------------------------------------
@@ -221,6 +254,7 @@ void AoCPopulation::addCapacity( Int delta )
 	if (delta == 0)
 		return;
 	m_capacity += delta;
+	DEBUG_ASSERTCRASH(m_capacity >= 0, ("AoCPopulation: capacity %d went below zero", m_capacity));
 	refreshBlockState();
 }
 

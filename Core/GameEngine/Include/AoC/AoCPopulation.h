@@ -42,6 +42,7 @@
 class ModuleData;
 class Object;
 class Player;
+class TeamPrototype;
 class ThingTemplate;
 
 class AoCPopulation : public Snapshot
@@ -74,6 +75,10 @@ public:
 	void objectLeavingInfluence( Object *obj );
 	/// The object's OBJECT_STATUS_UNDER_CONSTRUCTION bit changed while it belongs to the player.
 	void objectConstructionChange( const Object *obj, Bool completed );
+	/// A team prototype changes owner without its members changing team (Team::setControllingPlayer): every member of
+	/// every instance leaves the old owner before the switch and enters the new one after it.
+	void teamPrototypeLeaving( TeamPrototype *proto );
+	void teamPrototypeEntering( TeamPrototype *proto );
 
 	// Counters. Every change re-evaluates the at-cap state; reportBlockChange passes its net edges to the owner.
 	void addUsed( Int delta );

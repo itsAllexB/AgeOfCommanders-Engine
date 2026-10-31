@@ -1401,8 +1401,14 @@ Player *Team::getControllingPlayer() const
 void Team::setControllingPlayer(Player *newController)
 {
 	Player* oldOwner = m_proto->getControllingPlayer();
+	// AoC @hook 31/10/2026 Every member of every instance of the prototype changes owner here without a team change, so its population moves with it (D11 F4).
+	const Bool aocOwnerChanges = oldOwner != nullptr && newController != nullptr && oldOwner != newController;
+	if( aocOwnerChanges )
+		oldOwner->getAoCPopulation()->teamPrototypeLeaving( m_proto );
 	// nullptr is not allowed, but is caught by TeamPrototype::setControllingPlayer()
 	m_proto->setControllingPlayer(newController);
+	if( aocOwnerChanges )
+		newController->getAoCPopulation()->teamPrototypeEntering( m_proto );
 
 	// This function is used by one script, and it is kind of odd.  The actual units
 	// are not getting captured, the team they are on is being reassigned to a new player.
