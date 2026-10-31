@@ -198,6 +198,8 @@ void UpgradeTemplate::calcAoCCost( Player *player, AoCCost& cost ) const
 	AoCCost::parseFromINI( ini, *cost, &present );
 	if (present & (1u << AOC_RESOURCE_CASH))
 	{
+		if (cost->amount[AOC_RESOURCE_CASH] > 0x7FFFFFFF)
+			throw INI_INVALID_DATA;	// m_cost is an Int, as BuildCost parses it
 		self->m_cost = (Int)cost->amount[AOC_RESOURCE_CASH];
 		cost->amount[AOC_RESOURCE_CASH] = 0;
 	}
