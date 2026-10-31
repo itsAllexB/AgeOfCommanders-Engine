@@ -30,6 +30,7 @@
 // INCLUDES ///////////////////////////////////////////////////////////////////////////////////////
 #include "PreRTS.h"	// This must go first in EVERY cpp file in the GameEngine
 #include <cmath>	// For isnan() on Linux
+#include "AoC/AoCFolder.h"	// AoC @feature F5
 #define DEFINE_WEAPONCONDITIONMAP
 #include "Common/BitFlagsIO.h"
 #include "Common/BuildAssistant.h"
@@ -6323,6 +6324,10 @@ Bool Object::canProduceUpgrade( const UpgradeTemplate *upgrade )
 		if( button  &&  button->getUpgradeTemplate()  &&  (button->getUpgradeTemplate() == upgrade) )
 			return TRUE; // getUpgradeTemplate only returns something if it is actually an upgrade
 	}
+
+	// AoC @hook 31/10/2026 an upgrade button inside one of the set's folders is the object's own; INI data, no view state (D11 F5).
+	if( AoCFolder::hasUpgradeCommandInFolders( set, upgrade ) )
+		return TRUE;
 
 	return FALSE;// Cheatin' punk.
 }
