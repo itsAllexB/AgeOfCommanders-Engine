@@ -1207,7 +1207,7 @@ CommandAvailability ControlBar::getCommandAvailability( const CommandButton *com
 				//Disable the button if the player has a max amount of these units in build queue or existence.
 				return COMMAND_RESTRICTED;
 			}
-			if( makeType == CANMAKE_NO_MONEY )
+			if( makeType == CANMAKE_NO_MONEY || makeType == CANMAKE_NO_HOUSING )	// AoC @hook 31/10/2026 No housing shows as cannot afford (D11 F4).
 			{
 				return COMMAND_RESTRICTED; //COMMAND_CANT_AFFORD;
 			}

@@ -30,6 +30,8 @@
 // USER INCLUDES //////////////////////////////////////////////////////////////////////////////////
 #include "PreRTS.h"	// This must go first in EVERY cpp file in the GameEngine
 
+#include "AoC/AoCHarness.h"	// AoC @feature 31/10/2026 Refused unit queues for the -aiLog blocked_build column (D11 F4).
+
 #include "Common/BitFlagsIO.h"
 #include "Common/BuildAssistant.h"
 #include "Common/CRCDebug.h"
@@ -357,8 +359,13 @@ Bool ProductionUpdate::queueCreateUnit( const ThingTemplate *unitType, Productio
 	const ProductionUpdateModuleData *data = getProductionUpdateModuleData();
 
 	// if we can't create the unit do nothing
-	if( TheBuildAssistant->canMakeUnit( getObject(), unitType ) != CANMAKE_OK )
+	// AoC @hook 31/10/2026 The reason of a refusal (CANMAKE_NO_HOUSING above all) goes to the harness -aiLog row; the harness only counts (D11 F4).
+	const CanMakeType aocCanMake = TheBuildAssistant->canMakeUnit( getObject(), unitType );
+	if( aocCanMake != CANMAKE_OK )
+	{
+		AoCHarness::onUnitQueueRefused( getObject()->getControllingPlayer(), (Int)aocCanMake );
 		return FALSE;
+	}
 
 	ExitDoorType exitDoor = DOOR_NONE_AVAILABLE;
 
@@ -422,6 +429,9 @@ Bool ProductionUpdate::queueCreateUnit( const ThingTemplate *unitType, Productio
 	production->m_objectToProduce = unitType;
 	production->m_productionID = productionID;
 	production->m_exitDoor = exitDoor;
+
+	// AoC @hook 31/10/2026 Reserve the population of the whole batch now, as its cost is paid now; it is released unit by unit at the door or on removal (D11 F4).
+	player->getAoCPopulation()->reserve( AoCPopulation::costOf( unitType ) * production->m_productionQuantityTotal );
 
 	// tie to the end of the production queue
 	addToProductionQueue( production );
@@ -775,6 +785,9 @@ UpdateSleepTime ProductionUpdate::update()
 							Object *newObj = TheThingFactory->newObject( production->m_objectToProduce,
 																	creationBuilding->getControllingPlayer()->getDefaultTeam() );
 
+							// AoC @hook 31/10/2026 One unit of the batch is out of the door: its population moves from reserved to used (D11 F4).
+							creationBuilding->getControllingPlayer()->getAoCPopulation()->release( AoCPopulation::costOf( production->m_objectToProduce ) );
+
 							newObj->setProducer(creationBuilding);
 
 							// call the exit interface to do the rally point and position stuff
@@ -990,6 +1003,14 @@ void ProductionUpdate::addToProductionQueue( ProductionEntry *production )
 //-------------------------------------------------------------------------------------------------
 void ProductionUpdate::removeFromProductionQueue( ProductionEntry *production )
 {
+	// AoC @hook 31/10/2026 A unit entry leaving the queue (cancel, refund, deletion) frees the population of the units it did not produce; none once every unit is out (D11 F4).
+	if( production->m_type == PRODUCTION_UNIT )
+	{
+		Player *aocOwner = getObject()->getControllingPlayer();
+		if( aocOwner )
+			aocOwner->getAoCPopulation()->release( AoCPopulation::costOf( production->m_objectToProduce ) * production->getProductionQuantityRemaining() );
+	}
+
 	if (production->m_type == PRODUCTION_UNIT &&
 			production->m_exitDoor != DOOR_NONE_AVAILABLE)
 	{
@@ -1144,6 +1165,22 @@ UnsignedInt ProductionUpdate::countUnitTypeInQueue( const ThingTemplate *unitTyp
 
 	return count;
 
+}
+
+// ------------------------------------------------------------------------------------------------
+/** AoC @feature 31/10/2026 How many units one queue entry of unitType makes here: the QuantityModifier
+	* that queueCreateUnit applies, so canMakeUnit can check the population of the whole batch (D11 F4). */
+// ------------------------------------------------------------------------------------------------
+Int ProductionUpdate::getAoCProductionQuantity( const ThingTemplate *unitType ) const
+{
+	const ProductionUpdateModuleData *data = getProductionUpdateModuleData();
+	for( std::vector<QuantityModifier>::const_iterator it = data->m_quantityModifiers.begin(); it != data->m_quantityModifiers.end(); ++it )
+	{
+		const ThingTemplate* productionTemplate = TheThingFactory->findTemplate( it->m_templateName );
+		if( productionTemplate && productionTemplate->isEquivalentTo( unitType ) )
+			return it->m_quantity;
+	}
+	return 1;
 }
 
 // ------------------------------------------------------------------------------------------------
