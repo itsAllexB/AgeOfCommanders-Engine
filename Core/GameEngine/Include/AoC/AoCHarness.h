@@ -34,7 +34,13 @@
 //                                   and replays alike (the stock GameLogic::getCRC values).
 //   -aiLog <dir>                    Every 900 logic frames write one CSV row per AI player to
 //                                   <dir>/ai_<playerIndex>.csv. Logic reads only. With resource types
-//                                   defined (F1) the row gains bank_<Type> columns and cash_equivalent.
+//                                   defined (F1) the row gains bank_<Type> columns and cash_equivalent,
+//                                   then (F4) pop_used, pop_capacity, pop_reserved, pop_cap (capacity
+//                                   clamped to the lobby cap: what production is checked against) and
+//                                   blocked_build (unit queue refusals since the previous row, by reason,
+//                                   e.g. NO_HOUSING:12). With -aiLog, stderr also gets each AI player's
+//                                   population when -saveAtFrame saves and at the first frame of a loaded
+//                                   game.
 //   -saveAtFrame <N> <name>         F1: write the stock save game <name>.sav (the save menu's path,
 //                                   TheGameState->saveGame) once logic frame N (1 or more) has run, from the
 //                                   engine loop. Load it with the stock -loadsave <name>.sav at the same
@@ -72,6 +78,8 @@
 
 #pragma once
 
+class Player;
+
 class AoCHarness
 {
 public:
@@ -108,4 +116,8 @@ public:
 	/// GameEngine::update, around TheGameLogic->UPDATE(): logic frame timing for -aiLog's timing.csv (D11 F15 test e).
 	static void logicUpdateBegin();
 	static void logicUpdateEnd();
+
+	/// ProductionUpdate::queueCreateUnit refused a unit (a CanMakeType other than CANMAKE_OK): counted per player for
+	/// the -aiLog blocked_build column (D11 F4). Harness state only; the logic never reads it.
+	static void onUnitQueueRefused( const Player *player, Int canMakeType );
 };
