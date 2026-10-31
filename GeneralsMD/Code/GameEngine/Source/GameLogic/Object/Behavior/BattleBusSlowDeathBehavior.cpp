@@ -29,7 +29,6 @@
 
 // INCLUDES ///////////////////////////////////////////////////////////////////////////////////////
 #include "PreRTS.h"	// This must go first in EVERY cpp file in the GameEngine
-#include "AoC/AoCSimRate.h"
 #include "Common/Xfer.h"
 
 #include "GameLogic/Module/BattleBusSlowDeathBehavior.h"
@@ -166,8 +165,6 @@ void BattleBusSlowDeathBehavior::beginSlowDeath( const DamageInfo *damageInfo )
 			throwForce.x = 0;
 			throwForce.y = 0;
 			throwForce.z = data->m_throwForce;
-			if (AoCSimRate::frameMultiplier() > 1)	// AoC @tweak 30/10/2026 velocity per frame (D11 F15 port list)
-				throwForce.z /= (Real)AoCSimRate::frameMultiplier();
 			me->getPhysics()->applyShock(&throwForce);
 			me->getPhysics()->applyRandomRotation();
 		}
