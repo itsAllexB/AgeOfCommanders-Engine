@@ -571,15 +571,17 @@ void SlavedUpdate::setRepairState( RepairStates repairState )
 		return;
 	}
 
+	// AoC @hook 31/10/2026 The unpack, pack, extend and retract steps below are retail 30 Hz frame counts, so they are
+	// multiplied by the frame multiplier to keep their real-time length at 60 Hz (D11 F15).
 	switch( repairState )
 	{
 		case REPAIRSTATE_UNPACKING:
 			setRepairModelConditionStates( MODELCONDITION_UNPACKING );
-			m_framesToWait = 15;
+			m_framesToWait = 15 * AoCSimRate::frameMultiplier();
 			break;
 		case REPAIRSTATE_PACKING:
 			setRepairModelConditionStates( MODELCONDITION_PACKING );
-			m_framesToWait = 15;
+			m_framesToWait = 15 * AoCSimRate::frameMultiplier();
 			break;
 		case REPAIRSTATE_READY:
 		{
@@ -589,12 +591,12 @@ void SlavedUpdate::setRepairState( RepairStates repairState )
 					//We're not in a repair state -- so assume we need to unpack
 					setRepairModelConditionStates( MODELCONDITION_UNPACKING );
 					m_repairState = REPAIRSTATE_UNPACKING;
-					m_framesToWait = 15;
+					m_framesToWait = 15 * AoCSimRate::frameMultiplier();
 					break;
 				case REPAIRSTATE_WELDING:
 					//We are welding so retract before going into ready state.
 					m_repairState = REPAIRSTATE_RETRACTING;
-					m_framesToWait = 5;
+					m_framesToWait = 5 * AoCSimRate::frameMultiplier();
 					setRepairModelConditionStates( MODELCONDITION_FIRING_C );
 					moveToNewRepairSpot();
 					break;
@@ -610,7 +612,7 @@ void SlavedUpdate::setRepairState( RepairStates repairState )
 			if( m_repairState == REPAIRSTATE_READY )
 			{
 				m_repairState = REPAIRSTATE_EXTENDING;
-				m_framesToWait = 5;
+				m_framesToWait = 5 * AoCSimRate::frameMultiplier();
 				setRepairModelConditionStates( MODELCONDITION_FIRING_B );
 				break;
 			}
