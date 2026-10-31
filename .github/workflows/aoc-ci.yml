@@ -235,7 +235,8 @@ jobs:
           if ($replays.Count -eq 0) { throw "No replay files found" }
           foreach ($rep in $replays) {
             $log = Join-Path $env:RUNNER_TEMP "$($rep.BaseName)-stdout.log"
-            $p = Start-Process -FilePath $exe -ArgumentList "-headless -replay `"$($rep.FullName)`" -setCwd `"$game`"" `
+            # Stock replays are 30 Hz games; the engine defaults to 60 Hz (D11 F15) and refuses them without -simrate 30.
+            $p = Start-Process -FilePath $exe -ArgumentList "-headless -simrate 30 -replay `"$($rep.FullName)`" -setCwd `"$game`"" `
                  -WorkingDirectory $game -RedirectStandardOutput $log -RedirectStandardError "$log.err" -PassThru
             if (!$p.WaitForExit(180000)) { Stop-Process -Id $p.Id -Force; $code = "timeout" } else { $p.WaitForExit(); $code = $p.ExitCode }
             # The engine compares its per-frame CRC with the CRCs recorded in the replay and exits 1 on a mismatch.

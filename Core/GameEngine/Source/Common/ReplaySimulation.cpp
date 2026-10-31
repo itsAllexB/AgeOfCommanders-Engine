@@ -207,10 +207,12 @@ int ReplaySimulation::simulateReplaysInWorkerProcesses(const std::vector<AsciiSt
 			UnicodeString filenameWide;
 			filenameWide.translate(filenames[filenamePositionStarted]);
 			UnicodeString command;
-			command.format(L"\"%s\"%s%s -replay \"%s\"",
+			// AoC @tweak 31/10/2026 Workers run at this process's simulation rate, whether it came from -simrate or Options.ini (D11 F15).
+			command.format(L"\"%s\"%s%s -simrate %d -replay \"%s\"",
 				exePath,
 				TheGlobalData->m_windowed ? L" -win" : L"",
 				TheGlobalData->m_headless ? L" -headless" : L"",
+				LOGICFRAMES_PER_SECOND,
 				filenameWide.str());
 
 			processes.push_back(WorkerProcess());
