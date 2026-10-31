@@ -43,6 +43,7 @@
 #define DEFINE_BODYDAMAGETYPE_NAMES
 #define DEFINE_PANNING_NAMES
 
+#include "AoC/AoCSimRate.h"
 #include "Common/AddonCompat.h"
 #include "Common/crc.h"
 #include "Common/file.h"
@@ -1198,7 +1199,9 @@ GlobalData *GlobalData::newOverride()
 //-------------------------------------------------------------------------------------------------
 void GlobalData::init()
 {
-	m_exeCRC = generateExeCRC();
+	// AoC @feature 31/10/2026 A non-stock simulation rate is part of the executable identity, so the GameSpy and
+	// GeneralsOnline CRC gates refuse a client at the other rate; at 30 Hz the CRC is unchanged (D11 F15).
+	m_exeCRC = AoCSimRate::exeCRCForRate(generateExeCRC(), LOGICFRAMES_PER_SECOND);
 }
 
 //-------------------------------------------------------------------------------------------------

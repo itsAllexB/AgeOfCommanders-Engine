@@ -27,7 +27,8 @@
 // Lockstep: the rate travels in the game options string (key "AF=") next to the slot list, is recorded
 // in the replay header through that string, is written by GameLogic::xfer, and a mismatch is refused
 // at the LAN join, at replay playback and at save load. A stock options string without the key is a
-// 30 Hz game, which is what every stock replay is.
+// 30 Hz game, which is what every stock replay is. At any rate but 30 the rate is also folded into the
+// executable CRC (exeCRCForRate), which the GameSpy and GeneralsOnline lobbies compare.
 //
 // Legacy frame: data that counts retail 30 Hz frames (particle keyframes, script counters) keeps that
 // cadence through legacyFrame() and isLegacyFrameStep(); at 30 Hz both are the identity.
@@ -70,6 +71,11 @@ namespace AoCSimRate
 
 	/// TRUE once set() or readStartupOptions() has run; after that the rate is final for this process.
 	Bool isLocked();
+
+	/// The executable CRC this process reports (lobbies, GameSpy staging rooms, GeneralsOnline login and
+	/// matchmaking, replay headers). At 30 Hz it is the stock CRC; at any other rate the rate is folded in, so
+	/// every CRC gate that compares executables also keeps the two rates apart.
+	UnsignedInt exeCRCForRate( UnsignedInt exeCRC, Int rate );
 
 	// Mismatch reporting, shared by the replay, save and lobby refusals.
 	void logMismatch( const char *what, Int otherRate );

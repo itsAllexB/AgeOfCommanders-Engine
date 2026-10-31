@@ -23,6 +23,7 @@
 
 #include "AoC/AoCSimRate.h"
 
+#include "Common/crc.h"
 #include "GameClient/GameText.h"
 #include "Common/GlobalData.h"
 #include "Common/OptionPreferences.h"
@@ -106,6 +107,16 @@ void AoCSimRate::readStartupOptions()
 Bool AoCSimRate::isLocked()
 {
 	return s_locked;
+}
+
+UnsignedInt AoCSimRate::exeCRCForRate( UnsignedInt exeCRC, Int rate )
+{
+	if (rate == BaseFps)
+		return exeCRC;
+	CRC crc;
+	crc.computeCRC(&exeCRC, sizeof(exeCRC));
+	crc.computeCRC(&rate, sizeof(rate));
+	return crc.get();
 }
 
 void AoCSimRate::logMismatch( const char *what, Int otherRate )
