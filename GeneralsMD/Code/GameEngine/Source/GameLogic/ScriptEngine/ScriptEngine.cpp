@@ -4472,7 +4472,7 @@ void ScriptEngine::init()
 	curTemplate->m_uiStrings[2] = " the amount possessed by ";
 	curTemplate->m_uiStrings[3] = " of ";
 
-	// AoC @feature 31/10/2026 Population headroom: cap minus used minus reserved, negative over the cap (D11 F4)
+	// AoC @feature 31/10/2026 Population headroom: cap minus used minus reserved, negative over the cap (D11 F4).
 	curTemplate = &m_conditionTemplates[Condition::AOC_PLAYER_POPULATION_HEADROOM];
 	curTemplate->m_internalName = "AOC_PLAYER_POPULATION_HEADROOM";
 	curTemplate->m_uiName = "Player_/ Player's population headroom is (comparison) to a number (AoC).";

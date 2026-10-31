@@ -523,7 +523,7 @@ public:
 	Money m_defaultStartingCash;				///< The amount of cash a player starts with by default.
 	AoCCost m_aocStartingStock;					///< AoC @feature F1: AoCStartingStock, deposited with the lobby starting cash
 	Int m_aocRefundPerMille;						///< AoC @feature F1: AoCRefundPerMille, share of the non-cash cost refunded on sell (default 500)
-	Int m_aocDefaultPopulationCap;			///< AoC @feature 31/10/2026 AoCDefaultPopulationCap: a new game's population cap until F7's lobby option, 0 = none (D11 F4)
+	Int m_aocDefaultPopulationCap;			///< AoC @feature 31/10/2026 AoCDefaultPopulationCap: a new game's population cap until F7's lobby option, 0 = none (D11 F4).
 
 	Bool m_debugShowGraphicalFramerate;		///< Whether or not to show the graphical framerate bar.
 
