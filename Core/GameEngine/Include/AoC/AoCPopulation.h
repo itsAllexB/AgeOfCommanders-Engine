@@ -126,6 +126,8 @@ public:
 	/// Client side of the at-cap edge, local player only: GUI:AoCNeedHousing through TheInGameUI, at most once
 	/// every 120 seconds of client time. Writes UI state only; logic never reads it.
 	static void showLocalWarning();
+	/// GameLogic::startNewGame (new game or load): the next warning shows at once, whatever the last game did.
+	static void resetLocalWarning();
 
 protected:
 

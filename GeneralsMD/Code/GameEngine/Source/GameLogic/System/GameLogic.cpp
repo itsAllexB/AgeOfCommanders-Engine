@@ -1343,6 +1343,7 @@ void GameLogic::tryStartNewGame( Bool loadingSaveGame )
     // AoC @hook 31/10/2026 The population cap of a new game, before any player or object exists; F7 takes it from the lobby, a save from GameLogic::xfer (D11 F4).
     m_aocPopulationCap = TheGlobalData->m_aocDefaultPopulationCap;
   }
+  AoCPopulation::resetLocalWarning();	// AoC @hook 31/10/2026 Client side: a new or loaded game shows its first housing warning at once (D11 F4).
 
 	checkForDuplicateColors( TheGameInfo );
 

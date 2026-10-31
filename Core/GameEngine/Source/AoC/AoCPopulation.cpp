@@ -43,6 +43,8 @@ namespace
 
 // The warning repeats at most this often, in client (wall clock) time. Client state only.
 const long long AOC_POPULATION_WARNING_INTERVAL_MS = 120 * 1000;
+Bool s_warningShown = FALSE;				///< client state: a warning was shown in this game
+long long s_warningLastShownMs = 0;	///< client state: when
 
 struct PopulationCount
 {
@@ -431,15 +433,23 @@ void AoCPopulation::reportBlockChange()
 {
 	if (TheInGameUI == nullptr || TheGameText == nullptr)
 		return;
-	static Bool s_shown = FALSE;
-	static long long s_lastShownMs = 0;
 	const long long nowMs = (long long)std::chrono::duration_cast<std::chrono::milliseconds>(
 		std::chrono::steady_clock::now().time_since_epoch()).count();
-	if (s_shown && nowMs - s_lastShownMs < AOC_POPULATION_WARNING_INTERVAL_MS)
+	if (s_warningShown && nowMs - s_warningLastShownMs < AOC_POPULATION_WARNING_INTERVAL_MS)
 		return;
-	s_shown = TRUE;
-	s_lastShownMs = nowMs;
+	s_warningShown = TRUE;
+	s_warningLastShownMs = nowMs;
 	TheInGameUI->messageNoFormat(TheGameText->FETCH_OR_SUBSTITUTE("GUI:AoCNeedHousing", L"Population limit reached. Build houses."));
+}
+
+// ------------------------------------------------------------------------------------------------
+/** Review of PR #5, nit 5: the throttle used to carry over, so a new game started within 120 s of the
+	* last warning stayed silent the first time it reached the cap. Client state only. */
+// ------------------------------------------------------------------------------------------------
+/*static*/ void AoCPopulation::resetLocalWarning()
+{
+	s_warningShown = FALSE;
+	s_warningLastShownMs = 0;
 }
 
 // ------------------------------------------------------------------------------------------------
