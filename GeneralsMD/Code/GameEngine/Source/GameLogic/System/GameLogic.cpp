@@ -40,6 +40,7 @@
 #include "Common/AudioHandleSpecialValues.h"
 #include "Common/BuildAssistant.h"
 #include "AoC/AoCHarness.h"
+#include "AoC/AoCLobbyRules.h"	// AoC @hook 01/11/2026 Lobby options (D11 F7).
 #include "AoC/AoCSimRate.h"
 #include "Common/CRCDebug.h"
 #include "Common/FramePacer.h"
@@ -110,6 +111,7 @@
 #include "GameLogic/Module/CreateModule.h"
 #include "GameLogic/Module/DestroyModule.h"
 #include "GameLogic/Module/OpenContain.h"
+#include "GameLogic/Module/SupplyWarehouseDockUpdate.h"	// AoC @hook 01/11/2026 Richness (D11 F7).
 #include "GameLogic/PartitionManager.h"
 #include "GameLogic/PolygonTrigger.h"
 #include "GameLogic/ScriptActions.h"
@@ -272,6 +274,8 @@ GameLogic::GameLogic()
 
 	m_rankPointsToAddAtGameStart = 0;
 	m_aocPopulationCap = 0;	// AoC @hook 31/10/2026 No lobby population cap until a game sets one (D11 F4).
+	m_aocAmbientCivilians = TRUE;	// AoC @hook 01/11/2026 Ambient civilians on and conquest until a game sets them (D11 F7).
+	m_aocVictory = AOC_VICTORY_CONQUEST;
 
 	for(Int i = 0; i < MAX_SLOTS; i++)
 	{
@@ -540,6 +544,8 @@ void GameLogic::reset()
 
 	m_rankPointsToAddAtGameStart = 0;
 	m_aocPopulationCap = 0;	// AoC @hook 31/10/2026 No lobby population cap until a game sets one (D11 F4).
+	m_aocAmbientCivilians = TRUE;	// AoC @hook 01/11/2026 Ambient civilians on and conquest until a game sets them (D11 F7).
+	m_aocVictory = AOC_VICTORY_CONQUEST;
 }
 
 static Object * placeObjectAtPosition(Int slotNum, AsciiString objectTemplateName, Coord3D& pos, Player *pPlayer,
@@ -1340,8 +1346,15 @@ void GameLogic::tryStartNewGame( Bool loadingSaveGame )
       // ??? Apparently this is legit? Oh well, use defaults
       m_superweaponRestriction = 0;
     }
-    // AoC @hook 31/10/2026 The population cap of a new game, before any player or object exists; F7 takes it from the lobby, a save from GameLogic::xfer (D11 F4).
-    m_aocPopulationCap = TheGlobalData->m_aocDefaultPopulationCap;
+    // AoC @hook 01/11/2026 The lobby fields the logic reads during play, before any player or object exists: the cap (the
+    // chosen AoCPopulationCapChoice, else GameData.ini AoCDefaultPopulationCap, F4), ambient civilians and victory. A save
+    // restores them in GameLogic::xfer and never re-reads them here (D11 F7).
+    {
+      const AoCLobbySettings aocLobby = TheGameInfo ? TheGameInfo->getAoCLobbySettings() : AoCLobbyRules::defaults();
+      m_aocPopulationCap = AoCLobbyRules::populationCapFor( aocLobby, TheGlobalData->m_aocDefaultPopulationCap );
+      m_aocAmbientCivilians = aocLobby.ambientCivilians;
+      m_aocVictory = aocLobby.victory;
+    }
   }
   AoCPopulation::resetLocalWarning();	// AoC @hook 31/10/2026 Client side: a new or loaded game shows its first housing warning at once (D11 F4).
 
@@ -2532,6 +2545,11 @@ void GameLogic::tryStartNewGame( Bool loadingSaveGame )
     }
   }
 
+  // AoC @hook 01/11/2026 Richness: once, at the start of a new game (not a load, not the shell map), every warehouse whose
+  // module says AoCScalesWithRichness has its stored boxes scaled by the chosen per mille; counts never change (D11 F7).
+  if( loadingSaveGame == FALSE && m_gameMode != GAME_SHELL )
+    aocApplyRichness();
+
 	//ReAllows quit menu to work during loading scene
 	//setGameLoading(FALSE);
 	setLoadingMap( FALSE );
@@ -2558,6 +2576,38 @@ void GameLogic::tryStartNewGame( Bool loadingSaveGame )
 	message.format("GameStart: %s", TheGlobalData->m_mapName.str());
 	PROFILER_MSG(message.str(), message.getLength());
 #endif
+}
+
+// ------------------------------------------------------------------------------------------------
+/** AoC @feature 01/11/2026 Richness (D11 F7, decision 5): every warehouse flagged AoCScalesWithRichness has its stored
+	* boxes scaled by the lobby's ScalePerMille, in integer arithmetic (AoCLobbyRules::scaleBoxes). Runs once at the end of
+	* startNewGame for a new game; the result is in the objects' save data, so a load never scales again. The object list
+	* is the same on every machine, so the order is too. The harness logs the count and the first warehouse. */
+// ------------------------------------------------------------------------------------------------
+void GameLogic::aocApplyRichness()
+{
+	const AoCLobbySettings aocLobby = TheGameInfo ? TheGameInfo->getAoCLobbySettings() : AoCLobbyRules::defaults();
+	const Int perMille = AoCLobbyRules::richnessPerMilleFor( aocLobby );
+	static const NameKeyType key_warehouseUpdate = NAMEKEY("SupplyWarehouseDockUpdate");
+	Int scaled = 0;
+	Int firstBefore = 0;
+	Int firstAfter = 0;
+	for( Object *obj = getFirstObject(); obj; obj = obj->getNextObject() )
+	{
+		SupplyWarehouseDockUpdate *dock = (SupplyWarehouseDockUpdate *)obj->findUpdateModule( key_warehouseUpdate );
+		if( dock == nullptr )
+			continue;
+		const Int before = dock->getBoxesStored();
+		if( !dock->aocScaleForRichness( perMille ) )
+			continue;
+		if( scaled == 0 )
+		{
+			firstBefore = before;
+			firstAfter = dock->getBoxesStored();
+		}
+		++scaled;
+	}
+	AoCHarness::onLobbyGameStart( perMille, scaled, firstBefore, firstAfter );
 }
 
 //-----------------------------------------------------------------------------------------
@@ -5039,6 +5089,11 @@ void GameLogic::crc( Xfer *xfer )
 	// AoC @hook 31/10/2026 The lobby population cap, when one is set (D11 F4). Every active player's population CRC carries it too.
 	if( m_aocPopulationCap != 0 )
 		xfer->xferInt( &m_aocPopulationCap );
+	// AoC @hook 01/11/2026 Ambient civilians and victory, each only when not the default, so stock stays silent (D11 F7).
+	if( !m_aocAmbientCivilians )
+		xfer->xferBool( &m_aocAmbientCivilians );
+	if( m_aocVictory != AOC_VICTORY_CONQUEST )
+		xfer->xferInt( &m_aocVictory );
 
 }
 
@@ -5253,13 +5308,14 @@ void GameLogic::prepareLogicForObjectLoad()
 	* 12: AoC F15: the simulation rate the game was saved at (D11 F15). Every build writes version 12, which retail
 	*     cannot load, so every build also saves the objects in the version 11 order (newest first, no reversal on load)
 	* 13: AoC F4: m_aocPopulationCap, the lobby population cap (D11 F4).
+	* 14: AoC F7: m_aocAmbientCivilians and m_aocVictory, the lobby fields the logic reads (D11 F7).
 	*/
 // ------------------------------------------------------------------------------------------------
 void GameLogic::xfer( Xfer *xfer )
 {
 
 	// version
-	const XferVersion currentVersion = 13;	// AoC @hook 31/10/2026 12 to 13, the lobby population cap (D11 F4).
+	const XferVersion currentVersion = 14;	// AoC @hook 01/11/2026 13 to 14, ambient civilians and victory (D11 F7).
 	XferVersion version = currentVersion;
 	xfer->xferVersion( &version, currentVersion );
 
@@ -5626,6 +5682,17 @@ void GameLogic::xfer( Xfer *xfer )
 		xfer->xferInt( &m_aocPopulationCap );
 	else if( xfer->getXferMode() == XFER_LOAD )
 		m_aocPopulationCap = 0;
+	// AoC @hook 01/11/2026 Ambient civilians and victory; a save from before F7 had neither (on, conquest) (D11 F7).
+	if( version >= 14 )
+	{
+		xfer->xferBool( &m_aocAmbientCivilians );
+		xfer->xferInt( &m_aocVictory );
+	}
+	else if( xfer->getXferMode() == XFER_LOAD )
+	{
+		m_aocAmbientCivilians = TRUE;
+		m_aocVictory = AOC_VICTORY_CONQUEST;
+	}
 }
 
 // ------------------------------------------------------------------------------------------------

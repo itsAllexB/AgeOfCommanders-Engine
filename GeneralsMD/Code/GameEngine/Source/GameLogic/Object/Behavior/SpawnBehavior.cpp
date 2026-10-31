@@ -830,6 +830,10 @@ Bool SpawnBehavior::shouldTryToSpawn()
 	// Not if we are turned off
 	if( !m_active )
 		return FALSE;
+	// AoC @hook 01/11/2026 Ambient civilians: a spawner flagged AoCRequiresLobbyAmbient makes nothing while the game says off,
+	// read from GameLogic (copied from the lobby at the start, saved with the game), so the switch is in the simulation (D11 F7).
+	if( modData->m_aocRequiresLobbyAmbient && !TheGameLogic->getAoCAmbientCivilians() )
+		return FALSE;
 	if( getObject()->getStatusBits().test( OBJECT_STATUS_RECONSTRUCTING ) && modData->m_isOneShotData )
 	{
 		// If we are a Hole rebuild, not only should we not, but we should never ask again.

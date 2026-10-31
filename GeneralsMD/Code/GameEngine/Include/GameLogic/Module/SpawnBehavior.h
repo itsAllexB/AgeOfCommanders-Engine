@@ -58,6 +58,7 @@ public:
 	Bool m_exitByBudding;									///< do I create each new spawn atop an existing one?
 	Bool m_spawnedRequireSpawner;					///< Spawned objects can only exist while the spawner (us) is alive and present
 	Bool m_slavesHaveFreeWill;						///< Slaves with free will don't attack when parent attacks.
+	Bool m_aocRequiresLobbyAmbient;				///< AoC @feature 01/11/2026 AoCRequiresLobbyAmbient: spawns nothing while the lobby's ambient civilians are off (D11 F7)
 	DamageTypeFlags m_damageTypesToPropagateToSlaves;
 	std::vector<AsciiString> m_spawnTemplateNameData;
 	DieMuxData m_dieMuxData;
@@ -75,6 +76,7 @@ public:
 		m_spawnTemplateNameData.clear();
 		m_spawnedRequireSpawner = FALSE;
 		m_slavesHaveFreeWill = FALSE;
+		m_aocRequiresLobbyAmbient = FALSE;	// AoC @hook 01/11/2026 Stock spawners ignore the lobby (D11 F7).
 	}
 
 	static void buildFieldParse(MultiIniFieldParse& p)
@@ -93,6 +95,7 @@ public:
 			{ "PropagateDamageTypesToSlavesWhenExisting",   INI::parseDamageTypeFlags, nullptr, offsetof( SpawnBehaviorModuleData, m_damageTypesToPropagateToSlaves ) },
 			{ "InitialBurst",				      INI::parseInt,						        nullptr, offsetof( SpawnBehaviorModuleData, m_initialBurst ) },
 			{ "SlavesHaveFreeWill",				INI::parseBool,										nullptr, offsetof( SpawnBehaviorModuleData, m_slavesHaveFreeWill ) },
+			{ "AoCRequiresLobbyAmbient",	INI::parseBool,										nullptr, offsetof( SpawnBehaviorModuleData, m_aocRequiresLobbyAmbient ) },	// AoC @hook 01/11/2026 Ambient civilians switch (D11 F7).
 			{ nullptr, nullptr, nullptr, 0 }
 
 		};

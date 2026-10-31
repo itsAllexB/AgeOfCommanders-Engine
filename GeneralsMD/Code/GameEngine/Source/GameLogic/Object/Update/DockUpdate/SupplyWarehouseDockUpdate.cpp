@@ -29,6 +29,7 @@
 
 #include "PreRTS.h"	// This must go first in EVERY cpp file in the GameEngine
 
+#include "AoC/AoCLobbyRules.h"	// AoC @hook 01/11/2026 Richness arithmetic (D11 F7).
 #include "Common/GlobalData.h"
 #include "Common/Xfer.h"
 #include "GameClient/Drawable.h"
@@ -46,6 +47,7 @@ SupplyWarehouseDockUpdateModuleData::SupplyWarehouseDockUpdateModuleData()
 	m_deleteWhenEmpty = FALSE;
 	m_aocResourceType = AOC_RESOURCE_CASH;	// AoC @hook 31/10/2026 A node is cash unless AoCResourceType says otherwise (D11 F2).
 	m_aocKillWhenEmpty = FALSE;
+	m_aocScalesWithRichness = FALSE;	// AoC @hook 01/11/2026 Stock docks never scale (D11 F7).
 }
 
 // ------------------------------------------------------------------------------------------------
@@ -62,6 +64,7 @@ SupplyWarehouseDockUpdateModuleData::SupplyWarehouseDockUpdateModuleData()
 		// AoC @hook 31/10/2026 The node's resource type and the kill at zero (D11 F2).
 		{ "AoCResourceType",	AoCGather::parseResourceType,	nullptr, offsetof( SupplyWarehouseDockUpdateModuleData, m_aocResourceType ) },
 		{ "AoCKillWhenEmpty",	INI::parseBool,	nullptr, offsetof( SupplyWarehouseDockUpdateModuleData, m_aocKillWhenEmpty ) },
+		{ "AoCScalesWithRichness",	INI::parseBool,	nullptr, offsetof( SupplyWarehouseDockUpdateModuleData, m_aocScalesWithRichness ) },	// AoC @hook 01/11/2026 Richness flag (D11 F7).
 		{ nullptr, nullptr, nullptr, 0 }
 	};
 
@@ -244,6 +247,21 @@ void SupplyWarehouseDockUpdate::setCashValue( Int cashValue )
 	{
 		draw->updateDrawableSupplyStatus( getSupplyWarehouseDockUpdateModuleData()->m_startingBoxesData, m_boxesStored );
 	}
+}
+
+// ------------------------------------------------------------------------------------------------
+/** AoC @feature 01/11/2026 Richness (D11 F7, decision 5): called once by GameLogic at the start of a new game. Integer
+	* per mille, rounded down, a non-empty warehouse keeps at least one box; the drawable is told as setCashValue does. */
+// ------------------------------------------------------------------------------------------------
+Bool SupplyWarehouseDockUpdate::aocScaleForRichness( Int perMille )
+{
+	if( !getSupplyWarehouseDockUpdateModuleData()->m_aocScalesWithRichness )
+		return FALSE;
+	m_boxesStored = AoCLobbyRules::scaleBoxes( m_boxesStored, perMille );
+	Drawable *draw = getObject()->getDrawable();
+	if( draw )
+		draw->updateDrawableSupplyStatus( getSupplyWarehouseDockUpdateModuleData()->m_startingBoxesData, m_boxesStored );
+	return TRUE;
 }
 
 // ------------------------------------------------------------------------------------------------

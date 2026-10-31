@@ -58,6 +58,7 @@
 #include "Common/Science.h"
 #include "Common/FunctionLexicon.h"
 #include "AoC/AoCHarness.h"
+#include "AoC/AoCLobbyRules.h"	// AoC @hook 01/11/2026 The lobby choice lists (D11 F7).
 #include "AoC/AoCRules.h"	// AoC @hook F1
 #include "Common/CommandLine.h"
 #include "Common/DamageFX.h"
@@ -295,6 +296,7 @@ GameEngine::~GameEngine()
 
 	TheSubsystemList->shutdownAll();
 	TheAoCRules = nullptr;	// AoC @hook F1: deleted by shutdownAll
+	TheAoCLobbyRules = nullptr;	// AoC @hook 01/11/2026 Deleted by shutdownAll (D11 F7).
 	delete TheSubsystemList;
 	TheSubsystemList = nullptr;
 
@@ -483,6 +485,9 @@ void GameEngine::init()
 		// AoC @hook F1: resource types first, so GameData.ini (AoCStartingStock) and the templates (AoCCost) can name them
 		initSubsystem(TheAoCRules, "TheAoCRules", MSGNEW("GameEngineSubsystem") AoCRules, nullptr);
 		TheAoCRules->loadDefinitions(&xferCRC);
+		// AoC @hook 01/11/2026 The lobby choice lists, after the resource types their starting stock names (D11 F7).
+		initSubsystem(TheAoCLobbyRules, "TheAoCLobbyRules", MSGNEW("GameEngineSubsystem") AoCLobbyRules, nullptr);
+		TheAoCLobbyRules->loadDefinitions(&xferCRC);
 	initSubsystem(TheWritableGlobalData, "TheWritableGlobalData", TheWritableGlobalData, &xferCRC, "Data\\INI\\Default\\GameData", "Data\\INI\\GameData");
 	TheWritableGlobalData->parseCustomDefinition();
 

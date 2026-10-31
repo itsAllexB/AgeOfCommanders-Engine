@@ -3,6 +3,7 @@ set(GAMEENGINE_SRC
     Include/AoC/AoCFolder.h
     Include/AoC/AoCGather.h
     Include/AoC/AoCHarness.h
+    Include/AoC/AoCLobbyRules.h
     Include/AoC/AoCPopulation.h
     Include/AoC/AoCResourceBank.h
     Include/AoC/AoCRules.h
@@ -583,6 +584,7 @@ set(GAMEENGINE_SRC
     Source/AoC/AoCFolder.cpp
     Source/AoC/AoCGather.cpp
     Source/AoC/AoCHarness.cpp
+    Source/AoC/AoCLobbyRules.cpp
     Source/AoC/AoCPopulation.cpp
     Source/AoC/AoCResourceBank.cpp
     Source/AoC/AoCRules.cpp
