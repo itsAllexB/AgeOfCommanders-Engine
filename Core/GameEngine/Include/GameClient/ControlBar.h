@@ -215,7 +215,7 @@ enum GUICommandType CPP_11(: Int)
 
 	GUI_COMMAND_SELECT_ALL_UNITS_OF_TYPE,
 
-	// AoC @hook 31/10/2026 command bar folders: show the button's FolderCommandSet, and Back to the object's own set (D11 F5).
+	// AoC @hook 31/10/2026 command bar folders: show the button's AoCFolderCommandSet, and Back to the object's own set (D11 F5).
 	GUI_COMMAND_AOC_FOLDER,
 	GUI_COMMAND_AOC_FOLDER_BACK,
 
@@ -352,7 +352,7 @@ public:
 	Int getMaxShotsToFire() const { return m_maxShotsToFire; }
 	const ScienceVec& getScienceVec() const { return m_science; }
 	CommandButtonMappedBorderType getCommandButtonMappedBorderType() const { return m_commandButtonBorder; }
-	const AsciiString& getAoCFolderSet() const { return m_aocFolderSet; }	// AoC @hook 31/10/2026 FolderCommandSet of an AOC_FOLDER button (D11 F5).
+	const AsciiString& getAoCFolderSet() const { return m_aocFolderSet; }	// AoC @hook 31/10/2026 AoCFolderCommandSet of an AOC_FOLDER button (D11 F5).
 	const Image* getButtonImage() const { return m_buttonImage;	}
 	void cacheButtonImage();
 
@@ -904,7 +904,7 @@ protected:
 	void aocOpenFolder( const CommandButton *folderButton, Object *obj );
 	void aocCloseFolder();
 	void aocSetCaption( GameWindow *button, const CommandButton *commandButton );	///< setControlCommand: caption over folder and Back cameos
-	AsciiString m_aocOpenFolder;																///< FolderCommandSet on the buttons; empty while the object's own set shows
+	AsciiString m_aocOpenFolder;																///< AoCFolderCommandSet on the buttons; empty while the object's own set shows
 	ObjectID m_aocFolderOwner;																	///< the object the folder was opened for
 	AsciiString m_aocFolderBaseSet;															///< its command set then; a CommandSetUpgrade changes it and closes the folder
 	const CommandButton *m_aocFolderButton;											///< the folder button pressed; Back's caption names it

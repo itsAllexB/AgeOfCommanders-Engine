@@ -124,7 +124,7 @@ const FieldParse CommandButton::s_commandButtonFieldParseTable[] =
 	{ "ButtonBorderType",			INI::parseLookupList,				 CommandButtonMappedBorderTypeNames, offsetof( CommandButton, m_commandButtonBorder ) },
 	{ "RadiusCursorType",			INI::parseIndexList,				 TheRadiusCursorNames, offsetof( CommandButton, m_radiusCursor ) },
 	{ "UnitSpecificSound",		INI::parseAudioEventRTS,		 nullptr, offsetof( CommandButton, m_unitSpecificSound ) },
-	{ "FolderCommandSet",			INI::parseAsciiString,			 nullptr, offsetof( CommandButton, m_aocFolderSet ) },	// AoC @hook 31/10/2026 command bar folders (D11 F5).
+	{ "AoCFolderCommandSet",	INI::parseAsciiString,			 nullptr, offsetof( CommandButton, m_aocFolderSet ) },	// AoC @hook 31/10/2026 command bar folders: the set a folder shows (D11 F5).
 
 	{ nullptr,						nullptr,												 nullptr, 0 }
 

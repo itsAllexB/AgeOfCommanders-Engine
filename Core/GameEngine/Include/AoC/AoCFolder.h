@@ -22,9 +22,9 @@
 // Data:
 //
 //   CommandButton Command_AoCFolderDefence
-//     Command          = AOC_FOLDER
-//     FolderCommandSet = AoC_AmericaDozerDefence    ; the set the button shows for the same selection
-//     TextLabel        = CONTROLBAR:AoCFolderDefence ; "&Defence >": hotkey D, caption "Defence >"
+//     Command             = AOC_FOLDER
+//     AoCFolderCommandSet = AoC_AmericaDozerDefence ; the set the button shows for the same selection
+//     TextLabel           = CONTROLBAR:AoCFolderDefence ; "&Defence >": hotkey D, caption "Defence >"
 //   End
 //   CommandButton Command_AoCFolderBack
 //     Command   = AOC_FOLDER_BACK                   ; back to the object's own set; slot 14 of a folder
@@ -45,7 +45,7 @@
 // The logic checks that a builder or factory has a button for what it is asked to make
 // (BuildAssistant::isPossibleToMakeUnit, Object::canProduceUpgrade). A button inside a folder counts as the
 // object's own: the helpers below look one folder level deep in the command set data, which every machine loads
-// alike; they never read the view state. With stock data no button has a FolderCommandSet and they find nothing.
+// alike; they never read the view state. With stock data no button has an AoCFolderCommandSet and they find nothing.
 
 #pragma once
 
