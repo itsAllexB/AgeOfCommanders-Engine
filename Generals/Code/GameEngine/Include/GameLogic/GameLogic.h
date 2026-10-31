@@ -231,6 +231,9 @@ public:
 
   UnsignedShort getSuperweaponRestriction() const; ///< Get any optional limits on superweapons
 
+	/// AoC @feature 31/10/2026 Mirror of Zero Hour for the shared Core code: Generals has no population cap (D11 F4).
+	Int getAoCPopulationCap() const { return 0; }
+
 #ifdef DUMP_PERF_STATS
 	void getAIMetricsStatistics( UnsignedInt *numAI, UnsignedInt *numMoving, UnsignedInt *numAttacking, UnsignedInt *numWaitingForPath, UnsignedInt *overallFailedPathfinds );
 	void resetOverallFailedPathfinds() { m_overallFailedPathfinds = 0; }

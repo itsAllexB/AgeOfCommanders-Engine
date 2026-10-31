@@ -595,6 +595,9 @@ public:
 	void calcAoCCost( const Player* player, AoCCost& cost ) const;
 	/// AoC @feature F1: the AoCCost as written in INI, without player modifiers (tools and tests)
 	const AoCCost& friend_getAoCCost() const { return m_aocCost; }
+	/// AoC @feature 31/10/2026 Population a unit takes while it exists and housing a completed building gives (D11 F4).
+	UnsignedByte getAoCPopulationCost() const { return m_aocPopulationCost; }
+	UnsignedShort getAoCPopulationCapacity() const { return m_aocPopulationCapacity; }
 
 	/// Used only by Skirmish AI. Everyone else should call calcCostToBuild.
 	Int friend_getBuildCost() const { return m_buildCost; }
@@ -761,8 +764,10 @@ private:
 	AoCCost					m_aocCost;										///< AoC @feature F1: non-cash build cost (AoCCost key; Cash:n writes m_buildCost)
 	UnsignedShort		m_threatValue;								///< Threat map info
 	UnsignedShort		m_maxSimultaneousOfType;			///< max simultaneous of this unit we can have (per player) at one time. (0 == unlimited)
+	UnsignedShort		m_aocPopulationCapacity;		///< AoC @feature 31/10/2026 AoCPopulationCapacity: housing when completed, default 0 (D11 F4).
 
 	// ---- Bool-sized things
+	UnsignedByte		m_aocPopulationCost;			///< AoC @feature 31/10/2026 AoCPopulationCost: population while the object exists, default 0 (D11 F4).
   Bool          m_maxSimultaneousDeterminedBySuperweaponRestriction; ///< If true, override value in m_maxSimultaneousOfType with value from GameInfo::getSuperweaponRestriction()
 	Bool					m_isPrerequisite;							///< Is this thing considered in a prerequisite for any other thing?
 	Bool					m_isBridge;										///< True if this model is a bridge.

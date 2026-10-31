@@ -34,6 +34,8 @@
 
 // USER INCLUDES //////////////////////////////////////////////////////////////////////////////////
 #include "PreRTS.h"	// This must go first in EVERY cpp file in the GameEngine
+
+#include "AoC/AoCPopulation.h"	// AoC @feature 31/10/2026 Payload population (D11 F4).
 #include "Common/Player.h"
 #include "Common/Xfer.h"
 #include "Common/ThingTemplate.h"
@@ -189,6 +191,19 @@ ExitInterface* OverlordContain::getContainExitInterface()
 		return OpenContain::getContainExitInterface();
 
 	return getRedirectedContain()->getContainExitInterface();
+}
+
+// ------------------------------------------------------------------------------------------------
+/** AoC @feature 31/10/2026 The population of the payload list this transport creates with itself (D11 F4). */
+// ------------------------------------------------------------------------------------------------
+Int OverlordContainModuleData::getAoCInitialPayloadPopulation() const
+{
+	if( TheThingFactory == nullptr )
+		return 0;
+	Int total = 0;
+	for( TemplateNameIterator it = m_payloadTemplateNameData.begin(); it != m_payloadTemplateNameData.end(); ++it )
+		total += AoCPopulation::costOf( TheThingFactory->findTemplate( *it ) );
+	return total;
 }
 
 //-------------------------------------------------------------------------------------------------

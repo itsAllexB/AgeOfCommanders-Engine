@@ -228,6 +228,7 @@ Object::Object( const ThingTemplate *tt, const ObjectStatusMaskType &objectStatu
 #endif
 	//Modules have not been created yet!
 	m_modulesReady = false;
+	m_aocPopulationFreed = FALSE;	// AoC @hook 31/10/2026 Alive: its population and housing count with its owner (D11 F4).
 
 	// Force the thing template to use the most overridden version of itself - jkmcd
 	// Note that after this, the object will be using m_template, which forces the usage of the
@@ -1090,6 +1091,11 @@ void Object::setStatus( ObjectStatusMaskType objectStatus, Bool set )
 
 			if (m_partitionData)
 				m_partitionData->makeDirty(true);
+
+			// AoC @hook 31/10/2026 Housing counts only for completed buildings: capacity enters and leaves with this bit, the moment construction completes (D11 F4).
+			Player *aocOwner = getControllingPlayer();
+			if( aocOwner )
+				aocOwner->getAoCPopulation()->objectConstructionChange( this, !m_status.test( OBJECT_STATUS_UNDER_CONSTRUCTION ) );
 		}
 
 	}
@@ -4087,6 +4093,10 @@ void Object::crc( Xfer *xfer )
 		}
 	}
 
+	// AoC @hook 31/10/2026 Population freed at death; only ever set for an object that had population or housing, so never with stock data (D11 F4).
+	if( m_aocPopulationFreed )
+		xfer->xferBool( &m_aocPopulationFreed );
+
 }
 
 //-------------------------------------------------------------------------------------------------
@@ -4101,6 +4111,7 @@ void Object::crc( Xfer *xfer )
 	* 7: save full mtx, not pos+orient.
 	* 8: Kris: Conversion of object status bits from UnsignedInt to BitFlags<>
 	* 9: Extra sighting for reveal to all with different range units
+	* 10: AoC F4: m_aocPopulationFreed, population and housing freed at death (D11 F4)
 	*/
 //-------------------------------------------------------------------------------------------------
 void Object::xfer( Xfer *xfer )
@@ -4116,7 +4127,7 @@ void Object::xfer( Xfer *xfer )
 #endif
 
 #else
-	const XferVersion currentVersion = 9;
+	const XferVersion currentVersion = 10;	// AoC @hook 31/10/2026 9 to 10, m_aocPopulationFreed (D11 F4).
 #endif
 	XferVersion version = currentVersion;
 	xfer->xferVersion( &version, currentVersion );
@@ -4568,6 +4579,12 @@ void Object::xfer( Xfer *xfer )
 	else
 		m_isReceivingDifficultyBonus = FALSE;
 
+	// AoC @hook 31/10/2026 Population freed at death; an older save has none freed (D11 F4).
+	if (version >= 10)
+		xfer->xferBool(&m_aocPopulationFreed);
+	else if (xfer->getXferMode() == XFER_LOAD)
+		m_aocPopulationFreed = FALSE;
+
 }
 
 //-------------------------------------------------------------------------------------------------
@@ -4736,6 +4753,11 @@ void Object::onDie( DamageInfo *damageInfo )
 		if (die)
 			die->onDie(damageInfo);
 	}
+
+	// AoC @hook 31/10/2026 A dead unit frees its population slot and a destroyed building its housing now, not when the body is removed;
+	// the die modules above have already cancelled any production (D11 F4).
+	if( getControllingPlayer() )
+		getControllingPlayer()->getAoCPopulation()->objectDying( this );
 
 	// When objects die we remove from the radar as they're really not interesting anymore
 	if( m_radarData )

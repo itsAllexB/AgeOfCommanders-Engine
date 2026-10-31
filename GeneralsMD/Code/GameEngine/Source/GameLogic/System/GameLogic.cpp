@@ -271,6 +271,7 @@ GameLogic::GameLogic()
 	m_isInUpdate = FALSE;
 
 	m_rankPointsToAddAtGameStart = 0;
+	m_aocPopulationCap = 0;	// AoC @hook 31/10/2026 No lobby population cap until a game sets one (D11 F4).
 
 	for(Int i = 0; i < MAX_SLOTS; i++)
 	{
@@ -538,6 +539,7 @@ void GameLogic::reset()
 	TheWeatherSetting = (WeatherSetting*) ws->deleteOverrides();
 
 	m_rankPointsToAddAtGameStart = 0;
+	m_aocPopulationCap = 0;	// AoC @hook 31/10/2026 No lobby population cap until a game sets one (D11 F4).
 }
 
 static Object * placeObjectAtPosition(Int slotNum, AsciiString objectTemplateName, Coord3D& pos, Player *pPlayer,
@@ -1338,7 +1340,10 @@ void GameLogic::tryStartNewGame( Bool loadingSaveGame )
       // ??? Apparently this is legit? Oh well, use defaults
       m_superweaponRestriction = 0;
     }
+    // AoC @hook 31/10/2026 The population cap of a new game, before any player or object exists; F7 takes it from the lobby, a save from GameLogic::xfer (D11 F4).
+    m_aocPopulationCap = TheGlobalData->m_aocDefaultPopulationCap;
   }
+  AoCPopulation::resetLocalWarning();	// AoC @hook 31/10/2026 Client side: a new or loaded game shows its first housing warning at once (D11 F4).
 
 	checkForDuplicateColors( TheGameInfo );
 
@@ -5031,6 +5036,10 @@ void GameLogic::getAIMetricsStatistics( UnsignedInt *numAI, UnsignedInt *numMovi
 void GameLogic::crc( Xfer *xfer )
 {
 
+	// AoC @hook 31/10/2026 The lobby population cap, when one is set (D11 F4). Every active player's population CRC carries it too.
+	if( m_aocPopulationCap != 0 )
+		xfer->xferInt( &m_aocPopulationCap );
+
 }
 
 // ------------------------------------------------------------------------------------------------
@@ -5243,13 +5252,14 @@ void GameLogic::prepareLogicForObjectLoad()
   * 11: TheSuperHackers @fix Save objects in reverse order so they load in correct order
 	* 12: AoC F15: the simulation rate the game was saved at (D11 F15). Every build writes version 12, which retail
 	*     cannot load, so every build also saves the objects in the version 11 order (newest first, no reversal on load)
+	* 13: AoC F4: m_aocPopulationCap, the lobby population cap (D11 F4).
 	*/
 // ------------------------------------------------------------------------------------------------
 void GameLogic::xfer( Xfer *xfer )
 {
 
 	// version
-	const XferVersion currentVersion = 12;
+	const XferVersion currentVersion = 13;	// AoC @hook 31/10/2026 12 to 13, the lobby population cap (D11 F4).
 	XferVersion version = currentVersion;
 	xfer->xferVersion( &version, currentVersion );
 
@@ -5610,6 +5620,12 @@ void GameLogic::xfer( Xfer *xfer )
   {
     m_superweaponRestriction = 0;
   }
+
+	// AoC @hook 31/10/2026 The lobby population cap; a save from before F4 had none (D11 F4).
+	if( version >= 13 )
+		xfer->xferInt( &m_aocPopulationCap );
+	else if( xfer->getXferMode() == XFER_LOAD )
+		m_aocPopulationCap = 0;
 }
 
 // ------------------------------------------------------------------------------------------------

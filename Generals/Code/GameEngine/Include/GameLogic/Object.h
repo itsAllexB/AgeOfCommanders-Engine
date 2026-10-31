@@ -270,6 +270,10 @@ public:
 	//yet, and there's stuff being done inside of setTeam() that cares.
 	Bool areModulesReady() const { return m_modulesReady; }
 
+	/// AoC @feature 31/10/2026 Mirror of Zero Hour for the shared Core code; Generals counts no population, so nothing is ever freed (D11 F4).
+	Bool isAoCPopulationFreed() const { return FALSE; }
+	void friend_setAoCPopulationFreed() { }
+
 	BehaviorModule** getBehaviorModules() const { return m_behaviors; }
 
 	BodyModuleInterface* getBodyModule() const { return m_body; }

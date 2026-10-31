@@ -62,6 +62,8 @@ public:
 	static void buildFieldParse(MultiIniFieldParse& p);
 	static void parseInitialPayload( INI* ini, void *instance, void *store, const void* /*userData*/ );
 
+	virtual Int getAoCInitialPayloadPopulation() const override;	///< AoC @feature 31/10/2026 InitialPayload: its template's population times its count (D11 F4).
+
 };
 
 //-------------------------------------------------------------------------------------------------
@@ -94,6 +96,9 @@ public:
 	virtual ExitDoorType reserveDoorForExit( const ThingTemplate* objType, Object *specificObject ) override;
 	virtual void unreserveDoorForExit( ExitDoorType exitDoor ) override;
 	virtual Bool isDisplayedOnControlBar() const override {return TRUE;}///< Does this container display its contents on the ControlBar?
+
+	/// AoC @feature 31/10/2026 The payload a produced transport would create on its first update, created at the door instead (D11 F4).
+	virtual void aocCreateInitialPayloadNow() override { if( !m_payloadCreated ) createPayload(); }
 
 protected:
 

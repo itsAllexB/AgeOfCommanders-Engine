@@ -175,6 +175,9 @@ public:
 	virtual const CommandButton* getSpecialPowerConstructionCommandButton() const = 0;
 	virtual void setSpecialPowerConstructionCommandButton( const CommandButton *commandButton ) = 0;
 
+	/// AoC @feature 31/10/2026 Units one queue entry of this type makes here (QuantityModifier), for the population check (D11 F4).
+	virtual Int getAoCProductionQuantity( const ThingTemplate * /*unitType*/ ) const { return 1; }
+
 };
 
 //-------------------------------------------------------------------------------------------------
@@ -233,6 +236,8 @@ public:
 	//This was added for the sneak attack building functionality.
 	virtual const CommandButton* getSpecialPowerConstructionCommandButton() const override { return m_specialPowerConstructionCommandButton; }
 	virtual void setSpecialPowerConstructionCommandButton( const CommandButton *commandButton ) override { m_specialPowerConstructionCommandButton = commandButton; }
+
+	virtual Int getAoCProductionQuantity( const ThingTemplate *unitType ) const override;	///< AoC @feature 31/10/2026 The QuantityModifier batch size, as queueCreateUnit counts it (D11 F4).
 
 	// DieModuleInterface
 	virtual void onDie( const DamageInfo *damageInfo ) override;

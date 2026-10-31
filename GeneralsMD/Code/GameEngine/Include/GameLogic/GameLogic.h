@@ -234,6 +234,11 @@ public:
   UnsignedShort getSuperweaponRestriction() const; ///< Get any optional limits on superweapons
   void setSuperweaponRestriction();
 
+	/// AoC @feature 31/10/2026 The game's population cap, 0 = no lobby cap (only housing limits). Copied at the start of a
+	/// new game (GameData.ini AoCDefaultPopulationCap until F7's lobby option sets it) and saved with the game (D11 F4).
+	Int getAoCPopulationCap() const { return m_aocPopulationCap; }
+	void setAoCPopulationCap( Int cap ) { m_aocPopulationCap = cap; }
+
 #ifdef DUMP_PERF_STATS
 	void getAIMetricsStatistics( UnsignedInt *numAI, UnsignedInt *numMoving, UnsignedInt *numAttacking, UnsignedInt *numWaitingForPath, UnsignedInt *overallFailedPathfinds );
 	void resetOverallFailedPathfinds() { m_overallFailedPathfinds = 0; }
@@ -440,6 +445,7 @@ public:
 	GameMode m_gameMode;
 	Int m_rankLevelLimit;
   UnsignedShort m_superweaponRestriction;
+	Int m_aocPopulationCap;		///< AoC @feature 31/10/2026 Lobby population cap, 0 = none; lives here because TheGameInfo is not saved for every mode (D11 F4).
 
 	LoadScreen *getLoadScreen( Bool loadSaveGame );
 	LoadScreen *m_loadScreen;

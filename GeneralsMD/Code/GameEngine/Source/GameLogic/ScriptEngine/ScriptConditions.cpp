@@ -997,6 +997,19 @@ Bool ScriptConditions::evaluateAoCPlayerHasResource(Parameter *pAmountParm, Para
 }
 
 //-------------------------------------------------------------------------------------------------
+/** evaluateAoCPlayerPopulationHeadroom (AoC @feature 31/10/2026, D11 F4): the player's population headroom
+	* (cap - used - reserved, negative over the cap) <comparison> amount */
+//-------------------------------------------------------------------------------------------------
+Bool ScriptConditions::evaluateAoCPlayerPopulationHeadroom(Parameter *pPlayerParm, Parameter* pComparisonParm, Parameter *pAmountParm)
+{
+	Player* pPlayer = playerFromParam(pPlayerParm);
+	if (!pPlayer) {
+		return false;
+	}
+	return pPlayer->getAoCPopulation()->scriptHeadroomIs(pComparisonParm->getInt(), pAmountParm->getInt());
+}
+
+//-------------------------------------------------------------------------------------------------
 /** evaluateBuildingEntered */
 //-------------------------------------------------------------------------------------------------
 Bool ScriptConditions::evaluateBuildingEntered( Parameter *pPlayerParm, Parameter *pItemParm )
@@ -2806,6 +2819,8 @@ Bool ScriptConditions::evaluateCondition( Condition *pCondition )
 			return evaluatePlayerHasCredits(pCondition->getParameter(0), pCondition->getParameter(1), pCondition->getParameter(2));
 		case Condition::AOC_PLAYER_HAS_RESOURCE:	// AoC F1
 			return evaluateAoCPlayerHasResource(pCondition->getParameter(0), pCondition->getParameter(1), pCondition->getParameter(2), pCondition->getParameter(3));
+		case Condition::AOC_PLAYER_POPULATION_HEADROOM:	// AoC @hook 31/10/2026 Dispatch of the population headroom condition (D11 F4).
+			return evaluateAoCPlayerPopulationHeadroom(pCondition->getParameter(0), pCondition->getParameter(1), pCondition->getParameter(2));
 		case Condition::BRIDGE_REPAIRED:
 			return evaluateBridgeRepaired(pCondition->getParameter(0));
 		case Condition::BRIDGE_BROKEN:

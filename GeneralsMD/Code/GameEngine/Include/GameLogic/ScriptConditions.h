@@ -106,6 +106,7 @@ protected:
 	Bool evaluateTeamStateIsNot(Parameter *pTeamParm, Parameter *pStateParm);
 	Bool evaluatePlayerHasCredits(Parameter *pCreditsParm, Parameter* pComparisonParm, Parameter *pPlayerParm);
 	Bool evaluateAoCPlayerHasResource(Parameter *pAmountParm, Parameter* pComparisonParm, Parameter *pPlayerParm, Parameter *pResourceParm);	///< AoC F1
+	Bool evaluateAoCPlayerPopulationHeadroom(Parameter *pPlayerParm, Parameter* pComparisonParm, Parameter *pAmountParm);	///< AoC @feature 31/10/2026 Population headroom compared with a number (D11 F4).
 	Bool evaluateNamedCreated(Parameter* pUnitParm);	///< Implemented as evaluateNamedExists(...)
 	Bool evaluateTeamCreated(Parameter* pTeamParm);		///< Implemented as evaluateTeamExists(...)
 	Bool evaluateNamedOwnedByPlayer(Parameter *pUnitParm, Parameter *pPlayerParm);

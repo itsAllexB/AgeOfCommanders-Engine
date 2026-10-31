@@ -30,6 +30,8 @@
 // USER INCLUDES //////////////////////////////////////////////////////////////////////////////////
 #include "PreRTS.h"	// This must go first in EVERY cpp file in the GameEngine
 
+#include "AoC/AoCHarness.h"	// AoC @feature 31/10/2026 Refused unit queues for the -aiLog blocked_build column (D11 F4).
+
 #include "Common/BitFlagsIO.h"
 #include "Common/BuildAssistant.h"
 #include "Common/CRCDebug.h"
@@ -49,6 +51,7 @@
 #include "GameClient/InGameUI.h"
 
 #include "GameLogic/GameLogic.h"
+#include "GameLogic/Module/ContainModule.h"	// AoC @feature 31/10/2026 A produced transport's payload at the door (D11 F4).
 #include "GameLogic/Module/CreateModule.h"
 #include "GameLogic/Module/ParkingPlaceBehavior.h"
 #include "GameLogic/Module/ProductionUpdate.h"
@@ -357,8 +360,13 @@ Bool ProductionUpdate::queueCreateUnit( const ThingTemplate *unitType, Productio
 	const ProductionUpdateModuleData *data = getProductionUpdateModuleData();
 
 	// if we can't create the unit do nothing
-	if( TheBuildAssistant->canMakeUnit( getObject(), unitType ) != CANMAKE_OK )
+	// AoC @hook 31/10/2026 The reason of a refusal (CANMAKE_NO_HOUSING above all) goes to the harness -aiLog row; the harness only counts (D11 F4).
+	const CanMakeType aocCanMake = TheBuildAssistant->canMakeUnit( getObject(), unitType );
+	if( aocCanMake != CANMAKE_OK )
+	{
+		AoCHarness::onUnitQueueRefused( getObject()->getControllingPlayer(), (Int)aocCanMake, unitType );
 		return FALSE;
+	}
 
 	ExitDoorType exitDoor = DOOR_NONE_AVAILABLE;
 
@@ -422,6 +430,9 @@ Bool ProductionUpdate::queueCreateUnit( const ThingTemplate *unitType, Productio
 	production->m_objectToProduce = unitType;
 	production->m_productionID = productionID;
 	production->m_exitDoor = exitDoor;
+
+	// AoC @hook 31/10/2026 Reserve the population of the whole batch now, as its cost is paid now; it is released unit by unit at the door or on removal (D11 F4).
+	player->getAoCPopulation()->reserve( AoCPopulation::productionCostOf( unitType ) * production->m_productionQuantityTotal );
 
 	// tie to the end of the production queue
 	addToProductionQueue( production );
@@ -780,6 +791,12 @@ UpdateSleepTime ProductionUpdate::update()
 							// call the exit interface to do the rally point and position stuff
 							exitInterface->exitObjectViaDoor( newObj, exitDoor );
 
+							// AoC @hook 31/10/2026 One unit of the batch is out of the door: a transport with a priced initial payload creates it here (stock waits for
+							// the transport's first update), so the unit and its passengers move from reserved to used in one go (D11 F4).
+							if( AoCPopulation::payloadPopulationOf( production->m_objectToProduce ) > 0 && newObj->getContain() )
+								newObj->getContain()->aocCreateInitialPayloadNow();
+							creationBuilding->getControllingPlayer()->getAoCPopulation()->release( AoCPopulation::productionCostOf( production->m_objectToProduce ) );
+
 							// since we successfully exited via this door, we should NOT call unreserveDoorForExit
 							// when we toss this production entry. so set it back to an innocuous value.
 							production->setExitDoor(DOOR_NONE_AVAILABLE);
@@ -990,6 +1007,14 @@ void ProductionUpdate::addToProductionQueue( ProductionEntry *production )
 //-------------------------------------------------------------------------------------------------
 void ProductionUpdate::removeFromProductionQueue( ProductionEntry *production )
 {
+	// AoC @hook 31/10/2026 A unit entry leaving the queue (cancel, refund, deletion) frees the population of the units it did not produce; none once every unit is out (D11 F4).
+	if( production->m_type == PRODUCTION_UNIT )
+	{
+		Player *aocOwner = getObject()->getControllingPlayer();
+		if( aocOwner )
+			aocOwner->getAoCPopulation()->release( AoCPopulation::productionCostOf( production->m_objectToProduce ) * production->getProductionQuantityRemaining() );
+	}
+
 	if (production->m_type == PRODUCTION_UNIT &&
 			production->m_exitDoor != DOOR_NONE_AVAILABLE)
 	{
@@ -1144,6 +1169,22 @@ UnsignedInt ProductionUpdate::countUnitTypeInQueue( const ThingTemplate *unitTyp
 
 	return count;
 
+}
+
+// ------------------------------------------------------------------------------------------------
+/** AoC @feature 31/10/2026 How many units one queue entry of unitType makes here: the QuantityModifier
+	* that queueCreateUnit applies, so canMakeUnit can check the population of the whole batch (D11 F4). */
+// ------------------------------------------------------------------------------------------------
+Int ProductionUpdate::getAoCProductionQuantity( const ThingTemplate *unitType ) const
+{
+	const ProductionUpdateModuleData *data = getProductionUpdateModuleData();
+	for( std::vector<QuantityModifier>::const_iterator it = data->m_quantityModifiers.begin(); it != data->m_quantityModifiers.end(); ++it )
+	{
+		const ThingTemplate* productionTemplate = TheThingFactory->findTemplate( it->m_templateName );
+		if( productionTemplate && productionTemplate->isEquivalentTo( unitType ) )
+			return it->m_quantity;
+	}
+	return 1;
 }
 
 // ------------------------------------------------------------------------------------------------

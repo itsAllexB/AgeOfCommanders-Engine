@@ -976,7 +976,7 @@ public:
 		START_POSITION_IS,											// True if our start position matches.
 		NAMED_HAS_FREE_CONTAINER_SLOTS,					///< Kris -- Checks if any given container has any free slots.
 		AOC_PLAYER_HAS_RESOURCE,								///< AoC F1: If X [comparison] the amount of one resource type in the player's bank.
-		// AoC: AOC_PLAYER_POPULATION_HEADROOM (D11 2.1) is deferred to F4, which adds population; append it here then.
+		AOC_PLAYER_POPULATION_HEADROOM,					///< AoC @feature 31/10/2026 If the player's population headroom [comparison] X (D11 F4).
 
 		NUM_ITEMS		 // Always the last condition.
 	};

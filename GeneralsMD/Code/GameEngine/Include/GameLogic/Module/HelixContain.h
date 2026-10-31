@@ -52,6 +52,8 @@ public:
 
 	static void buildFieldParse(MultiIniFieldParse& p);
 	static void parseInitialPayload( INI* ini, void *instance, void *store, const void* /*userData*/ );
+
+	virtual Int getAoCInitialPayloadPopulation() const override;	///< AoC @feature 31/10/2026 The payload list: each template's population (D11 F4).
 };
 
 //-------------------------------------------------------------------------------------------------

@@ -53,6 +53,7 @@
 #include "Common/MissionStats.h"
 #include "Common/Money.h"
 #include "AoC/AoCResourceBank.h"	// AoC @feature F1
+#include "AoC/AoCPopulation.h"	// AoC @feature 31/10/2026 Population cap (D11 F4).
 #include "Common/Science.h"
 #include "Common/UnicodeString.h"
 #include "Common/NameKeyGenerator.h"
@@ -243,6 +244,12 @@ public:
 	AoCResourceBank *getAoCBank() { return &m_aocBank; }
 	const AoCResourceBank *getAoCBank() const { return &m_aocBank; }
 
+	/// AoC @feature 31/10/2026 Population used, housing capacity, units reserved in queues (D11 F4).
+	AoCPopulation *getAoCPopulation() { return &m_aocPopulation; }
+	const AoCPopulation *getAoCPopulation() const { return &m_aocPopulation; }
+	/// AoC @feature 31/10/2026 The AI hook of D9 3.4: population that can still be queued (cap - used - reserved; negative over the cap) (D11 F4).
+	Int getAoCPopulationHeadroom() const { return m_aocPopulation.getHeadroom(); }
+
 	UnsignedInt getSupplyBoxValue();///< Many things can affect the value of a crate, but at heart it is a GlobalData ratio.
 
 	Energy *getEnergy() { return &m_energy; }
@@ -356,6 +363,10 @@ public:
 	///< Power just changed at all.  Didn't make two functions so you can't forget to undo something you didin one of them.
 	///< @todo Can't do edge trigger until after demo; make things check for power on creation
 	void onPowerBrownOutChange( Bool brownOut );
+
+	/// AoC @feature 31/10/2026 Edge into (TRUE) and out of (FALSE) "at cap": no population headroom left, so production waits.
+	/// Mirrors onPowerBrownOutChange; the logic changes nothing here, the local player gets a client warning (D11 F4).
+	void onAoCPopulationBlockChange( Bool atCap );
 
 
 	///< one of my command centers just fired a special power, let us reset timers for all command centers.
@@ -757,6 +768,7 @@ private:
 	PlayerType									m_playerType;									///< human/computer control
 	Money												m_money;											///< Player's current wealth
 	AoCResourceBank							m_aocBank;										///< AoC @feature F1: typed resources; cash proxied through m_money
+	AoCPopulation								m_aocPopulation;								///< AoC @feature 31/10/2026 Population used, capacity and reserved (D11 F4).
 	Upgrade*										m_upgradeList;								///< list of all upgrades this player has
 	Int													m_radarCount;									///< # of facilities that have a radar under the players control
 	Int													m_disableProofRadarCount;			///< # of disable proof radars.  A disable proof one will be in both refcounts
