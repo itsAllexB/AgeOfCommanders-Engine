@@ -439,6 +439,8 @@ public:
 		MSG_META_PLACE_BEACON,
 		MSG_META_REMOVE_BEACON,
 
+		MSG_META_AOC_FOLDER_BACK,										///< AoC @hook 31/10/2026 close the open command bar folder (D11 F5); meta, never sent
+
 		MSG_END_META_MESSAGES,											///< Marker to delineate "meta" messages
 
 		MSG_MOUSEOVER_DRAWABLE_HINT,								///< (drawableid) the given drawable is under the mouse, regardless of button states

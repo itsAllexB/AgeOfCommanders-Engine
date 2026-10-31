@@ -4183,6 +4183,13 @@ GameMessageDisposition CommandTranslator::translateGameMessage(const GameMessage
 			break;
 
 		//-----------------------------------------------------------------------------------------
+		// AoC @hook 31/10/2026 Back out of the open command bar folder; client view state only, no GameMessage (D11 F5).
+		case GameMessage::MSG_META_AOC_FOLDER_BACK:
+			if( TheControlBar && TheControlBar->aocFolderBack() )
+				disp = DESTROY_MESSAGE;
+			break;
+
+		//-----------------------------------------------------------------------------------------
 		case GameMessage::MSG_META_INCREASE_MAX_RENDER_FPS:
 		{
 			if (changeMaxRenderFps(FpsValueChange_Increase))
