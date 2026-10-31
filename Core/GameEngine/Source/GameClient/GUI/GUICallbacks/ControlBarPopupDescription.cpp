@@ -363,6 +363,10 @@ void ControlBar::populateBuildTooltipLayout( const CommandButton *commandButton,
 							descrip.concat( L"\n\n" );
 							descrip.concat( TheGameText->fetch( "TOOLTIP:TooltipNotEnoughMoneyToBuild" ) );
 							break;
+						case CANMAKE_NO_HOUSING:	// AoC @hook 31/10/2026 The reason a unit cannot be bought: population cap (D11 F4).
+							descrip.concat( L"\n\n" );
+							descrip.concat( TheGameText->FETCH_OR_SUBSTITUTE( "TOOLTIP:AoCNeedHousing", L"Not enough housing: build houses to raise the population limit." ) );
+							break;
 						case CANMAKE_QUEUE_FULL:
 							descrip.concat( L"\n\n" );
 							descrip.concat( TheGameText->fetch( "TOOLTIP:TooltipCannotPurchaseBecauseQueueFull" ) );

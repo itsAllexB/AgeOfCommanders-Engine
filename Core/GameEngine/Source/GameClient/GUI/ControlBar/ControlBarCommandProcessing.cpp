@@ -46,6 +46,7 @@
 #include "GameClient/Drawable.h"
 #include "GameClient/Eva.h"
 #include "GameClient/GameClient.h"
+#include "GameClient/GameText.h"	// AoC @feature 31/10/2026 The no-housing message (D11 F4).
 #include "GameClient/GadgetPushButton.h"
 #include "GameClient/GameWindow.h"
 #include "GameClient/GameWindowManager.h"
@@ -401,6 +402,11 @@ CBCommandStatus ControlBar::processCommandUI( GameWindow *control,
 			{
 				TheEva->setShouldPlay(EVA_InsufficientFunds);
 				TheInGameUI->message( "GUI:NotEnoughMoneyToBuild" );
+				break;
+			}
+			else if (cmt == CANMAKE_NO_HOUSING)	// AoC @hook 31/10/2026 A click at the population cap: say why, queue nothing (D11 F4).
+			{
+				TheInGameUI->messageNoFormat( TheGameText->FETCH_OR_SUBSTITUTE( "GUI:AoCNeedHousing", L"Population limit reached. Build houses." ) );
 				break;
 			}
 			else if (cmt == CANMAKE_QUEUE_FULL)
