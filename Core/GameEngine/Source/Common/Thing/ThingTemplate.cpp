@@ -160,6 +160,8 @@ const FieldParse ThingTemplate::s_objectFieldParseTable[] =
 	{ "Buildable",						INI::parseByteSizedIndexList,				BuildableStatusNames, offsetof( ThingTemplate, m_buildable) },
 	{ "BuildCost",						INI::parseUnsignedShort,						nullptr,		offsetof( ThingTemplate, m_buildCost ) },
 	{ "AoCCost",							ThingTemplate::parseAoCCost,					nullptr,		offsetof( ThingTemplate, m_aocCost ) },	// AoC @feature F1
+	{ "AoCPopulationCost",		INI::parseUnsignedByte,						nullptr,		offsetof( ThingTemplate, m_aocPopulationCost ) },	// AoC @feature 31/10/2026 Population while the object exists (D11 F4).
+	{ "AoCPopulationCapacity",	INI::parseUnsignedShort,						nullptr,		offsetof( ThingTemplate, m_aocPopulationCapacity ) },	// AoC @feature 31/10/2026 Housing of a completed building (D11 F4).
 	{ "BuildTime",						INI::parseReal,											nullptr,		offsetof( ThingTemplate, m_buildTime ) },
 	{ "RefundValue",					INI::parseUnsignedShort,						nullptr,   offsetof( ThingTemplate, m_refundValue ) },
 	{ "BuildCompletion",			INI::parseByteSizedIndexList,				BuildCompletionNames,		offsetof( ThingTemplate, m_buildCompletion ) },
@@ -1069,6 +1071,8 @@ ThingTemplate::ThingTemplate() :
 	m_instanceScaleFuzziness = 0;
 	m_threatValue = 0;
 	m_maxSimultaneousOfType = 0;	// unlimited
+	m_aocPopulationCost = 0;		// AoC @feature 31/10/2026 No population by default (D11 F4).
+	m_aocPopulationCapacity = 0;	// AoC @feature 31/10/2026 No housing by default (D11 F4).
   m_maxSimultaneousLinkKey = NAMEKEY_INVALID; // Not linked
   m_maxSimultaneousDeterminedBySuperweaponRestriction = false;
 	m_crusherLevel = 0;			//Unspecified, this object is unable to crush anything!

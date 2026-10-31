@@ -1090,6 +1090,11 @@ void Object::setStatus( ObjectStatusMaskType objectStatus, Bool set )
 
 			if (m_partitionData)
 				m_partitionData->makeDirty(true);
+
+			// AoC @hook 31/10/2026 Housing counts only for completed buildings: capacity enters and leaves with this bit, the moment construction completes (D11 F4).
+			Player *aocOwner = getControllingPlayer();
+			if( aocOwner )
+				aocOwner->getAoCPopulation()->objectConstructionChange( this, !m_status.test( OBJECT_STATUS_UNDER_CONSTRUCTION ) );
 		}
 
 	}

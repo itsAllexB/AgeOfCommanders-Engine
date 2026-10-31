@@ -2,6 +2,7 @@ set(GAMEENGINE_SRC
     Include/AoC/AoCCost.h
     Include/AoC/AoCFolder.h
     Include/AoC/AoCHarness.h
+    Include/AoC/AoCPopulation.h
     Include/AoC/AoCResourceBank.h
     Include/AoC/AoCRules.h
     Include/AoC/AoCSimRate.h
@@ -580,6 +581,7 @@ set(GAMEENGINE_SRC
     Source/AoC/AoCCost.cpp
     Source/AoC/AoCFolder.cpp
     Source/AoC/AoCHarness.cpp
+    Source/AoC/AoCPopulation.cpp
     Source/AoC/AoCResourceBank.cpp
     Source/AoC/AoCRules.cpp
     Source/AoC/AoCSimRate.cpp
