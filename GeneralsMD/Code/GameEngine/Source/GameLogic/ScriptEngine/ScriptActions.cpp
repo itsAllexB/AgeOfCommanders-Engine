@@ -4098,6 +4098,30 @@ void ScriptActions::doGiveMoney(const AsciiString& playerName, Int money)
 }
 
 //-------------------------------------------------------------------------------------------------
+/** doAoCGiveResource (AoC F1) */
+//-------------------------------------------------------------------------------------------------
+void ScriptActions::doAoCGiveResource(const AsciiString& playerName, const AsciiString& resourceName, Int amount)
+{
+	Player* player = TheScriptEngine->getPlayerFromAsciiString(playerName);
+	if (!player) {
+		return;
+	}
+	player->getAoCBank()->scriptGiveResource(resourceName.str(), amount);
+}
+
+//-------------------------------------------------------------------------------------------------
+/** doAoCSetResource (AoC F1) */
+//-------------------------------------------------------------------------------------------------
+void ScriptActions::doAoCSetResource(const AsciiString& playerName, const AsciiString& resourceName, Int amount)
+{
+	Player* player = TheScriptEngine->getPlayerFromAsciiString(playerName);
+	if (!player) {
+		return;
+	}
+	player->getAoCBank()->scriptSetResource(resourceName.str(), amount);
+}
+
+//-------------------------------------------------------------------------------------------------
 /** doDisplayCounter */
 //-------------------------------------------------------------------------------------------------
 void ScriptActions::doDisplayCounter(const AsciiString& counterName, const AsciiString& counterText)
@@ -7249,6 +7273,12 @@ void ScriptActions::executeAction( ScriptAction *pAction )
 			return;
 		case ScriptAction::PLAYER_GIVE_MONEY:
 			doGiveMoney(pAction->getParameter(0)->getString(), pAction->getParameter(1)->getInt());
+			return;
+		case ScriptAction::AOC_PLAYER_GIVE_RESOURCE:	// AoC F1
+			doAoCGiveResource(pAction->getParameter(0)->getString(), pAction->getParameter(1)->getString(), pAction->getParameter(2)->getInt());
+			return;
+		case ScriptAction::AOC_PLAYER_SET_RESOURCE:	// AoC F1
+			doAoCSetResource(pAction->getParameter(0)->getString(), pAction->getParameter(1)->getString(), pAction->getParameter(2)->getInt());
 			return;
 
 		case ScriptAction::DISPLAY_COUNTDOWN_TIMER:

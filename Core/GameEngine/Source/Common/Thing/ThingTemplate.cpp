@@ -159,6 +159,7 @@ const FieldParse ThingTemplate::s_objectFieldParseTable[] =
 	{ "Prerequisites",				ThingTemplate::parsePrerequisites,	nullptr, 0 },
 	{ "Buildable",						INI::parseByteSizedIndexList,				BuildableStatusNames, offsetof( ThingTemplate, m_buildable) },
 	{ "BuildCost",						INI::parseUnsignedShort,						nullptr,		offsetof( ThingTemplate, m_buildCost ) },
+	{ "AoCCost",							ThingTemplate::parseAoCCost,					nullptr,		offsetof( ThingTemplate, m_aocCost ) },	// AoC @feature F1
 	{ "BuildTime",						INI::parseReal,											nullptr,		offsetof( ThingTemplate, m_buildTime ) },
 	{ "RefundValue",					INI::parseUnsignedShort,						nullptr,   offsetof( ThingTemplate, m_refundValue ) },
 	{ "BuildCompletion",			INI::parseByteSizedIndexList,				BuildCompletionNames,		offsetof( ThingTemplate, m_buildCompletion ) },
@@ -1571,6 +1572,45 @@ Int ThingTemplate::calcCostToBuild( const Player* player) const
 	Real factionModifier = 1 + player->getProductionCostChangePercent( getName() );
 	factionModifier *= player->getProductionCostChangeBasedOnKindOf( m_kindof );
 	return getBuildCost() * factionModifier * player->getHandicap()->getHandicap(Handicap::BUILDCOST, this);
+}
+
+//-------------------------------------------------------------------------------------------------
+// AoC @feature F1: the cost vector. Cash is the stock calcCostToBuild; the other types take the same
+// faction and handicap modifiers in the same arithmetic, so a template without AoCCost is a pure cash cost.
+//-------------------------------------------------------------------------------------------------
+void ThingTemplate::calcAoCCost( const Player* player, AoCCost& cost ) const
+{
+	cost.clear();
+	cost.amount[AOC_RESOURCE_CASH] = (UnsignedInt)calcCostToBuild( player );
+	if (!player || !m_aocCost.hasNonCash())
+		return;
+
+	Real factionModifier = 1 + player->getProductionCostChangePercent( getName() );
+	factionModifier *= player->getProductionCostChangeBasedOnKindOf( m_kindof );
+	Real handicap = player->getHandicap()->getHandicap(Handicap::BUILDCOST, this);
+	for (Int i = AOC_RESOURCE_CASH + 1; i < AOC_MAX_RESOURCES; ++i)
+	{
+		Int amount = m_aocCost.amount[i] * factionModifier * handicap;
+		cost.amount[i] = amount > 0 ? (UnsignedInt)amount : 0;
+	}
+}
+
+//-------------------------------------------------------------------------------------------------
+// AoC @feature F1: "AoCCost = Wood:250 Cash:100". Cash:n writes BuildCost, so cash keeps its one store.
+//-------------------------------------------------------------------------------------------------
+/*static*/ void ThingTemplate::parseAoCCost( INI* ini, void *instance, void *store, const void* /*userData*/ )
+{
+	ThingTemplate* self = (ThingTemplate*)instance;
+	AoCCost* cost = (AoCCost*)store;
+	UnsignedInt present = 0;
+	AoCCost::parseFromINI( ini, *cost, &present );
+	if (present & (1u << AOC_RESOURCE_CASH))
+	{
+		if (cost->amount[AOC_RESOURCE_CASH] > 0xFFFF)
+			throw INI_INVALID_DATA;
+		self->m_buildCost = (UnsignedShort)cost->amount[AOC_RESOURCE_CASH];
+		cost->amount[AOC_RESOURCE_CASH] = 0;
+	}
 }
 
 //-------------------------------------------------------------------------------------------------

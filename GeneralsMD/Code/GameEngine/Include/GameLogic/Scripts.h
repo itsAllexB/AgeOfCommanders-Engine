@@ -543,6 +543,8 @@ public:
 		TEAM_SET_BOOBYTRAPPED,										///< Add boobytrap to all units on team.
 		SHOW_WEATHER,															///< show map defined weather.
 		AI_PLAYER_BUILD_TYPE_NEAREST_TEAM,				///< Tell the ai player to build an object nearest team.
+		AOC_PLAYER_GIVE_RESOURCE,									///< AoC F1: add/subtract an amount of one resource type in a player's bank.
+		AOC_PLAYER_SET_RESOURCE,									///< AoC F1: set one resource type in a player's bank to an exact amount.
 		// add new items here, please
 		NUM_ITEMS
 	};
@@ -773,6 +775,7 @@ public:
 		SCIENCE_AVAILABILITY, // String, the name of the different science availabilities.
     LEFT_OR_RIGHT,        // 1=left, 2=right, okay?
 		PERCENT,						// Real.  A percentage.
+		AOC_RESOURCE_TYPE,	// String, the name of an AoC resource type (F1); stored by name so renaming a type does not break scripts.
 		NUM_ITEMS
 	};
 
@@ -972,6 +975,8 @@ public:
 		SUPPLY_SOURCE_ATTACKED,									// True if our supply depot or dozer near depot was attacked.
 		START_POSITION_IS,											// True if our start position matches.
 		NAMED_HAS_FREE_CONTAINER_SLOTS,					///< Kris -- Checks if any given container has any free slots.
+		AOC_PLAYER_HAS_RESOURCE,								///< AoC F1: If X [comparison] the amount of one resource type in the player's bank.
+		// AoC: AOC_PLAYER_POPULATION_HEADROOM (D11 2.1) is deferred to F4, which adds population; append it here then.
 
 		NUM_ITEMS		 // Always the last condition.
 	};

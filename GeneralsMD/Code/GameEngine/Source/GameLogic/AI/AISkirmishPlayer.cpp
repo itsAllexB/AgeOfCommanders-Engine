@@ -278,11 +278,12 @@ void AISkirmishPlayer::processBaseBuilding()
 			}	else {
 				// building is missing, (re)build it
 				// deduct money to build, if we have it
-				Int cost = bldgPlan->calcCostToBuild( m_player );
-				if (m_player->getMoney()->countMoney() >= cost)
+				AoCCost cost;	// AoC @hook F1: the whole cost vector
+				bldgPlan->calcAoCCost( m_player, cost );
+				if (m_player->getAoCBank()->canAfford( cost ))
 				{
 					// we have the money, deduct it
-					m_player->getMoney()->withdraw( cost );
+					m_player->getAoCBank()->withdraw( cost );
 
 					// inst-construct the building
 					bldg = buildStructureNow(bldgPlan, bldgInfo);

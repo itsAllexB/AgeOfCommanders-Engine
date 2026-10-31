@@ -985,6 +985,18 @@ Bool ScriptConditions::evaluatePlayerHasCredits(Parameter *pCreditsParm, Paramet
 }
 
 //-------------------------------------------------------------------------------------------------
+/** evaluateAoCPlayerHasResource (AoC F1): amount <comparison> the player's bank count of a resource type */
+//-------------------------------------------------------------------------------------------------
+Bool ScriptConditions::evaluateAoCPlayerHasResource(Parameter *pAmountParm, Parameter* pComparisonParm, Parameter *pPlayerParm, Parameter *pResourceParm)
+{
+	Player* pPlayer = playerFromParam(pPlayerParm);
+	if (!pPlayer) {
+		return false;
+	}
+	return pPlayer->getAoCBank()->scriptHasResource(pResourceParm->getString().str(), pComparisonParm->getInt(), pAmountParm->getInt());
+}
+
+//-------------------------------------------------------------------------------------------------
 /** evaluateBuildingEntered */
 //-------------------------------------------------------------------------------------------------
 Bool ScriptConditions::evaluateBuildingEntered( Parameter *pPlayerParm, Parameter *pItemParm )
@@ -2792,6 +2804,8 @@ Bool ScriptConditions::evaluateCondition( Condition *pCondition )
 			return evaluateTeamCreated(pCondition->getParameter(0));
 		case Condition::PLAYER_HAS_CREDITS:
 			return evaluatePlayerHasCredits(pCondition->getParameter(0), pCondition->getParameter(1), pCondition->getParameter(2));
+		case Condition::AOC_PLAYER_HAS_RESOURCE:	// AoC F1
+			return evaluateAoCPlayerHasResource(pCondition->getParameter(0), pCondition->getParameter(1), pCondition->getParameter(2), pCondition->getParameter(3));
 		case Condition::BRIDGE_REPAIRED:
 			return evaluateBridgeRepaired(pCondition->getParameter(0));
 		case Condition::BRIDGE_BROKEN:

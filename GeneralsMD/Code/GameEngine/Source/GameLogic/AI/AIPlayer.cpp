@@ -520,9 +520,10 @@ Object *AIPlayer::buildStructureWithDozer(const ThingTemplate *bldgPlan, BuildLi
 	if (dozer==nullptr) {
 		return nullptr;
 	}
-	// Check available funds.
-	Money *money = m_player->getMoney();
-	if (money->countMoney()<bldgPlan->calcCostToBuild(m_player)) {
+	// Check available funds (AoC @hook F1: the whole cost vector).
+	AoCCost cost;
+	bldgPlan->calcAoCCost(m_player, cost);
+	if (!m_player->getAoCBank()->canAfford(cost)) {
 		return nullptr;
 	}
 	// construct the building
@@ -822,11 +823,12 @@ void AIPlayer::processBaseBuilding()
 					}	else {
 						// building is missing, (re)build it
 						// deduct money to build, if we have it
-						Int cost = bldgPlan->calcCostToBuild( m_player );
-						if (m_player->getMoney()->countMoney() >= cost)
+						AoCCost cost;	// AoC @hook F1: the whole cost vector
+						bldgPlan->calcAoCCost( m_player, cost );
+						if (m_player->getAoCBank()->canAfford( cost ))
 						{
 							// we have the money, deduct it
-							m_player->getMoney()->withdraw( cost );
+							m_player->getAoCBank()->withdraw( cost );
 
 							// inst-construct the building
 							bldg = buildStructureNow(bldgPlan, info);
@@ -1487,6 +1489,7 @@ Bool AIPlayer::isPossibleToBuildTeam( TeamPrototype *proto, Bool requireIdleFact
 	/* Make sure we have at least one idle factory, and factories for all unit types. */
 	Bool anyIdle = false;
 	Int cost=0;
+	AoCCost aocCost;	// AoC @hook F1: the non-cash team cost, accumulated like cost
 	notEnoughMoney = false;
 	for( int i=0; i<proto->getTemplateInfo()->m_numUnitsInfo; i++ )
 	{
@@ -1503,12 +1506,31 @@ Bool AIPlayer::isPossibleToBuildTeam( TeamPrototype *proto, Bool requireIdleFact
 				anyIdle = true;
 			}
 			cost += thingCost * ((unitInfo[i].maxUnits+unitInfo[i].minUnits)/2.0f);
+			// AoC @hook F1: the non-cash components, accumulated like cost
+			AoCCost thingAoCCost;
+			thing->calcAoCCost(m_player, thingAoCCost);
+			// AoC @hook 31/10/2026 The average unit count in integers, as the integer economy asks (D11 F1).
+			const UnsignedInt unitCountTwice = (UnsignedInt)(unitInfo[i].maxUnits + unitInfo[i].minUnits);
+			for (Int t = AOC_RESOURCE_CASH + 1; t < AOC_MAX_RESOURCES; ++t)
+				thingAoCCost.amount[t] = thingAoCCost.amount[t] * unitCountTwice / 2;
+			aocCost.add(thingAoCCost);
 		}
 	}
 	cost *= TheAI->getAiData()->m_teamResourcesToBuild;
 	if (m_player->getMoney()->countMoney() < cost)	{
 		notEnoughMoney = true;
 		return false; // too expensive
+	}
+	// AoC @hook F1: the non-cash components of the team cost, scaled like the cash above
+	if (aocCost.hasNonCash())
+	{
+		aocCost.amount[AOC_RESOURCE_CASH] = 0;
+		for (Int t = AOC_RESOURCE_CASH + 1; t < AOC_MAX_RESOURCES; ++t)
+			aocCost.amount[t] *= TheAI->getAiData()->m_teamResourcesToBuild;
+		if (!m_player->getAoCBank()->canAfford(aocCost)) {
+			notEnoughMoney = true;
+			return false; // too expensive
+		}
 	}
 	if (anyIdle)
 	{

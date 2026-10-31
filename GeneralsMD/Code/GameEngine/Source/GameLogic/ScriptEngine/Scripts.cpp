@@ -2085,6 +2085,10 @@ AsciiString Parameter::getUiText() const
 			uiText.format("Reveal Name: %s", uiString.str());
 			break;
 
+		case AOC_RESOURCE_TYPE:	// AoC @hook F1
+			uiText.format("Resource '%s'", uiString.str());
+			break;
+
 		case OBJECT_PANEL_FLAG:
 			uiText.format("Object Flag: %s", uiString.str());
 			break;

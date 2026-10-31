@@ -1,0 +1,393 @@
+/*
+**	Command & Conquer Generals Zero Hour(tm)
+**	Copyright 2026 Age of Commanders contributors
+**
+**	This program is free software: you can redistribute it and/or modify
+**	it under the terms of the GNU General Public License as published by
+**	the Free Software Foundation, either version 3 of the License, or
+**	(at your option) any later version.
+**
+**	This program is distributed in the hope that it will be useful,
+**	but WITHOUT ANY WARRANTY; without even the implied warranty of
+**	MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+**	GNU General Public License for more details.
+**
+**	You should have received a copy of the GNU General Public License
+**	along with this program.  If not, see <http://www.gnu.org/licenses/>.
+*/
+
+// AoC F1: the resource bank's afford, withdraw and refund logic, the script handler logic behind
+// AOC_PLAYER_HAS_RESOURCE / AOC_PLAYER_GIVE_RESOURCE / AOC_PLAYER_SET_RESOURCE, the save round trip
+// with its remap by type name, and the CRC rule (design D11 section 2.1). The bank runs standalone
+// here (no Money bound), so cash is its own slot.
+
+#include <stdio.h>
+#include <string>
+#include <gtest/gtest.h>
+
+#include "AoC/AoCCost.h"
+#include "AoC/AoCResourceBank.h"
+#include "AoC/AoCRules.h"
+#include "Common/XferCRC.h"
+#include "Common/XferLoad.h"
+#include "Common/XferSave.h"
+#include "GameLogic/Scripts.h"
+
+namespace
+{
+
+enum { FOOD = 1, WOOD = 2, IRON = 3, STEEL = 4 };
+
+class AoCResourceBankTest : public ::testing::Test
+{
+protected:
+	void SetUp() override
+	{
+		m_rules = new AoCRules;
+		m_rules->init();
+		TheAoCRules = m_rules;
+		m_bank.init(nullptr);
+	}
+
+	void TearDown() override
+	{
+		TheAoCRules = nullptr;
+		delete m_rules;
+	}
+
+	void defineStandardTypes()
+	{
+		m_rules->defineType("Food", "", "", 1000, FALSE, -1);
+		m_rules->defineType("Wood", "", "", 1000, FALSE, -1);
+		m_rules->defineType("Iron", "", "", 1500, FALSE, -1);
+		m_rules->defineType("Steel", "", "", 4000, FALSE, -1);
+	}
+
+	static AoCCost cost(const char *text)
+	{
+		AoCCost c;
+		AoCCost::parseText(text, c, nullptr);
+		return c;
+	}
+
+	// A save game in miniature: the rules, then a bank, in the order PlayerList::xfer (v2) writes them
+	// (TheAoCRules ahead of the players, each Player::xfer v9 ending with its bank).
+	static void saveTo(const std::string &path, AoCRules *rules, AoCResourceBank &bank)
+	{
+		XferSave save;
+		save.open(path.c_str());
+		save.xferSnapshot(rules);
+		save.xferSnapshot(&bank);
+		save.close();
+	}
+
+	static void loadFrom(const std::string &path, AoCRules *rules, AoCResourceBank &bank)
+	{
+		XferLoad load;
+		load.setOptions(XO_NO_POST_PROCESSING);	// no TheGameState to queue post-processing on
+		load.open(path.c_str());
+		load.xferSnapshot(rules);
+		load.xferSnapshot(&bank);
+		load.close();
+	}
+
+	// The light CRC of one bank, as Player::crc computes it through xferSnapshot.
+	static UnsignedInt crcOf(AoCResourceBank &bank)
+	{
+		XferCRC xfer;
+		xfer.open("lightCRC");
+		xfer.xferSnapshot(&bank);
+		UnsignedInt value = xfer.getCRC();
+		xfer.close();
+		return value;
+	}
+
+	AoCRules *m_rules;
+	AoCResourceBank m_bank;
+};
+
+TEST_F(AoCResourceBankTest, StartsEmpty)
+{
+	for (Int i = 0; i < AOC_MAX_RESOURCES; ++i)
+		EXPECT_EQ(m_bank.count(i), 0u);
+	EXPECT_EQ(m_bank.count(-1), 0u);
+	EXPECT_EQ(m_bank.count(AOC_MAX_RESOURCES), 0u);
+	EXPECT_TRUE(m_bank.canAfford(AoCCost())) << "a zero vector is always affordable";
+}
+
+TEST_F(AoCResourceBankTest, DepositAndCount)
+{
+	defineStandardTypes();
+	m_bank.deposit(AOC_RESOURCE_CASH, 500, FALSE, FALSE);
+	m_bank.deposit(WOOD, 200, FALSE, FALSE);
+	m_bank.deposit(WOOD, 50);
+	EXPECT_EQ(m_bank.count(AOC_RESOURCE_CASH), 500u);
+	EXPECT_EQ(m_bank.count(WOOD), 250u);
+	EXPECT_EQ(m_bank.count(FOOD), 0u);
+
+	m_bank.deposit(cost("Food:200 Wood:200 Cash:500"), FALSE, FALSE);
+	EXPECT_EQ(m_bank.count(AOC_RESOURCE_CASH), 1000u);
+	EXPECT_EQ(m_bank.count(FOOD), 200u);
+	EXPECT_EQ(m_bank.count(WOOD), 450u);
+}
+
+TEST_F(AoCResourceBankTest, CanAffordComparesEveryComponent)
+{
+	defineStandardTypes();
+	m_bank.deposit(cost("Food:200 Wood:200 Cash:500"), FALSE, FALSE);
+	EXPECT_TRUE(m_bank.canAfford(cost("Wood:200 Cash:100")));
+	EXPECT_TRUE(m_bank.canAfford(cost("Cash:500")));
+	EXPECT_FALSE(m_bank.canAfford(cost("Wood:250 Cash:100"))) << "the barracks needs 250 wood";
+	EXPECT_FALSE(m_bank.canAfford(cost("Cash:501")));
+	EXPECT_FALSE(m_bank.canAfford(cost("Steel:1")));
+	m_bank.deposit(WOOD, 50);
+	EXPECT_TRUE(m_bank.canAfford(cost("Wood:250 Cash:100"))) << "affordable once wood suffices";
+}
+
+TEST_F(AoCResourceBankTest, WithdrawIsAllOrNothingForNonCash)
+{
+	defineStandardTypes();
+	m_bank.deposit(cost("Food:200 Wood:200 Cash:500"), FALSE, FALSE);
+	EXPECT_FALSE(m_bank.withdraw(cost("Wood:250 Cash:100"), FALSE));
+	EXPECT_EQ(m_bank.count(WOOD), 200u) << "nothing taken";
+	EXPECT_EQ(m_bank.count(AOC_RESOURCE_CASH), 500u) << "not even the cash";
+
+	EXPECT_TRUE(m_bank.withdraw(cost("Wood:200 Food:50 Cash:100"), FALSE));
+	EXPECT_EQ(m_bank.count(WOOD), 0u);
+	EXPECT_EQ(m_bank.count(FOOD), 150u);
+	EXPECT_EQ(m_bank.count(AOC_RESOURCE_CASH), 400u);
+}
+
+TEST_F(AoCResourceBankTest, WithdrawTakesNothingWhenOnlyCashIsShort)
+{
+	// Review finding 1: the typed components are covered but cash is not. The whole vector is refused,
+	// so a caller that does not check canAfford can never get the typed part for free or a clamped cash.
+	defineStandardTypes();
+	m_bank.deposit(cost("Food:50 Wood:300 Cash:100"), FALSE, FALSE);
+	EXPECT_FALSE(m_bank.withdraw(cost("Wood:250 Cash:150"), FALSE));
+	EXPECT_EQ(m_bank.count(WOOD), 300u) << "the wood stays";
+	EXPECT_EQ(m_bank.count(AOC_RESOURCE_CASH), 100u) << "the cash is not clamped";
+	EXPECT_EQ(m_bank.count(FOOD), 50u);
+
+	EXPECT_FALSE(m_bank.withdraw(cost("Wood:250 Food:51 Cash:100"), FALSE)) << "any one short component refuses";
+	EXPECT_EQ(m_bank.count(WOOD), 300u);
+	EXPECT_EQ(m_bank.count(AOC_RESOURCE_CASH), 100u);
+
+	EXPECT_TRUE(m_bank.withdraw(cost("Wood:250 Food:50 Cash:100"), FALSE)) << "exactly enough of everything";
+	EXPECT_EQ(m_bank.count(WOOD), 50u);
+	EXPECT_EQ(m_bank.count(FOOD), 0u);
+	EXPECT_EQ(m_bank.count(AOC_RESOURCE_CASH), 0u);
+}
+
+TEST_F(AoCResourceBankTest, CashOnlyVectorKeepsTheStockClamp)
+{
+	defineStandardTypes();
+	m_bank.deposit(cost("Wood:100 Cash:100"), FALSE, FALSE);
+	// Stock Money::withdraw never goes into debt and takes what is there; a cash-only vector (every cost
+	// while the feature is off) keeps exactly that, so the stock construct path is unchanged.
+	EXPECT_FALSE(m_bank.withdraw(cost("Cash:150"), FALSE));
+	EXPECT_EQ(m_bank.count(AOC_RESOURCE_CASH), 0u) << "clamped, as Money::withdraw does";
+	EXPECT_EQ(m_bank.count(WOOD), 100u) << "the typed amounts are not touched";
+	m_bank.deposit(AOC_RESOURCE_CASH, 40, FALSE, FALSE);
+	EXPECT_TRUE(m_bank.withdraw(cost("Cash:40"), FALSE));
+	EXPECT_EQ(m_bank.count(AOC_RESOURCE_CASH), 0u);
+	m_bank.withdrawType(WOOD, 100, FALSE);
+	EXPECT_EQ(m_bank.withdrawType(WOOD, 10, FALSE), 0u);
+	m_bank.deposit(WOOD, 30);
+	EXPECT_EQ(m_bank.withdrawType(WOOD, 100, FALSE), 30u) << "returns the amount actually taken";
+	EXPECT_EQ(m_bank.count(WOOD), 0u);
+}
+
+TEST_F(AoCResourceBankTest, RefundRestoresTheVector)
+{
+	defineStandardTypes();
+	const AoCCost barracks = cost("Wood:250 Cash:100");
+	m_bank.deposit(cost("Food:200 Wood:300 Cash:500"), FALSE, FALSE);
+	ASSERT_TRUE(m_bank.withdraw(barracks, FALSE));
+	EXPECT_EQ(m_bank.count(WOOD), 50u);
+	EXPECT_EQ(m_bank.count(AOC_RESOURCE_CASH), 400u);
+	m_bank.deposit(barracks, TRUE, FALSE);	// cancel: full refund
+	EXPECT_EQ(m_bank.count(WOOD), 300u);
+	EXPECT_EQ(m_bank.count(AOC_RESOURCE_CASH), 500u);
+	EXPECT_EQ(m_bank.count(FOOD), 200u);
+
+	// sell: the non-cash share at AoCRefundPerMille (default 500), cash through the stock sell path
+	AoCCost sellRefund = barracks;
+	sellRefund.amount[AOC_RESOURCE_CASH] = 0;
+	sellRefund.scale(500);
+	EXPECT_EQ(sellRefund.amount[WOOD], 125u);
+	EXPECT_EQ(sellRefund.amount[AOC_RESOURCE_CASH], 0u);
+}
+
+TEST_F(AoCResourceBankTest, Shortfall)
+{
+	defineStandardTypes();
+	m_bank.deposit(cost("Wood:200 Cash:50"), FALSE, FALSE);
+	AoCCost missing;
+	EXPECT_TRUE(m_bank.shortfall(cost("Wood:250 Steel:10 Cash:100"), missing));
+	EXPECT_EQ(missing.amount[WOOD], 50u);
+	EXPECT_EQ(missing.amount[STEEL], 10u);
+	EXPECT_EQ(missing.amount[AOC_RESOURCE_CASH], 50u);
+	EXPECT_EQ(missing.amount[FOOD], 0u);
+	EXPECT_FALSE(m_bank.shortfall(cost("Wood:200"), missing));
+	EXPECT_TRUE(missing.isZero());
+}
+
+TEST_F(AoCResourceBankTest, CashEquivalentWeighsEveryType)
+{
+	// Feature off: exactly the cash on hand, so the -aiLog cash_equivalent column equals money.
+	m_bank.deposit(AOC_RESOURCE_CASH, 1234, FALSE, FALSE);
+	EXPECT_EQ(m_bank.cashEquivalent(), 1234u);
+
+	defineStandardTypes();
+	m_bank.deposit(cost("Food:100 Iron:10 Steel:10"), FALSE, FALSE);
+	// 1234 + 100 + 15 + 40
+	EXPECT_EQ(m_bank.cashEquivalent(), 1389u);
+}
+
+TEST_F(AoCResourceBankTest, DeathAndTransfer)
+{
+	defineStandardTypes();
+	AoCResourceBank other;
+	other.init(nullptr);
+	m_bank.deposit(cost("Food:10 Wood:20 Cash:30"), FALSE, FALSE);
+	other.deposit(cost("Wood:5 Steel:7 Cash:1"), FALSE, FALSE);
+
+	other.transferNonCashFrom(m_bank);	// the stock lines move the cash
+	EXPECT_EQ(other.count(FOOD), 10u);
+	EXPECT_EQ(other.count(WOOD), 25u);
+	EXPECT_EQ(other.count(STEEL), 7u);
+	EXPECT_EQ(other.count(AOC_RESOURCE_CASH), 1u);
+	EXPECT_EQ(m_bank.count(FOOD), 0u);
+	EXPECT_EQ(m_bank.count(WOOD), 0u);
+	EXPECT_EQ(m_bank.count(AOC_RESOURCE_CASH), 30u);
+
+	other.clearNonCash();	// the stock line zeroes the cash on death
+	EXPECT_EQ(other.count(WOOD), 0u);
+	EXPECT_EQ(other.count(STEEL), 0u);
+	EXPECT_EQ(other.count(AOC_RESOURCE_CASH), 1u);
+}
+
+// --- script handlers: AOC_PLAYER_HAS_RESOURCE (int, comparison, side, resource) ---------------------
+// ScriptConditions::evaluateAoCPlayerHasResource looks the player up and calls scriptHasResource; the
+// tests call the same method.
+
+TEST_F(AoCResourceBankTest, ScriptConditionHasResource)
+{
+	defineStandardTypes();
+	m_bank.deposit(cost("Wood:150 Cash:40"), FALSE, FALSE);
+	// "X is <comparison> the amount possessed by <player> of <resource>", the PLAYER_HAS_CREDITS orientation
+	EXPECT_TRUE(m_bank.scriptHasResource("Wood", Parameter::LESS_THAN, 100));
+	EXPECT_FALSE(m_bank.scriptHasResource("Wood", Parameter::LESS_THAN, 200));
+	EXPECT_TRUE(m_bank.scriptHasResource("wood", Parameter::EQUAL, 150));
+	EXPECT_TRUE(m_bank.scriptHasResource("Wood", Parameter::GREATER, 200));
+	EXPECT_TRUE(m_bank.scriptHasResource("Cash", Parameter::GREATER_EQUAL, 40));
+	EXPECT_TRUE(m_bank.scriptHasResource("Steel", Parameter::EQUAL, 0));
+	EXPECT_FALSE(m_bank.scriptHasResource("Gold", Parameter::EQUAL, 0)) << "an unknown type is false, never a crash";
+}
+
+// --- script handlers: AOC_PLAYER_GIVE_RESOURCE and AOC_PLAYER_SET_RESOURCE (side, resource, int) -------
+// ScriptActions::doAoCGiveResource and doAoCSetResource look the player up and call these methods.
+
+TEST_F(AoCResourceBankTest, ScriptActionsGiveAndSet)
+{
+	defineStandardTypes();
+	m_bank.scriptGiveResource("Wood", 300);
+	EXPECT_EQ(m_bank.count(WOOD), 300u);
+	m_bank.scriptGiveResource("Wood", -100);
+	EXPECT_EQ(m_bank.count(WOOD), 200u);
+	m_bank.scriptGiveResource("Wood", -1000);
+	EXPECT_EQ(m_bank.count(WOOD), 0u) << "taking more than there is empties the type, like Money";
+	m_bank.scriptGiveResource("Gold", 50);	// unknown: no effect
+	for (Int i = 0; i < AOC_MAX_RESOURCES; ++i)
+		EXPECT_EQ(m_bank.count(i), 0u);
+
+	m_bank.scriptGiveResource("Cash", 70);
+	EXPECT_EQ(m_bank.count(AOC_RESOURCE_CASH), 70u);
+	m_bank.scriptSetResource("Cash", 5);
+	EXPECT_EQ(m_bank.count(AOC_RESOURCE_CASH), 5u);
+	m_bank.scriptSetResource("Steel", 42);
+	EXPECT_EQ(m_bank.count(STEEL), 42u);
+	m_bank.scriptSetResource("Steel", -3);
+	EXPECT_EQ(m_bank.count(STEEL), 0u);
+	m_bank.scriptSetResource("Gold", 9);	// unknown: no effect
+	EXPECT_EQ(m_bank.count(STEEL), 0u);
+}
+
+// --- save and load: the bank round-trips, remapped by type name ------------------------------------
+
+TEST_F(AoCResourceBankTest, XferRoundTripRemapsTypesByName)
+{
+	defineStandardTypes();	// Cash 0, Food 1, Wood 2, Iron 3, Steel 4
+	m_bank.deposit(cost("Food:10 Wood:20 Iron:30 Steel:40 Cash:999"), FALSE, FALSE);
+	const std::string path = ::testing::TempDir() + "AoCBankXferRoundTrip.sav";
+	saveTo(path, m_rules, m_bank);
+
+	// The same type set: every typed amount comes back.
+	AoCResourceBank same;
+	same.init(nullptr);
+	loadFrom(path, m_rules, same);
+	EXPECT_EQ(same.count(FOOD), 10u);
+	EXPECT_EQ(same.count(WOOD), 20u);
+	EXPECT_EQ(same.count(IRON), 30u);
+	EXPECT_EQ(same.count(STEEL), 40u);
+	EXPECT_EQ(same.count(AOC_RESOURCE_CASH), 0u) << "cash is the owner's Money, saved by the stock code";
+
+	// A later data set: Iron removed, the order changed, Stone added. Amounts follow their names.
+	AoCRules later;
+	later.init();
+	later.defineType("Steel", "", "", 4000, FALSE, -1);	// 1
+	later.defineType("Stone", "", "", 1000, FALSE, -1);	// 2
+	later.defineType("Wood", "", "", 1000, FALSE, -1);	// 3
+	later.defineType("Food", "", "", 1000, FALSE, -1);	// 4
+	TheAoCRules = &later;
+	AoCResourceBank loaded;
+	loaded.init(nullptr);
+	loaded.deposit(2, 5, FALSE, FALSE);	// whatever the bank held before the load is cleared
+	loadFrom(path, &later, loaded);
+	EXPECT_EQ(loaded.count(1), 40u) << "Steel";
+	EXPECT_EQ(loaded.count(2), 0u) << "Stone is not in the save";
+	EXPECT_EQ(loaded.count(3), 20u) << "Wood";
+	EXPECT_EQ(loaded.count(4), 10u) << "Food";
+	EXPECT_EQ(later.remapLoadedType(IRON), -1) << "Iron no longer exists and is dropped";
+	TheAoCRules = m_rules;
+	remove(path.c_str());
+}
+
+TEST_F(AoCResourceBankTest, XferWithTheFeatureOffCarriesNoAmounts)
+{
+	m_bank.deposit(AOC_RESOURCE_CASH, 500, FALSE, FALSE);
+	const std::string path = ::testing::TempDir() + "AoCBankXferFeatureOff.sav";
+	saveTo(path, m_rules, m_bank);	// count byte 1 (cash only), no amounts
+
+	// Loaded where types are defined: the bank holds no typed amounts.
+	defineStandardTypes();
+	AoCResourceBank loaded;
+	loaded.init(nullptr);
+	loaded.deposit(cost("Wood:7 Steel:3"), FALSE, FALSE);
+	loadFrom(path, m_rules, loaded);
+	for (Int i = AOC_RESOURCE_CASH + 1; i < AOC_MAX_RESOURCES; ++i)
+		EXPECT_EQ(loaded.count(i), 0u) << "type " << i;
+	EXPECT_EQ(m_rules->remapLoadedType(AOC_RESOURCE_CASH), AOC_RESOURCE_CASH);
+	remove(path.c_str());
+}
+
+// --- CRC rule: nothing enters the per-frame CRC while the feature is off ---------------------------
+
+TEST_F(AoCResourceBankTest, CrcIsSilentWhileDisabledAndCoversAmountsWhenEnabled)
+{
+	AoCResourceBank empty;
+	empty.init(nullptr);
+	const UnsignedInt emptyCRC = crcOf(empty);
+
+	m_bank.deposit(AOC_RESOURCE_CASH, 999, FALSE, FALSE);
+	EXPECT_EQ(crcOf(m_bank), emptyCRC) << "feature off: the bank adds nothing, like the stock Money::crc";
+
+	defineStandardTypes();
+	const UnsignedInt cashOnlyCRC = crcOf(m_bank);
+	EXPECT_NE(cashOnlyCRC, emptyCRC) << "feature on: cash enters the CRC";
+	m_bank.deposit(WOOD, 1, FALSE, FALSE);
+	EXPECT_NE(crcOf(m_bank), cashOnlyCRC) << "feature on: every typed amount enters the CRC";
+}
+
+} // namespace

@@ -29,6 +29,7 @@
 #include "PreRTS.h"	// This must go first in EVERY cpp file in the GameEngine
 
 #include "Common/ActionManager.h"
+#include "AoC/AoCRules.h"	// AoC @hook F1
 #include "Common/AudioAffect.h"
 #include "Common/BuildAssistant.h"
 #include "Common/CRCDebug.h"
@@ -282,6 +283,7 @@ GameEngine::~GameEngine()
 	reset();
 
 	TheSubsystemList->shutdownAll();
+	TheAoCRules = nullptr;	// AoC @hook F1: deleted by shutdownAll
 	delete TheSubsystemList;
 	TheSubsystemList = nullptr;
 
@@ -408,6 +410,9 @@ void GameEngine::init()
 		TheArchiveFileSystem->loadMods();
 
 		DEBUG_ASSERTCRASH(TheWritableGlobalData,("TheWritableGlobalData expected to be created"));
+		// AoC @hook F1: resource types first, so GameData.ini (AoCStartingStock) and the templates (AoCCost) can name them
+		initSubsystem(TheAoCRules, "TheAoCRules", MSGNEW("GameEngineSubsystem") AoCRules, nullptr);
+		TheAoCRules->loadDefinitions(&xferCRC);
 		fprintf(stderr, "INFO: GameEngine::init() - About to initialize TheWritableGlobalData\n");
 		initSubsystem(TheWritableGlobalData, "TheWritableGlobalData", TheWritableGlobalData, &xferCRC, "Data\\INI\\Default\\GameData", "Data\\INI\\GameData");
 		fprintf(stderr, "INFO: GameEngine::init() - TheWritableGlobalData initialized\n");

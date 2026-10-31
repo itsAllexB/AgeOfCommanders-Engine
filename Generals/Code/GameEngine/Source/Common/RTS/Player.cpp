@@ -301,6 +301,7 @@ Player::Player( Int playerIndex )
 	m_isPlayerDead = FALSE;
 
 	m_playerIndex = playerIndex;
+	m_aocBank.init( &m_money );	// AoC @hook F1: cash stays in m_money, the bank proxies it
 
 	// allocate new relation map pools
 	m_playerRelations = newInstance(PlayerRelationMap);
@@ -356,6 +357,7 @@ void Player::init(const PlayerTemplate* pt)
 	DEBUG_ASSERTCRASH(m_playerTeamPrototypes.empty(), ("Player::m_playerTeamPrototypes is not empty at game start!"));
 	m_skillPointsModifier = 1.0f;
 	m_attackedFrame = 0;
+	m_aocBank.reset();	// AoC @hook F1
 
 	m_isPreorder = FALSE;
 	m_isPlayerDead = FALSE;
@@ -2003,6 +2005,7 @@ void Player::killPlayer()
 	}
 
 	m_money.withdraw(m_money.countMoney()); // force $$$ to 0 on death
+	m_aocBank.clearNonCash();	// AoC @hook F1
 }
 
 //=============================================================================
@@ -2115,6 +2118,7 @@ void Player::transferAssetsFromThat(Player *that)
 	UnsignedInt allMoney = that->getMoney()->countMoney();
 	that->getMoney()->withdraw(allMoney);
 	getMoney()->deposit(allMoney, TRUE, FALSE);
+	getAoCBank()->transferNonCashFrom( *that->getAoCBank() );	// AoC @hook F1
 }
 
 //=============================================================================
@@ -3855,6 +3859,9 @@ void Player::crc( Xfer *xfer )
 	xfer->xferInt( &m_skillPoints );
 	xfer->xferInt( &m_sciencePurchasePoints );
 
+	// AoC @hook F1: the bank writes nothing while no resource types are defined
+	xfer->xferSnapshot( &m_aocBank );
+
 }
 
 // ------------------------------------------------------------------------------------------------
@@ -3868,13 +3875,14 @@ void Player::crc( Xfer *xfer )
 	* 6: Store m_unitsShouldHunt, set to true after the script "Tell player to hunt" is called.
 	* 7: added Preorder flag
 	* 8: Save m_disabledSciences & m_hiddenSciences. jba.
+	* 9: AoC F1: the resource bank (count byte and non-cash amounts) at the end.
 	*/
 // ------------------------------------------------------------------------------------------------
 void Player::xfer( Xfer *xfer )
 {
 
 	// version
-	const XferVersion currentVersion = 8;
+	const XferVersion currentVersion = 9;	// AoC @hook F1: 8 to 9
 	XferVersion version = currentVersion;
 	xfer->xferVersion( &version, currentVersion );
 
@@ -4418,6 +4426,12 @@ void Player::xfer( Xfer *xfer )
 	}
 	else
 		m_unitsShouldHunt = FALSE;
+
+	// AoC @hook F1: the resource bank; cash is already in m_money above
+	if (version >= 9)
+		xfer->xferSnapshot( &m_aocBank );
+	else if( xfer->getXferMode() == XFER_LOAD )
+		m_aocBank.reset();	// AoC @hook 31/10/2026 A pre-F1 save has no bank: drop the starting stock Player::init deposited (D11 F1).
 
 }
 

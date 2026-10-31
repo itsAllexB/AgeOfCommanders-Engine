@@ -386,6 +386,9 @@ AsciiString EditParameter::getWarningText(Parameter *pParm, Bool isAction)
 		case Parameter::REVEALNAME:
 			break;
 
+		case Parameter::AOC_RESOURCE_TYPE:	// AoC F1
+			break;
+
 
 	}
 	if (warningText.isNotEmpty()) {
@@ -454,6 +457,7 @@ AsciiString EditParameter::getInfoText(Parameter *pParm)
 		case Parameter::EMOTICON:
 		case Parameter::OBJECT_TYPE_LIST:
 		case Parameter::REVEALNAME:
+		case Parameter::AOC_RESOURCE_TYPE:	// AoC F1
 		case Parameter::OBJECT_PANEL_FLAG:
     case Parameter::LEFT_OR_RIGHT:
 
@@ -2100,6 +2104,13 @@ BOOL EditParameter::OnInitDialog()
 			loadRevealNames(pCombo);
 			break;
 		}
+		case Parameter::AOC_RESOURCE_TYPE:	// AoC F1: typed like a text string
+		{
+			captionText = "Resource type (AoC):";
+			editText = m_parameter->getString().str();
+			showCombo = false;
+			break;
+		}
 
 
 	}
@@ -2194,6 +2205,7 @@ void EditParameter::OnOK()
 			break;
 		case Parameter::TEAM_STATE:
 		case Parameter::TEXT_STRING:
+		case Parameter::AOC_RESOURCE_TYPE:	// AoC F1
 			pEdit->GetWindowText(txt);
 			comboText = AsciiString(txt);
 			m_parameter->friend_setString(comboText);

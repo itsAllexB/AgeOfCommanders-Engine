@@ -1698,6 +1698,18 @@ Object *DozerAIUpdate::construct( const ThingTemplate *what,
 
 	}
 
+	// AoC @hook F1: a cost with typed components must be affordable in full, on the player and the
+	// AI branch alike, or nothing is built (the stock refusal for a player short of cash). A cash-only
+	// cost, every cost while the feature is off, keeps the stock path: the AI builds and the
+	// withdrawal below clamps. Reads only; the cost withdrawn is computed after newObject, as stock does.
+	if( isRebuild == FALSE )
+	{
+		AoCCost cost;
+		what->calcAoCCost( owningPlayer, cost );
+		if( cost.hasNonCash() && !owningPlayer->getAoCBank()->canAfford( cost ) )
+			return nullptr;
+	}
+
 	//
 	// what will our initial status bits be, it is important to do this early
 	// before the hooks add/subtract power from a player are executed
@@ -1716,9 +1728,10 @@ Object *DozerAIUpdate::construct( const ThingTemplate *what,
 	// take the required money away from the player
 	if( isRebuild == FALSE )
 	{
-		Money *money = owningPlayer->getMoney();
-
-		money->withdraw( what->calcCostToBuild( owningPlayer ) );
+		// AoC @hook F1: the whole cost vector
+		AoCCost cost;
+		what->calcAoCCost( owningPlayer, cost );
+		owningPlayer->getAoCBank()->withdraw( cost );
 
 	}
 

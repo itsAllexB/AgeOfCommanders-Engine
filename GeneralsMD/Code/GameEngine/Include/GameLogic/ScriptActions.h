@@ -217,6 +217,8 @@ protected:
 
 	void doSetMoney(const AsciiString& playerName, Int money);		// Set a player's cash reserves to a specific value.
 	void doGiveMoney(const AsciiString& playerName, Int money);	// Add/subtract cash from a player's reserves.
+	void doAoCGiveResource(const AsciiString& playerName, const AsciiString& resourceName, Int amount);	// AoC F1: add/subtract one resource type.
+	void doAoCSetResource(const AsciiString& playerName, const AsciiString& resourceName, Int amount);		// AoC F1: set one resource type.
 
 	void updateNamedAttackPrioritySet(const AsciiString& unitName, const AsciiString& attackPrioritySet);
 	void updateTeamAttackPrioritySet(const AsciiString& teamName, const AsciiString& attackPrioritySet);
