@@ -29,6 +29,7 @@
 
 // USER INCLUDES //////////////////////////////////////////////////////////////////////////////////
 #include "PreRTS.h"	// This must go first in EVERY cpp file in the GameEngine
+#include "AoC/AoCSimRate.h"
 
 #include "Common/CRCDebug.h"
 #include "Common/Player.h"
@@ -39,6 +40,7 @@
 #include "GameLogic/AIPathfind.h"
 #include "GameLogic/Locomotor.h"
 #include "GameLogic/Module/AIUpdate.h"
+#include "GameLogic/Module/DeletionUpdate.h"
 #include "GameLogic/Module/ParachuteContain.h"
 #include "GameLogic/Module/PhysicsUpdate.h"
 #include "GameLogic/Object.h"
@@ -467,6 +469,18 @@ void ParachuteContain::onRemoving( Object *rider )
 	OpenContain::onRemoving(rider);
 
 	const ParachuteContainModuleData* d = getParachuteContainModuleData();
+
+	// AoC @hook 31/10/2026 At 60 Hz a short-lived payload can reach its DeletionUpdate lifetime while it is still
+	// parachuting (with the per-frame impulse corrections this branch shares with the owner's fork) and be destroyed
+	// before its delayed OCL runs after landing; an expired lifetime restarts before the rider is released, as the
+	// fork does (D11 F15). Nothing changes at 30 Hz.
+	if (AoCSimRate::frameMultiplier() > 1)
+	{
+		static NameKeyType key_DeletionUpdate = NAMEKEY( "DeletionUpdate" );
+		DeletionUpdate *dup = (DeletionUpdate*)rider->findUpdateModule( key_DeletionUpdate );
+		if (dup && dup->getDieFrame() <= TheGameLogic->getFrame())
+			dup->restartAoCLifetime();
+	}
 
 	// object is no longer held inside a transport
 	rider->clearDisabled( DISABLED_HELD );

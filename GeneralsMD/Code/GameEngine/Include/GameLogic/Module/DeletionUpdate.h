@@ -73,6 +73,8 @@ public:
 
 	void setLifetimeRange( UnsignedInt minFrames, UnsignedInt maxFrames );
 	UnsignedInt getDieFrame() { return m_dieFrame; }
+	// AoC @hook 31/10/2026 Restart the INI lifetime (MinLifetime to MaxLifetime from now); ParachuteContain at 60 Hz (D11 F15).
+	void restartAoCLifetime() { const DeletionUpdateModuleData *d = getDeletionUpdateModuleData(); setLifetimeRange( d->m_minFrames, d->m_maxFrames ); }
 
 	virtual UpdateSleepTime update() override;
 
