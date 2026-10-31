@@ -384,14 +384,18 @@ void PhysicsBehavior::applyRandomRotation()
 
 	Real randomModifier;
 
-	randomModifier = GameLogicRandomValue(-1.0f, 1.0f);
-	m_yawRate += getPhysicsBehaviorModuleData()->m_shockMaxYaw * randomModifier;
+	// AoC @hook 31/10/2026 ShockMaxYaw, ShockMaxPitch and ShockMaxRoll are radians per frame, like the OCL spin rates:
+	// divided by the frame multiplier so a shock spins as fast per second at 60 Hz (D11 F15). Exact identity at 30 Hz.
+	const Real aocSpinDivisor = (Real)AoCSimRate::frameMultiplier();
 
 	randomModifier = GameLogicRandomValue(-1.0f, 1.0f);
-	m_pitchRate += getPhysicsBehaviorModuleData()->m_shockMaxPitch * randomModifier;
+	m_yawRate += getPhysicsBehaviorModuleData()->m_shockMaxYaw / aocSpinDivisor * randomModifier;
 
 	randomModifier = GameLogicRandomValue(-1.0f, 1.0f);
-	m_rollRate += getPhysicsBehaviorModuleData()->m_shockMaxRoll * randomModifier;
+	m_pitchRate += getPhysicsBehaviorModuleData()->m_shockMaxPitch / aocSpinDivisor * randomModifier;
+
+	randomModifier = GameLogicRandomValue(-1.0f, 1.0f);
+	m_rollRate += getPhysicsBehaviorModuleData()->m_shockMaxRoll / aocSpinDivisor * randomModifier;
 
 #ifdef SLEEPY_PHYSICS
 	if (getFlag(IS_IN_UPDATE))
