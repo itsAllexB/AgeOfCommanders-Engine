@@ -19,17 +19,18 @@
 // AoCSimRate.h
 // Age of Commanders: selectable simulation rate, 30 or 60 logic frames per second (design D11 F15).
 //
-// One binary, rate chosen at startup: Options.ini "SimulationRate = 30|60" (default 60 when absent),
-// overridden by "-simrate <30|60>". The value is read before any INI loads, so every INI
-// millisecond-to-frame conversion uses it. LOGICFRAMES_PER_SECOND (Common/GameCommon.h) is a read of
-// AoCSimRate::framesPerSecond(); MAX_LOGICFRAMES_PER_SECOND is the constexpr bound for array sizes.
+// One binary, rate chosen at startup: Options.ini "SimulationRate = 30|60" (default 60 when absent; 30 for the
+// base Generals target, which has none of the 60 Hz corrections), overridden by "-simrate <30|60>". The value
+// is read before any INI loads, so every INI millisecond-to-frame conversion uses it. LOGICFRAMES_PER_SECOND
+// (Common/GameCommon.h) is a read of AoCSimRate::framesPerSecond(); MAX_LOGICFRAMES_PER_SECOND is the constexpr
+// bound for array sizes.
 //
 // Lockstep: the rate travels in the game options string (key "AF=", written only when the rate is not 30, so a
-// 30 Hz game stays readable by stock builds) next to the slot list, is recorded
-// in the replay header through that string, is written by GameLogic::xfer, and a mismatch is refused
-// at the LAN join, at replay playback and at save load. A stock options string without the key is a
-// 30 Hz game, which is what every stock replay is. At any rate but 30 the rate is also folded into the
-// executable CRC (exeCRCForRate), which the GameSpy and GeneralsOnline lobbies compare.
+// 30 Hz game stays readable by stock builds) next to the slot list, is recorded in the replay header through
+// that string, is written by GameLogic::xfer, and a mismatch is refused at the LAN join, at replay playback and
+// at save load. A stock options string without the key is a 30 Hz game, which is what every stock replay is.
+// At any rate but 30 the rate is also folded into the executable CRC (exeCRCForRate), which the GameSpy and
+// GeneralsOnline lobbies compare.
 //
 // Legacy frame: data that counts retail 30 Hz frames (particle keyframes, script counters) keeps that
 // cadence through legacyFrame() and isLegacyFrameStep(); at 30 Hz both are the identity.
@@ -46,7 +47,13 @@ namespace AoCSimRate
 	{
 		MinRate = 30,
 		MaxRate = MAX_LOGICFRAMES_PER_SECOND,
+#if RTS_GENERALS
+		// The base Generals target has none of the frame corrections, refusals or save field of the Zero Hour
+		// target, so it keeps the stock rate unless -simrate or Options.ini asks otherwise.
+		DefaultRate = 30,
+#else
 		DefaultRate = 60,
+#endif
 	};
 
 	// framesPerSecond() and frameMultiplier() are declared in Common/GameCommon.h so that
