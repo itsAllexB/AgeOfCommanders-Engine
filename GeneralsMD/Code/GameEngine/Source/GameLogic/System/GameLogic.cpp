@@ -5258,17 +5258,16 @@ void GameLogic::xfer( Xfer *xfer )
 
 	// AoC @feature 30/10/2026 Simulation rate of the saved game (D11 F15). The frame counts in every timer below are
 	// in frames of that rate, so a save loads only at the rate it was made at.
+	// AoC @hook 31/10/2026 A save from before version 12 has no rate field and was made at 30 Hz, so it is refused at 60 (D11 F15).
+	Int simRate = (version >= 12) ? LOGICFRAMES_PER_SECOND : BaseFps;
 	if (version >= 12)
-	{
-		Int simRate = LOGICFRAMES_PER_SECOND;
 		xfer->xferInt( &simRate );
-		if (xfer->getXferMode() == XFER_LOAD && simRate != LOGICFRAMES_PER_SECOND)
-		{
-			AoCSimRate::logMismatch("This saved game", simRate);
-			AoCSimRate::noteSaveMismatch(simRate);
-			AoCHarness::onSimRateRefusal();
-			throw XFER_INVALID_VERSION;
-		}
+	if (xfer->getXferMode() == XFER_LOAD && simRate != LOGICFRAMES_PER_SECOND)
+	{
+		AoCSimRate::logMismatch("This saved game", simRate);
+		AoCSimRate::noteSaveMismatch(simRate);
+		AoCHarness::onSimRateRefusal();
+		throw XFER_INVALID_VERSION;
 	}
 
 	//
