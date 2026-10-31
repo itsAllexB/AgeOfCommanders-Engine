@@ -785,7 +785,7 @@ void uiBank( UnsignedInt frame )
 		text += fmt(" cargo %u %s:%d/%d", (UnsignedInt)first->getID(), TheAoCRules ? TheAoCRules->getTypeName(gatherer->getCargoType()).str() : "Cash",
 			gatherer->getNumberBoxes(), gatherer->getMaxUnitsFor(gatherer->getCargoType()));
 #else
-		text += fmt(" cargo %u boxes:%d/%d", (UnsignedInt)first->getID(), gatherer->getNumberBoxes(), gatherer->getMaxBoxes());
+		text += fmt(" cargo %u boxes:%d", (UnsignedInt)first->getID(), gatherer->getNumberBoxes());	// base Generals: no typed cargo, no getMaxBoxes
 #endif
 	}
 	else
