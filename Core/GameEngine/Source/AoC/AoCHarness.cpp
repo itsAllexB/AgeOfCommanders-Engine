@@ -725,12 +725,29 @@ Int AoCHarness::parseAocUiScript( char *args[], int num )
 	}
 	static const char *const known[] = { "select", "press", "back", "log", "screenshot" };
 	char text[512];
-	while (fgets(text, sizeof(text), f) && s.uiLineCount < (Int)ARRAY_SIZE(s.uiLines))
+	Int lineNumber = 0;
+	Int dropped = 0;
+	while (fgets(text, sizeof(text), f))
 	{
-		HarnessState::UiLine &l = s.uiLines[s.uiLineCount];
+		++lineNumber;
+		int c = strchr(text, '\n') == nullptr ? fgetc(f) : '\n';
+		if (c != '\n' && c != EOF)
+		{
+			// longer than the buffer: skip the rest of it rather than read its tail as a line of its own
+			while ((c = fgetc(f)) != EOF && c != '\n') {}
+			logLine("-aocUiScript: line %d is longer than %d characters, skipped", lineNumber, (int)sizeof(text) - 1);
+			continue;
+		}
+		HarnessState::UiLine scratch;
+		HarnessState::UiLine &l = s.uiLineCount < (Int)ARRAY_SIZE(s.uiLines) ? s.uiLines[s.uiLineCount] : scratch;
 		l.arg[0] = '\0';
 		if (sscanf(text, "%u %11s %243[^\r\n]", &l.frame, l.cmd, l.arg) < 2)
 			continue;	// blank line or comment
+		if (s.uiLineCount >= (Int)ARRAY_SIZE(s.uiLines))
+		{
+			++dropped;
+			continue;
+		}
 		Bool ok = FALSE;
 		for (size_t k = 0; k < ARRAY_SIZE(known); ++k)
 			ok = ok || strcmp(l.cmd, known[k]) == 0;
@@ -740,6 +757,8 @@ Int AoCHarness::parseAocUiScript( char *args[], int num )
 			logLine("-aocUiScript: unknown command '%s' skipped (select, press, back, log, screenshot)", l.cmd);
 	}
 	fclose(f);
+	if (dropped > 0)
+		logLine("-aocUiScript: only %d lines are kept; %d more dropped", (int)ARRAY_SIZE(s.uiLines), dropped);
 	s.anyFlag = TRUE;
 	logLine("-aocUiScript: %d lines from '%s'", s.uiLineCount, args[1]);
 	return 2;
