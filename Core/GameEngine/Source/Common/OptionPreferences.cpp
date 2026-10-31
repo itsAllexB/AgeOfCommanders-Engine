@@ -978,7 +978,9 @@ Int OptionPreferences::getSkirmishTickRate() const
 		return LOGICFRAMES_PER_SECOND;
 	}
 
-	return clamp(5, rate, 120);
+	// AoC @hook 31/10/2026 A stored tick rate counts retail 30 Hz frames per second (30 = normal speed) and is scaled
+	// to the simulation rate; unscaled, a stored 30 would play a 60 Hz skirmish at half speed (D11 F15).
+	return clamp(5, rate, 120) * AoCSimRate::frameMultiplier();
 }
 
 // AoC @feature 30/10/2026 Selectable simulation rate (D11 F15). Validation is AoCSimRate::set's.

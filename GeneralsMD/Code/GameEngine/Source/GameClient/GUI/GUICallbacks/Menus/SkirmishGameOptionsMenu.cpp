@@ -356,7 +356,8 @@ Int SkirmishPreferences::getSkirmishTickRate() const
 		Int rate = atoi(it->second.str());
 		if (rate > 0)
 		{
-			return clamp(5, rate, 120);
+			// AoC @hook 31/10/2026 Stored in retail 30 Hz frames per second, scaled to the simulation rate (D11 F15).
+			return clamp(5, rate, 120) * AoCSimRate::frameMultiplier();
 		}
 	}
 
