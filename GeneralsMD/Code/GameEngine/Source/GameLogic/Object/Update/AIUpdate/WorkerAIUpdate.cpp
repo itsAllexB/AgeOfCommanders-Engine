@@ -209,7 +209,13 @@ UnsignedInt WorkerAIUpdate::getActionDelayForDock( Object *dock )
 	static const NameKeyType key_warehouseUpdate = NAMEKEY("SupplyWarehouseDockUpdate");
 	SupplyWarehouseDockUpdate *warehouseModule = (SupplyWarehouseDockUpdate*) dock->findUpdateModule( key_warehouseUpdate );
 	if (warehouseModule) {
-		return getWorkerAIUpdateModuleData()->m_warehouseDelay;
+		// AoC @hook 31/10/2026 Delay per unit of the node's type: AoCGatherDelay, else SupplyWarehouseActionDelay (D11 F2).
+		const Int nodeType = warehouseModule->getAoCResourceType();
+		const UnsignedInt delay = getWorkerAIUpdateModuleData()->m_aocCargo.gatherDelayFor( nodeType, getWorkerAIUpdateModuleData()->m_warehouseDelay );
+		// F13 multiplication point: the player's gather rate for this type (per mille; horde bonus, gather upgrades) scales
+		// the delay here. 1000 until F13 adds Player::m_aocGatherPerMille.
+		const Int gatherRatePerMille = 1000;
+		return AoCGather::scaleDelayByRate( delay, gatherRatePerMille );
 	}
 	static const NameKeyType key_centerUpdate = NAMEKEY("SupplyCenterDockUpdate");
 	SupplyCenterDockUpdate *centerModule = (SupplyCenterDockUpdate*) dock->findUpdateModule( key_centerUpdate );
@@ -566,6 +572,11 @@ void WorkerAIUpdate::privateDock( Object *dock, CommandSourceType cmdSource )
 		// we lack a UI way to click Warehouse and drag to center to set up a specific path, the
 		// practical realization has been made that you do not want separate memory.
 		m_preferredDock = dock->getID();
+
+		// AoC @hook 31/10/2026 The player's dock order on a node assigns its type; node searches then keep to it (D11 F2).
+		const Int nodeType = SupplyWarehouseDockUpdate::getAoCNodeTypeOf( dock );
+		if( nodeType >= 0 && canCarryResourceType( nodeType ) )
+			m_aocCargo.assignedType = nodeType;
 	}
 }
 
@@ -1118,12 +1129,14 @@ void WorkerAIUpdate::aiDoCommand(const AICommandParms* parms)
 
 	if (isClearingMines() && m_numberBoxes > 0 )
 	{
+		// AoC @hook 31/10/2026 Gather log line for the dropped load (D11 F2).
+		AoCGather::log( getObject()->getID(), "dropped %s %d reason clearing-mines", AoCGather::typeName( m_aocCargo.cargoType ), m_numberBoxes );
 		// if clearing mines, we drop any boxes we were carrying
 		m_numberBoxes = 0;
 		Drawable *draw = getObject()->getDrawable();
 		if( draw )
 		{
-			draw->updateDrawableSupplyStatus( getWorkerAIUpdateModuleData()->m_maxBoxesData, m_numberBoxes );
+			draw->updateDrawableSupplyStatus( getMaxUnitsFor( m_aocCargo.cargoType ), m_numberBoxes );	// AoC @hook 31/10/2026 Capacity of the type carried (D11 F2).
 		}
 	}
 
@@ -1150,7 +1163,7 @@ Bool WorkerAIUpdate::loseOneBox()
 	Drawable *draw = getObject()->getDrawable();
 	if( draw )
 	{
-		draw->updateDrawableSupplyStatus( getWorkerAIUpdateModuleData()->m_maxBoxesData, m_numberBoxes );
+		draw->updateDrawableSupplyStatus( getMaxUnitsFor( m_aocCargo.cargoType ), m_numberBoxes );	// AoC @hook 31/10/2026 Capacity of the type carried (D11 F2).
 	}
 
 	return TRUE;
@@ -1160,7 +1173,8 @@ Bool WorkerAIUpdate::loseOneBox()
 // ------------------------------------------------------------------------------------------------
 Bool WorkerAIUpdate::gainOneBox( Int remainingStock )
 {
-	if( getWorkerAIUpdateModuleData() && m_numberBoxes >= getWorkerAIUpdateModuleData()->m_maxBoxesData )
+	// AoC @hook 31/10/2026 Full at the capacity of the type carried; the dock set the type before this call (D11 F2).
+	if( getWorkerAIUpdateModuleData() && m_numberBoxes >= getMaxUnitsFor( m_aocCargo.cargoType ) )
 		return FALSE;
 
 	++m_numberBoxes;
@@ -1194,10 +1208,19 @@ Bool WorkerAIUpdate::gainOneBox( Int remainingStock )
 	Drawable *draw = getObject()->getDrawable();
 	if( draw )
 	{
-		draw->updateDrawableSupplyStatus( getWorkerAIUpdateModuleData()->m_maxBoxesData, m_numberBoxes );
+		draw->updateDrawableSupplyStatus( getMaxUnitsFor( m_aocCargo.cargoType ), m_numberBoxes );	// AoC @hook 31/10/2026 Capacity of the type carried (D11 F2).
 	}
 
 	return TRUE;
+}
+
+// ------------------------------------------------------------------------------------------------
+// AoC @feature F2: D9's census reads this. Idle means the supply brain is not fetching or delivering and the
+// AI has nothing else to do (no dozer task, no move).
+// ------------------------------------------------------------------------------------------------
+Bool WorkerAIUpdate::isIdleGatherer() const
+{
+	return !isCurrentlyFerryingSupplies() && isIdle();
 }
 
 // ------------------------------------------------------------------------------------------------
@@ -1506,6 +1529,8 @@ void WorkerAIUpdate::crc( Xfer *xfer )
 {
 	// extend base class
 	AIUpdateInterface::crc(xfer);
+
+	m_aocCargo.crc( xfer );	// AoC @hook 31/10/2026 Cargo type and assigned type, while resource types are defined (D11 F2).
 }
 
 // ------------------------------------------------------------------------------------------------
@@ -1513,15 +1538,14 @@ void WorkerAIUpdate::crc( Xfer *xfer )
 	* Version Info:
 	* 1: Initial version
 	* 2: TheSuperHackers @tweak Stubbjax 17/11/2025 Save the worker's previous task
+	* 3: AoC F2: cargo type and assigned type (D11 F2). Every build writes version 3, the retail-compatible one
+	*    included: retail cannot load these saves anyway, since GameLogic::xfer writes version 12 (F15)
 	*/
 // ------------------------------------------------------------------------------------------------
 void WorkerAIUpdate::xfer( Xfer *xfer )
 {
-#if RETAIL_COMPATIBLE_XFER_SAVE
-	XferVersion currentVersion = 1;
-#else
-	XferVersion currentVersion = 2;
-#endif
+	// AoC @hook 31/10/2026 Version 3 in every build (was 1 retail-compatible, 2 otherwise) for the typed cargo fields (D11 F2).
+	XferVersion currentVersion = 3;
   XferVersion version = currentVersion;
   xfer->xferVersion( &version, currentVersion );
 
@@ -1574,6 +1598,10 @@ void WorkerAIUpdate::xfer( Xfer *xfer )
 
 	//-------------------------- xfer Worker info
 	xfer->xferSnapshot(m_workerMachine);
+
+	// AoC @hook 31/10/2026 Typed cargo, mapped by type name on load (D11 F2).
+	if( version >= 3 )
+		m_aocCargo.xfer( xfer );
 
 }
 

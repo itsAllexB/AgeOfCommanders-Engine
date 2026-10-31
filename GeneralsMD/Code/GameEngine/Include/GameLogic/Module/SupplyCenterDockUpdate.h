@@ -30,6 +30,7 @@
 #pragma once
 
 // INCLUDES ///////////////////////////////////////////////////////////////////////////////////////
+#include "AoC/AoCGather.h"	// AoC @feature F2
 #include "Common/INI.h"
 #include "Common/GameMemory.h"
 #include "GameLogic/Module/DockUpdate.h"
@@ -43,6 +44,8 @@ public:
 	static void buildFieldParse(MultiIniFieldParse& p);
 
 	UnsignedInt m_grantTemporaryStealthFrames;
+	UnsignedInt m_aocAcceptsMask;	///< AoC @feature F2: AoCAccepts, one bit per type taken (default cash only); template data
+	Int m_aocValuePerUnit;				///< AoC @feature F2: AoCValuePerUnit, bank units per carried unit of every type but cash (default 1)
 };
 
 // ------------------------------------------------------------------------------------------------
@@ -61,6 +64,9 @@ public:
 	virtual Bool action( Object* docker, Object *drone = nullptr ) override;	///<For me, this means taking boxes and turning them into money for my ownerplayer
 
 	virtual UpdateSleepTime update() override;
+
+	// AoC @hook 31/10/2026 Typed drop-offs (D11 F2).
+	Bool aocAccepts( Int type ) const { return (getSupplyCenterDockUpdateModuleData()->m_aocAcceptsMask & AoCGather::typeBit( type )) != 0; }
 
 protected:
 

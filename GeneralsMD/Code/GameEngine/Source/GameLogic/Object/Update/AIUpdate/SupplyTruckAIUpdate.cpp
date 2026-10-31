@@ -141,7 +141,8 @@ Bool SupplyTruckAIUpdate::loseOneBox()
 	Drawable *draw = getObject()->getDrawable();
 	if( draw )
 	{
-		draw->updateDrawableSupplyStatus( getSupplyTruckAIUpdateModuleData()->m_maxBoxesData, m_numberBoxes );
+		// AoC @hook 31/10/2026 The capacity of the type carried, which is MaxBoxes unless AoCMaxUnits names the type (D11 F2).
+		draw->updateDrawableSupplyStatus( getMaxUnitsFor( m_aocCargo.cargoType ), m_numberBoxes );
 	}
 
 	return TRUE;
@@ -150,7 +151,8 @@ Bool SupplyTruckAIUpdate::loseOneBox()
 //-------------------------------------------------------------------------------------------------
 Bool SupplyTruckAIUpdate::gainOneBox( Int remainingStock )
 {
-	if( getSupplyTruckAIUpdateModuleData() && m_numberBoxes >= getSupplyTruckAIUpdateModuleData()->m_maxBoxesData )
+	// AoC @hook 31/10/2026 Full at the capacity of the type carried; the dock set the type before this call (D11 F2).
+	if( getSupplyTruckAIUpdateModuleData() && m_numberBoxes >= getMaxUnitsFor( m_aocCargo.cargoType ) )
 		return FALSE;
 	++m_numberBoxes;
 
@@ -183,10 +185,18 @@ Bool SupplyTruckAIUpdate::gainOneBox( Int remainingStock )
 	Drawable *draw = getObject()->getDrawable();
 	if( draw )
 	{
-		draw->updateDrawableSupplyStatus( getSupplyTruckAIUpdateModuleData()->m_maxBoxesData, m_numberBoxes );
+		draw->updateDrawableSupplyStatus( getMaxUnitsFor( m_aocCargo.cargoType ), m_numberBoxes );	// AoC @hook 31/10/2026 Capacity of the type carried (D11 F2).
 	}
 
 	return TRUE;
+}
+
+//-------------------------------------------------------------------------------------------------
+// AoC @feature F2: D9's census reads this. Idle means the supply brain is not fetching or delivering and the
+// AI has nothing else to do.
+Bool SupplyTruckAIUpdate::isIdleGatherer() const
+{
+	return !isCurrentlyFerryingSupplies() && isIdle();
 }
 
 //----------------------------------------------------------------------------------------
@@ -212,6 +222,11 @@ void SupplyTruckAIUpdate::privateDock( Object *dock, CommandSourceType cmdSource
 		// we lack a UI way to click Warehouse and drag to center to set up a specific path, the
 		// practical realization has been made that you do not want separate memory.
 		m_preferredDock = dock->getID();
+
+		// AoC @hook 31/10/2026 The player's dock order on a node assigns its type; node searches then keep to it (D11 F2).
+		const Int nodeType = SupplyWarehouseDockUpdate::getAoCNodeTypeOf( dock );
+		if( nodeType >= 0 && canCarryResourceType( nodeType ) )
+			m_aocCargo.assignedType = nodeType;
 	}
 }
 
@@ -222,7 +237,13 @@ UnsignedInt SupplyTruckAIUpdate::getActionDelayForDock( Object *dock )
 	static const NameKeyType key_warehouseUpdate = NAMEKEY("SupplyWarehouseDockUpdate");
 	SupplyWarehouseDockUpdate *warehouseModule = (SupplyWarehouseDockUpdate*) dock->findUpdateModule( key_warehouseUpdate );
 	if (warehouseModule) {
-		return getSupplyTruckAIUpdateModuleData()->m_warehouseDelay;
+		// AoC @hook 31/10/2026 Delay per unit of the node's type: AoCGatherDelay, else SupplyWarehouseActionDelay (D11 F2).
+		const Int nodeType = warehouseModule->getAoCResourceType();
+		const UnsignedInt delay = getSupplyTruckAIUpdateModuleData()->m_aocCargo.gatherDelayFor( nodeType, getSupplyTruckAIUpdateModuleData()->m_warehouseDelay );
+		// F13 multiplication point: the player's gather rate for this type (per mille; horde bonus, gather upgrades) scales
+		// the delay here. 1000 until F13 adds Player::m_aocGatherPerMille.
+		const Int gatherRatePerMille = 1000;
+		return AoCGather::scaleDelayByRate( delay, gatherRatePerMille );
 	}
 	static const NameKeyType key_centerUpdate = NAMEKEY("SupplyCenterDockUpdate");
 	SupplyCenterDockUpdate *centerModule = (SupplyCenterDockUpdate*) dock->findUpdateModule( key_centerUpdate );
@@ -251,16 +272,19 @@ void SupplyTruckAIUpdate::crc( Xfer *xfer )
 {
 	// extend base class
 	AIUpdateInterface::crc(xfer);
+
+	m_aocCargo.crc( xfer );	// AoC @hook 31/10/2026 Cargo type and assigned type, while resource types are defined (D11 F2).
 }
 
 // ------------------------------------------------------------------------------------------------
 /** Xfer method
 	* Version Info:
-	* 1: Initial version */
+	* 1: Initial version
+	* 2: AoC F2: cargo type and assigned type (D11 F2); the Chinook saves them through this function */
 // ------------------------------------------------------------------------------------------------
 void SupplyTruckAIUpdate::xfer( Xfer *xfer )
 {
-  XferVersion currentVersion = 1;
+  XferVersion currentVersion = 2;	// AoC @hook 31/10/2026 Version 2 adds the typed cargo fields (D11 F2).
   XferVersion version = currentVersion;
   xfer->xferVersion( &version, currentVersion );
 
@@ -271,6 +295,10 @@ void SupplyTruckAIUpdate::xfer( Xfer *xfer )
 	xfer->xferObjectID(&m_preferredDock);
 	xfer->xferInt(&m_numberBoxes);
 	xfer->xferBool(&m_forcePending);
+
+	// AoC @hook 31/10/2026 Typed cargo, mapped by type name on load (D11 F2).
+	if( version >= 2 )
+		m_aocCargo.xfer( xfer );
 
 }
 

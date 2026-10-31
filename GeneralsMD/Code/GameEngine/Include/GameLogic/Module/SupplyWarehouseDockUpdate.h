@@ -34,6 +34,8 @@
 #include "Common/GameMemory.h"
 #include "GameLogic/Module/DockUpdate.h"
 
+class SupplyTruckAIInterface;	// AoC @feature F2
+
 // ------------------------------------------------------------------------------------------------
 // ------------------------------------------------------------------------------------------------
 class SupplyWarehouseDockUpdateModuleData : public DockUpdateModuleData
@@ -46,6 +48,8 @@ public:
 
 	Int m_startingBoxesData;
 	Bool m_deleteWhenEmpty;
+	Int m_aocResourceType;		///< AoC @feature F2: AoCResourceType, the node's type (default cash); template data, not saved
+	Bool m_aocKillWhenEmpty;	///< AoC @feature F2: AoCKillWhenEmpty, kill() at zero so Die modules run (default No)
 };
 
 //-------------------------------------------------------------------------------------------------
@@ -69,7 +73,16 @@ public:
 	void setCashValue( Int cashValue );
 
 	virtual void onObjectCreated() override;
+
+	// AoC @hook 31/10/2026 Typed nodes (D11 F2).
+	Int getAoCResourceType() const { return getSupplyWarehouseDockUpdateModuleData()->m_aocResourceType; }
+	/// The node type of an object with this module, -1 for any other object.
+	static Int getAoCNodeTypeOf( const Object *obj );
+
 protected:
+
+	/// AoC F2: a type the docker cannot carry is refused; a load of another type is dropped first (D2 3.1). FALSE refuses.
+	Bool aocPreparePickup( Object *docker, SupplyTruckAIInterface *ai );
 
 
 	Int m_boxesStored;

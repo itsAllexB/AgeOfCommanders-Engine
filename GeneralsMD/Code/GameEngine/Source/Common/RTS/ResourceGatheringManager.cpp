@@ -136,6 +136,19 @@ static Real computeRelativeCost( Object *queryObject, Object *destObject, Real *
 	return distSquared;
 }
 
+// AoC @feature F2: the node search's type rule (AoCGather::wantsNodeType): an assigned gatherer wants its assigned
+// type, an unassigned one any type it may carry. An object without a node module never matches, as the stock
+// legality check (computeRelativeCost) would refuse it too. The drop-off search needs no line of its own: its
+// legality check, canTransferSuppliesAt, refuses a drop-off that does not take the type carried.
+static Bool aocWantsNode( const SupplyTruckAIInterface *supplyTruckAI, const Object *warehouse )
+{
+	const Int nodeType = SupplyWarehouseDockUpdate::getAoCNodeTypeOf( warehouse );
+	if( nodeType < 0 )
+		return FALSE;
+	const UnsignedInt cargoMask = supplyTruckAI->canCarryResourceType( nodeType ) ? AoCGather::typeBit( nodeType ) : 0;
+	return AoCGather::wantsNodeType( nodeType, supplyTruckAI->getAssignedResourceType(), cargoMask );
+}
+
 Object *ResourceGatheringManager::findBestSupplyWarehouse( Object *queryObject )
 {
 	Object *bestWarehouse = nullptr;
@@ -155,7 +168,8 @@ Object *ResourceGatheringManager::findBestSupplyWarehouse( Object *queryObject )
 			static const NameKeyType key_warehouseUpdate = NAMEKEY("SupplyWarehouseDockUpdate");
 			SupplyWarehouseDockUpdate *warehouseModule = (SupplyWarehouseDockUpdate*)dock->findUpdateModule( key_warehouseUpdate );
 			//If remotely okay, let User win.
-			if( warehouseModule && computeRelativeCost( queryObject, dock, nullptr ) != FLT_MAX )
+			// AoC @hook 31/10/2026 ...and the node is of the type the gatherer wants (D11 F2).
+			if( warehouseModule && aocWantsNode( supplyTruckAI, dock ) && computeRelativeCost( queryObject, dock, nullptr ) != FLT_MAX )
 				return dock;
 		}
 		// Please note, there is not a separate Warehouse and Center memory by Design.  Because
@@ -182,6 +196,13 @@ Object *ResourceGatheringManager::findBestSupplyWarehouse( Object *queryObject )
 		}
 		else
 		{
+			// AoC @hook 31/10/2026 Skip nodes of a type the gatherer does not want: its assigned type, else any type it may carry (D11 F2).
+			if( supplyTruckAI && !aocWantsNode( supplyTruckAI, currentWarehouse ) )
+			{
+				iterator++;
+				continue;
+			}
+
 			Real distanceSquared;
 			Real currentCost = computeRelativeCost( queryObject, currentWarehouse, &distanceSquared );
 			if( (currentCost < bestCost) && (distanceSquared < maxDistanceSquared) )

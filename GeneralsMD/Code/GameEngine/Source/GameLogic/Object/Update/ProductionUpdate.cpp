@@ -58,6 +58,52 @@
 #include "GameLogic/Object.h"
 #include "GameLogic/ScriptEngine.h"
 
+#include "AoC/AoCRules.h"														// AoC @feature F2
+#include "Common/ActionManager.h"										// AoC @feature F2
+#include "GameLogic/AIPathfind.h"										// AoC @feature F2
+#include "GameLogic/PartitionManager.h"							// AoC @feature F2
+#include "GameLogic/Module/AIUpdate.h"							// AoC @feature F2
+#include "GameLogic/Module/SupplyTruckAIUpdate.h"		// AoC @feature F2
+#include "GameLogic/Module/SupplyWarehouseDockUpdate.h"	// AoC @feature F2
+
+
+// AoC @feature F2: a rally point on a node sends a new gatherer to dock there (D11 2.2, D5, D6) ------------------
+namespace
+{
+class AoCPartitionFilterDockableNode : public PartitionFilter
+{
+public:
+	AoCPartitionFilterDockableNode( Object *gatherer ) : m_gatherer( gatherer ) {}
+	virtual Bool allow( Object *objOther ) override
+	{
+		return SupplyWarehouseDockUpdate::getAoCNodeTypeOf( objOther ) >= 0 && TheActionManager->canTransferSuppliesAt( m_gatherer, objOther );
+	}
+#if defined(RTS_DEBUG)
+	virtual const char* debugGetName() override { return "AoCPartitionFilterDockableNode"; }
+#endif
+private:
+	Object *m_gatherer;
+};
+
+// Only while resource types are defined, so the stock game keeps its rally behaviour. The order counts as the
+// player's when a human set the rally point, so it assigns the node's type (privateDock).
+void aocDockAtRallyNode( Object *creationBuilding, ExitInterface *exitInterface, Object *newObj )
+{
+	if( !AoCRules::enabled() || newObj == nullptr || newObj->getAI() == nullptr || newObj->getAI()->getSupplyTruckAIInterface() == nullptr )
+		return;
+	const Coord3D *rally = exitInterface->getRallyPoint();
+	if( rally == nullptr )
+		return;
+	AoCPartitionFilterDockableNode filterNode( newObj );
+	PartitionFilter *filters[] = { &filterNode, nullptr };
+	Object *node = ThePartitionManager->getClosestObject( rally, PATHFIND_CELL_SIZE_F, FROM_BOUNDINGSPHERE_2D, filters );
+	if( node == nullptr )
+		return;
+	const Player *owner = creationBuilding->getControllingPlayer();
+	const CommandSourceType source = (owner && owner->getPlayerType() == PLAYER_HUMAN) ? CMD_FROM_PLAYER : CMD_FROM_AI;
+	newObj->getAI()->aiDock( node, source );
+}
+}
 
 // PUBLIC /////////////////////////////////////////////////////////////////////////////////////////
 
@@ -790,6 +836,7 @@ UpdateSleepTime ProductionUpdate::update()
 
 							// call the exit interface to do the rally point and position stuff
 							exitInterface->exitObjectViaDoor( newObj, exitDoor );
+							aocDockAtRallyNode( creationBuilding, exitInterface, newObj );	// AoC @hook 31/10/2026 A rally point on a node sends a new gatherer to gather there (D11 F2).
 
 							// AoC @hook 31/10/2026 One unit of the batch is out of the door: a transport with a priced initial payload creates it here (stock waits for
 							// the transport's first update), so the unit and its passengers move from reserved to used in one go (D11 F4).
