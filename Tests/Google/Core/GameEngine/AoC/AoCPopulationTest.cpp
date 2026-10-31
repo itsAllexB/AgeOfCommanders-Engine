@@ -27,6 +27,7 @@
 #include <gtest/gtest.h>
 
 #include "AoC/AoCPopulation.h"
+#include "Common/Debug.h"
 #include "Common/Module.h"
 #include "Common/XferCRC.h"
 #include "Common/XferLoad.h"
@@ -299,6 +300,54 @@ TEST_F(AoCPopulationTest, CrcIsSilentWhileInactiveAndCoversEveryCounter)
 	AoCPopulation::setDetachedLobbyCap(12);
 	EXPECT_NE(crcOf(m_pop), reservedCRC) << "the lobby cap enters the CRC";
 }
+
+// --- the load recount (review of PR #5, nit 8) ---------------------------------------------------------
+// Player::loadPostProcess -> recountFromOwner counts the owner's objects and applies applyRecount. The hook paths
+// themselves (team joins, the construction bit, death) need Objects, and a Player needs TheNameKeyGenerator and the
+// rank store in Player::init, so the game runs cover those; these tests cover the decision the recount applies.
+
+TEST_F(AoCPopulationTest, RecountKeepsTheSavedReservation)
+{
+	m_pop.addCapacity(20);
+	m_pop.addUsed(9);
+	m_pop.reserve(3);
+	const std::string path = ::testing::TempDir() + "AoCPopulationRecount.sav";
+	saveTo(path, m_pop);
+
+	AoCPopulation loaded;
+	loaded.init(nullptr);
+	loadFrom(path, loaded);
+	loaded.applyRecount(9, 20, 5);	// the objects say 9 and 20; the queues would say 5
+	EXPECT_EQ(loaded.getUsed(), 9);
+	EXPECT_EQ(loaded.getCapacity(), 20);
+	EXPECT_EQ(loaded.getReserved(), 3) << "a save with the population block keeps its reservation";
+
+	loaded.applyRecount(9, 20, 5);	// a later recount, with no load in between
+	EXPECT_EQ(loaded.getReserved(), 5) << "only the recount right after a load keeps the saved value";
+	remove(path.c_str());
+}
+
+TEST_F(AoCPopulationTest, RecountWithoutTheBlockTakesTheQueues)
+{
+	// A save from before F4 (Player::xfer v9) has no population block: Player::xfer resets, nothing is loaded.
+	m_pop.reset();
+	m_pop.applyRecount(12, 10, 4);
+	EXPECT_EQ(m_pop.getUsed(), 12);
+	EXPECT_EQ(m_pop.getCapacity(), 10);
+	EXPECT_EQ(m_pop.getReserved(), 4) << "reserved comes from the production queues";
+	EXPECT_TRUE(m_pop.isAtCap()) << "set by the recount, without an edge report";
+}
+
+#if !defined(DEBUG_CRASHING)	// releasing past the reservation is a DEBUG_CRASH; release builds clamp
+TEST_F(AoCPopulationTest, ReleasePastTheReservationStopsAtZero)
+{
+	m_pop.addCapacity(10);
+	m_pop.reserve(2);
+	m_pop.release(5);
+	EXPECT_EQ(m_pop.getReserved(), 0) << "reserved never goes below zero";
+	EXPECT_EQ(m_pop.getHeadroom(), 10);
+}
+#endif
 
 // --- a produced transport's initial payload counts with it (review of PR #5, finding 1) ---------------
 

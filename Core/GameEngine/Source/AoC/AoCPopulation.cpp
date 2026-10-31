@@ -361,10 +361,16 @@ void AoCPopulation::recountFromOwner()
 	count.capacity = 0;
 	count.reserved = 0;
 	m_owner->iterateObjects(countPopulation, &count);
+	applyRecount(count.used, count.capacity, count.reserved);
+}
+
+// ------------------------------------------------------------------------------------------------
+void AoCPopulation::applyRecount( Int used, Int capacity, Int queuedReserved )
+{
 	if (!m_reservedLoaded)
-		m_reserved = count.reserved;
+		m_reserved = queuedReserved;
 	m_reservedLoaded = FALSE;
-	recount(count.used, count.capacity);
+	recount(used, capacity);
 }
 
 // ------------------------------------------------------------------------------------------------

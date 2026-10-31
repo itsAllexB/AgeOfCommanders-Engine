@@ -96,6 +96,9 @@ public:
 	void recountFromOwner();
 	/// The same with explicit values (tests).
 	void recount( Int used, Int capacity );
+	/// The decision recountFromOwner applies to what it counted: used and capacity always; reserved only when the load did
+	/// not read it (a save without the population block), else the saved value stays.
+	void applyRecount( Int used, Int capacity, Int queuedReserved );
 
 	Int getUsed() const { return m_used; }
 	Int getCapacity() const { return m_capacity; }
