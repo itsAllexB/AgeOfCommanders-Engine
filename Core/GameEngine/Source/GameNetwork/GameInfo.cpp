@@ -1000,15 +1000,22 @@ static AsciiString buildGameInfoAsciiString(const GameInfo& game, const AsciiStr
 	}
 
 	AsciiString optionsString;
-	// AoC @feature 30/10/2026 "AF=" carries the simulation rate next to the CRC interval (D11 F15); stock parsers ignore unknown keys.
 #if RTS_GENERALS
-	optionsString.format("M=%2.2x%s;MC=%X;MS=%d;SD=%d;C=%d;AF=%d;", game.getMapContentsMask(), percentEncodeMapName(newMapName).str(),
-		game.getMapCRC(), game.getMapSize(), game.getSeed(), game.getCRCInterval(), game.getAoCSimRate());
+	optionsString.format("M=%2.2x%s;MC=%X;MS=%d;SD=%d;C=%d;", game.getMapContentsMask(), percentEncodeMapName(newMapName).str(),
+		game.getMapCRC(), game.getMapSize(), game.getSeed(), game.getCRCInterval());
 #else
-	optionsString.format("US=%d;M=%2.2x%s;MC=%X;MS=%d;SD=%d;C=%d;SR=%u;SC=%u;O=%c;AF=%d;", game.getUseStats(), game.getMapContentsMask(), percentEncodeMapName(newMapName).str(),
+	optionsString.format("US=%d;M=%2.2x%s;MC=%X;MS=%d;SD=%d;C=%d;SR=%u;SC=%u;O=%c;", game.getUseStats(), game.getMapContentsMask(), percentEncodeMapName(newMapName).str(),
 		game.getMapCRC(), game.getMapSize(), game.getSeed(), game.getCRCInterval(), game.getSuperweaponRestriction(),
-		game.getStartingCash().countMoney(), game.oldFactionsOnly() ? 'Y' : 'N', game.getAoCSimRate() );
+		game.getStartingCash().countMoney(), game.oldFactionsOnly() ? 'Y' : 'N' );
 #endif
+	// AoC @hook 31/10/2026 "AF=" carries a simulation rate other than 30 Hz (D11 F15). A stock parser rejects the whole
+	// string on an unknown key, so a 30 Hz game writes none and stays readable by stock builds; no key means 30 Hz.
+	if (game.getAoCSimRate() != BaseFps)
+	{
+		AsciiString aocSimRate;
+		aocSimRate.format("AF=%d;", game.getAoCSimRate());
+		optionsString.concat(aocSimRate);
+	}
 
 	//add player info for each slot
 	optionsString.concat(slotListID);
@@ -1323,7 +1330,8 @@ Bool ParseAsciiStringToGameInfo(GameInfo *game, AsciiString options)
     }
 		else if (key.compare("AF") == 0)
 		{
-			// AoC @feature 30/10/2026 simulation rate (D11 F15)
+			// AoC @feature 30/10/2026 simulation rate (D11 F15); only a rate other than 30 is written, but an explicit
+			// "AF=30" (strings from earlier F15 builds) is still accepted
 			simRate = atoi(val.str());
 		}
 		else if (key.getLength() == 1 && *key.str() == slotListID)

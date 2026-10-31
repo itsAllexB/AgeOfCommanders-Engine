@@ -234,7 +234,7 @@ public:
   inline void setOldFactionsOnly( Bool oldFactionsOnly );
 
 	// AoC @feature 30/10/2026 Simulation rate of this game, 30 or 60 Hz (D11 F15). Travels in the options string as
-	// "AF=<rate>;" next to the slot list; a string without the key is a 30 Hz (stock) game.
+	// "AF=<rate>;" next to the slot list, written only when the rate is not 30; a string without the key is a 30 Hz (stock) game.
 	Int getAoCSimRate() const { return m_aocSimRate; }
 	void setAoCSimRate( Int rate ) { m_aocSimRate = rate; }
 

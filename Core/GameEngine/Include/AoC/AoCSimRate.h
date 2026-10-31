@@ -24,7 +24,8 @@
 // millisecond-to-frame conversion uses it. LOGICFRAMES_PER_SECOND (Common/GameCommon.h) is a read of
 // AoCSimRate::framesPerSecond(); MAX_LOGICFRAMES_PER_SECOND is the constexpr bound for array sizes.
 //
-// Lockstep: the rate travels in the game options string (key "AF=") next to the slot list, is recorded
+// Lockstep: the rate travels in the game options string (key "AF=", written only when the rate is not 30, so a
+// 30 Hz game stays readable by stock builds) next to the slot list, is recorded
 // in the replay header through that string, is written by GameLogic::xfer, and a mismatch is refused
 // at the LAN join, at replay playback and at save load. A stock options string without the key is a
 // 30 Hz game, which is what every stock replay is. At any rate but 30 the rate is also folded into the
