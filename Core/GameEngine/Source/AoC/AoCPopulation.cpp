@@ -151,13 +151,28 @@ Int AoCPopulation::queuedPopulationOf( Object *obj ) const
 }
 
 // ------------------------------------------------------------------------------------------------
+/*static*/ Int AoCPopulation::livingCostOf( const Object *obj )
+{
+	if (obj == nullptr || obj->isAoCPopulationFreed())
+		return 0;
+	return costOf(obj->getTemplate());
+}
+
+// ------------------------------------------------------------------------------------------------
+/*static*/ Int AoCPopulation::livingCapacityOf( const Object *obj )
+{
+	if (obj == nullptr || obj->isAoCPopulationFreed() || obj->getStatusBits().test(OBJECT_STATUS_UNDER_CONSTRUCTION))
+		return 0;
+	return capacityOf(obj->getTemplate());
+}
+
+// ------------------------------------------------------------------------------------------------
 void AoCPopulation::objectEnteringInfluence( Object *obj )
 {
 	if (obj == nullptr)
 		return;
-	const ThingTemplate *tmpl = obj->getTemplate();
-	const Int cost = costOf(tmpl);
-	const Int capacity = obj->getStatusBits().test(OBJECT_STATUS_UNDER_CONSTRUCTION) ? 0 : capacityOf(tmpl);
+	const Int cost = livingCostOf(obj);
+	const Int capacity = livingCapacityOf(obj);
 	// A factory that changes hands with units in its queue takes their reservation along (captures cancel
 	// the queue first, so this covers script transfers). Nothing is queued while an object is created.
 	const Int queued = queuedPopulationOf(obj);
@@ -175,9 +190,8 @@ void AoCPopulation::objectLeavingInfluence( Object *obj )
 {
 	if (obj == nullptr)
 		return;
-	const ThingTemplate *tmpl = obj->getTemplate();
-	const Int cost = costOf(tmpl);
-	const Int capacity = obj->getStatusBits().test(OBJECT_STATUS_UNDER_CONSTRUCTION) ? 0 : capacityOf(tmpl);
+	const Int cost = livingCostOf(obj);
+	const Int capacity = livingCapacityOf(obj);
 	// Death, sale and capture empty the queue before the object leaves; an object removed without dying
 	// (a script, a replacement upgrade) still frees what its queue reserved. Nothing to look for when the
 	// player has nothing reserved.
@@ -231,12 +245,31 @@ void AoCPopulation::teamPrototypeEntering( TeamPrototype *proto )
 // ------------------------------------------------------------------------------------------------
 void AoCPopulation::objectConstructionChange( const Object *obj, Bool completed )
 {
-	if (obj == nullptr)
+	if (obj == nullptr || obj->isAoCPopulationFreed())
 		return;
 	const Int capacity = capacityOf(obj->getTemplate());
 	if (capacity == 0)
 		return;
 	addCapacity(completed ? capacity : -capacity);
+}
+
+// ------------------------------------------------------------------------------------------------
+/** Review of PR #5, finding 3 (decision: free the slot at death). Stock removes a dead unit's body
+	* seconds later (DestructionDelay), and the leave at removal used to be when its population went. */
+// ------------------------------------------------------------------------------------------------
+void AoCPopulation::objectDying( Object *obj )
+{
+	if (obj == nullptr || obj->isAoCPopulationFreed())
+		return;
+	const Int cost = livingCostOf(obj);
+	const Int capacity = livingCapacityOf(obj);
+	if (cost == 0 && capacity == 0)
+		return;	// every stock object: no marker, nothing in the CRC
+	obj->friend_setAoCPopulationFreed();
+	m_used -= cost;
+	m_capacity -= capacity;
+	DEBUG_ASSERTCRASH(m_used >= 0 && m_capacity >= 0, ("AoCPopulation: used %d or capacity %d went below zero", m_used, m_capacity));
+	refreshBlockState();
 }
 
 // ------------------------------------------------------------------------------------------------
@@ -296,10 +329,8 @@ void AoCPopulation::recount( Int used, Int capacity )
 static void countPopulation( Object *obj, void *userData )
 {
 	PopulationCount *count = (PopulationCount *)userData;
-	const ThingTemplate *tmpl = obj->getTemplate();
-	count->used += AoCPopulation::costOf(tmpl);
-	if (!obj->getStatusBits().test(OBJECT_STATUS_UNDER_CONSTRUCTION))
-		count->capacity += AoCPopulation::capacityOf(tmpl);
+	count->used += AoCPopulation::livingCostOf(obj);
+	count->capacity += AoCPopulation::livingCapacityOf(obj);
 	if (obj->areModulesReady())
 	{
 		ProductionUpdateInterface *pu = obj->getProductionUpdateInterface();

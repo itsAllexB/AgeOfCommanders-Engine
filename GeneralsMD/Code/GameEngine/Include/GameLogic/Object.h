@@ -286,6 +286,11 @@ public:
 	//yet, and there's stuff being done inside of setTeam() that cares.
 	Bool areModulesReady() const { return m_modulesReady; }
 
+	/// AoC @feature 31/10/2026 The object's population and housing left its owner when it died (Object::onDie), not when its body is
+	/// removed; saved, so the leave at removal does not take them a second time (D11 F4).
+	Bool isAoCPopulationFreed() const { return m_aocPopulationFreed; }
+	void friend_setAoCPopulationFreed() { m_aocPopulationFreed = TRUE; }
+
 	BehaviorModule** getBehaviorModules() const { return m_behaviors; }
 
 	BodyModuleInterface* getBodyModule() const { return m_body; }
@@ -812,6 +817,7 @@ private:
 	// --------- BYTE-SIZED THINGS GO HERE
 	Bool													m_isSelectable;
 	Bool													m_modulesReady;
+	Bool													m_aocPopulationFreed;			///< AoC @feature 31/10/2026 Population and housing freed at death; in xfer and crc (D11 F4).
 #if defined(RTS_DEBUG)
 	Bool													m_hasDiedAlready;
 #endif

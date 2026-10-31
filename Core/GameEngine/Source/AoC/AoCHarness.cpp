@@ -312,7 +312,7 @@ const char *canMakeName( Int canMakeType )
 void populationByTemplate( Object *obj, void *userData )
 {
 	std::vector< std::pair<std::string, Int> > *list = (std::vector< std::pair<std::string, Int> > *)userData;
-	const Int cost = AoCPopulation::costOf(obj->getTemplate());
+	const Int cost = AoCPopulation::livingCostOf(obj);	// 0 for the dead, whose slot is already free
 	if (cost == 0)
 		return;
 	const std::string name = obj->getTemplate()->getName().str();

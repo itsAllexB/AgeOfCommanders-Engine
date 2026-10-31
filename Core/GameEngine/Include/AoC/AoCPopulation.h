@@ -75,6 +75,12 @@ public:
 	void objectLeavingInfluence( Object *obj );
 	/// The object's OBJECT_STATUS_UNDER_CONSTRUCTION bit changed while it belongs to the player.
 	void objectConstructionChange( const Object *obj, Bool completed );
+	/// Object::onDie: the object's population and its housing leave now, and the object is marked so that the leave at
+	/// removal (and any join, bit change or recount until then) counts it as 0.
+	void objectDying( Object *obj );
+	/// What an object counts now: 0 once its population was freed at death.
+	static Int livingCostOf( const Object *obj );
+	static Int livingCapacityOf( const Object *obj );	///< also 0 while under construction
 	/// A team prototype changes owner without its members changing team (Team::setControllingPlayer): every member of
 	/// every instance leaves the old owner before the switch and enters the new one after it.
 	void teamPrototypeLeaving( TeamPrototype *proto );
