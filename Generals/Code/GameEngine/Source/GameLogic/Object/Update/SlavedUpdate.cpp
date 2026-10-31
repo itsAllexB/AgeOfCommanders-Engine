@@ -31,6 +31,7 @@
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 
 #include "PreRTS.h"	// This must go first in EVERY cpp file in the GameEngine
+#include "AoC/AoCSimRate.h"
 
 #include "Common/RandomValue.h"
 #include "Common/Xfer.h"
@@ -120,7 +121,7 @@ UpdateSleepTime SlavedUpdate::update()
 		{
 			return UPDATE_SLEEP_NONE;
 		}
-		m_framesToWait = SLAVED_UPDATE_RATE;
+		m_framesToWait = AoCSimRate::slavedUpdateFrames();	// AoC @hook 31/10/2026 runtime rate (D11 F15)
 	}
 
 	if( m_slaver == INVALID_ID )
@@ -517,7 +518,7 @@ void SlavedUpdate::endRepair()
 	{
 		//Remove the state so we can start using the update timer again.
 		m_repairState = REPAIRSTATE_NONE;
-		m_framesToWait = SLAVED_UPDATE_RATE;
+		m_framesToWait = AoCSimRate::slavedUpdateFrames();	// AoC @hook 31/10/2026 runtime rate (D11 F15)
 		m_repairing = false;
 
 		//Set the packing state and clear any other states (to force the arm to fully retract)

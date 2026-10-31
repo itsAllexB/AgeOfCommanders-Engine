@@ -64,13 +64,28 @@
 enum
 {
 	BaseFps = 30, // The historic base frame rate for this game. This value must never change.
-	LOGICFRAMES_PER_SECOND = WWSyncPerSecond,
+	// AoC @feature 30/10/2026 The simulation rate is selected at startup (D11 F15): 30 or 60 logic frames
+	// per second. LOGICFRAMES_PER_SECOND below reads the live value; MAX_LOGICFRAMES_PER_SECOND is the
+	// constant bound for array sizes and other constexpr contexts.
+	MAX_LOGICFRAMES_PER_SECOND = 60,
 	MSEC_PER_SECOND = 1000
 };
-const Real LOGICFRAMES_PER_MSEC_REAL = (((Real)LOGICFRAMES_PER_SECOND) / ((Real)MSEC_PER_SECOND));
-const Real MSEC_PER_LOGICFRAME_REAL = (((Real)MSEC_PER_SECOND) / ((Real)LOGICFRAMES_PER_SECOND));
-const Real LOGICFRAMES_PER_SECONDS_REAL = (Real)LOGICFRAMES_PER_SECOND;
-const Real SECONDS_PER_LOGICFRAME_REAL = 1.0f / LOGICFRAMES_PER_SECONDS_REAL;
+
+// AoC @feature 30/10/2026 Selectable simulation rate (D11 F15), see Include/AoC/AoCSimRate.h.
+namespace AoCSimRate
+{
+	extern Int g_framesPerSecond;	///< 30 or 60; set once at startup from Options.ini or -simrate, never changed in a running process
+	inline Int framesPerSecond() { return g_framesPerSecond; }
+	inline Int frameMultiplier() { return g_framesPerSecond / BaseFps; }	///< 1 at 30 Hz, 2 at 60 Hz
+}
+
+// The derived values are computed from the live rate with the same expressions the compile-time
+// constants used, so a 30 Hz game is bit-identical to the stock constants.
+#define LOGICFRAMES_PER_SECOND (AoCSimRate::framesPerSecond())
+#define LOGICFRAMES_PER_MSEC_REAL (((Real)LOGICFRAMES_PER_SECOND) / ((Real)MSEC_PER_SECOND))
+#define MSEC_PER_LOGICFRAME_REAL (((Real)MSEC_PER_SECOND) / ((Real)LOGICFRAMES_PER_SECOND))
+#define LOGICFRAMES_PER_SECONDS_REAL ((Real)LOGICFRAMES_PER_SECOND)
+#define SECONDS_PER_LOGICFRAME_REAL (1.0f / LOGICFRAMES_PER_SECONDS_REAL)
 
 // ----------------------------------------------------------------------------------------------
 // note that this returns a REAL value, not an int... most callers will want to

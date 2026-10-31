@@ -1205,7 +1205,7 @@ protected:
 private:
 	StateMachine* m_huntMachine;					///< state sub-machine for hunt behavior
 	UnsignedInt m_nextEnemyScanTime;			///< time of last enemy scan
-	enum { ENEMY_SCAN_RATE = LOGICFRAMES_PER_SECOND };
+	// AoC @hook 31/10/2026 The enemy scan interval (stock enum ENEMY_SCAN_RATE) is AoCSimRate::enemyScanFrames() (D11 F15).
 };
 
 //-----------------------------------------------------------------------------------------------------------
@@ -1235,7 +1235,7 @@ protected:
 private:
 	StateMachine *m_attackMachine;					///< state sub-machine for attack behavior
 	UnsignedInt m_nextEnemyScanTime;			///< time of last enemy scan
-	enum { ENEMY_SCAN_RATE = LOGICFRAMES_PER_SECOND };
+	// AoC @hook 31/10/2026 The enemy scan interval (stock enum ENEMY_SCAN_RATE) is AoCSimRate::enemyScanFrames() (D11 F15).
 };
 
 //-----------------------------------------------------------------------------------------------------------

@@ -361,7 +361,7 @@ void NeutronMissileSlowDeathBehavior::doBlast( const BlastInfo *blastInfo )
 #if defined(RTS_DEBUG)
 		if( TheGlobalData->m_debugProjectilePath && (blastInfo->maxDamage > 0.0f || blastInfo->minDamage > 0.0f) )
 		{
-			constexpr const Int frameDuration = 60 * LOGICFRAMES_PER_SECOND;
+			const Int frameDuration = 60 * LOGICFRAMES_PER_SECOND;	// AoC @tweak 30/10/2026 runtime rate (D11 F15)
 			debugDrawBlastRadii( missile, blastInfo, TheGlobalData->m_debugProjectileTileWidth, frameDuration );
 		}
 #endif

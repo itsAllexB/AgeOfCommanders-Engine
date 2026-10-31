@@ -378,7 +378,7 @@ void POWTruckAIUpdate::updateWaiting()
 
 }
 
-static const UnsignedInt FIND_DELAY = LOGICFRAMES_PER_SECOND * 1;
+#define FIND_DELAY ((UnsignedInt)(LOGICFRAMES_PER_SECOND * 1))	// AoC @tweak 30/10/2026 runtime simulation rate, not a static initializer (D11 F15)
 // ------------------------------------------------------------------------------------------------
 // ------------------------------------------------------------------------------------------------
 void POWTruckAIUpdate::updateFindTarget()

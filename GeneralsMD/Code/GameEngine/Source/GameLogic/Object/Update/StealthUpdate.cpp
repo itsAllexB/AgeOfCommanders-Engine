@@ -28,6 +28,7 @@
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 
 #include "PreRTS.h"	// This must go first in EVERY cpp file in the GameEngine
+#include "AoC/AoCSimRate.h"
 
 #define DEFINE_STEALTHLEVEL_NAMES
 #define DEFINE_OBJECT_STATUS_NAMES
@@ -350,7 +351,7 @@ Bool StealthUpdate::allowedToStealth( Object *stealthOwner ) const
 
 		//Now do weapon specific checks.
 		Weapon *weapon;
-		UnsignedInt lastFrame = TheGameLogic->getFrame() - 1;
+		UnsignedInt lastFrame = TheGameLogic->getFrame() - AoCSimRate::frameMultiplier();	// AoC @tweak 30/10/2026 one retail frame back (D11 F15)
 
 		if( flags & STEALTH_NOT_WHILE_FIRING_PRIMARY )
 		{
@@ -690,7 +691,7 @@ UpdateSleepTime StealthUpdate::update()
 		{
 			draw->setEffectiveOpacity( 0.5f + ( Sin( m_pulsePhase ) * 0.5f ) );
 			// between one half and full opacity
-			m_pulsePhase += m_pulsePhaseRate;
+			m_pulsePhase += m_pulsePhaseRate / (Real)AoCSimRate::frameMultiplier();	// AoC @tweak 30/10/2026 phase rate is per retail frame (D11 F15)
 		}
 	}
 

@@ -46,6 +46,7 @@
 #include "GameNetwork/networkutil.h"
 #include "GameLogic/GameLogic.h"
 #include "AoC/AoCHarness.h"
+#include "AoC/AoCSimRate.h"
 #include "Common/RandomValue.h"
 #include "Common/CRCDebug.h"
 #include "Common/OptionPreferences.h"
@@ -1223,7 +1224,9 @@ void RecorderClass::loadQueuedReplay()
 	if (!playbackFile(filename))
 	{
 		DEBUG_LOG(("Failed to play replay '%s'", filename.str()));
-		showQueuedReplayLoadFailure();
+		// AoC @hook 31/10/2026 playbackFile reports a replay at the other simulation rate itself; no generic message on top (D11 F15).
+		if (gameInfo.getAoCSimRate() == LOGICFRAMES_PER_SECOND)
+			showQueuedReplayLoadFailure();
 	}
 }
 
@@ -1245,6 +1248,17 @@ Bool RecorderClass::playbackFile(AsciiString filename)
 	Bool success = readReplayHeader( header, filename, TRUE );
 	if (!success)
 	{
+		return FALSE;
+	}
+
+	// AoC @hook 30/10/2026 A replay plays only at the simulation rate it was recorded at; the frame counts differ otherwise.
+	// The one refusal for every caller (replay menu, -replay, -loadreplay); AoCSimRate reports it (D11 F15).
+	if (AoCSimRate::refuseReplay(m_gameInfo.getAoCSimRate()))
+	{
+		m_gameInfo.endGame();
+		m_gameInfo.reset();
+		m_file->close();
+		m_file = nullptr;
 		return FALSE;
 	}
 

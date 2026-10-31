@@ -1077,7 +1077,9 @@ void GameEngine::update()
 		// TheSuperHackers @info Ignores frozen time because the script engine needs updating in the logic update regardless.
 		if (canUpdateGameLogic(FramePacer::IgnoreFrozenTime))
 		{
+			AoCHarness::logicUpdateBegin();	// AoC @hook 30/10/2026 logic frame timing for -aiLog (D11 F15)
 			TheGameLogic->UPDATE();
+			AoCHarness::logicUpdateEnd();
 
 			if (!TheFramePacer->isTimeFrozen())
 			{

@@ -329,6 +329,7 @@ void GameInfo::reset()
 	m_mapSize = 0;
   m_superweaponRestriction = 0;
   m_startingCash = TheGlobalData->m_defaultStartingCash;
+	m_aocSimRate = LOGICFRAMES_PER_SECOND;	// AoC @feature 30/10/2026 this machine's rate until an options string says otherwise (D11 F15)
 
 	for (Int i=0; i<MAX_SLOTS; ++i)
 	{
@@ -1007,6 +1008,14 @@ static AsciiString buildGameInfoAsciiString(const GameInfo& game, const AsciiStr
 		game.getMapCRC(), game.getMapSize(), game.getSeed(), game.getCRCInterval(), game.getSuperweaponRestriction(),
 		game.getStartingCash().countMoney(), game.oldFactionsOnly() ? 'Y' : 'N' );
 #endif
+	// AoC @hook 31/10/2026 "AF=" carries a simulation rate other than 30 Hz (D11 F15). A stock parser rejects the whole
+	// string on an unknown key, so a 30 Hz game writes none and stays readable by stock builds; no key means 30 Hz.
+	if (game.getAoCSimRate() != BaseFps)
+	{
+		AsciiString aocSimRate;
+		aocSimRate.format("AF=%d;", game.getAoCSimRate());
+		optionsString.concat(aocSimRate);
+	}
 
 	//add player info for each slot
 	optionsString.concat(slotListID);
@@ -1183,6 +1192,7 @@ Bool ParseAsciiStringToGameInfo(GameInfo *game, AsciiString options)
 	Int useStats = TRUE;
   Money startingCash = TheGlobalData->m_defaultStartingCash;
   UnsignedShort restriction = 0; // Always the default
+	Int simRate = BaseFps;	// AoC F15: a string without "AF=" is a stock 30 Hz game
 
 	Bool sawMap = FALSE;
 	Bool sawMapCRC = FALSE;
@@ -1318,6 +1328,12 @@ Bool ParseAsciiStringToGameInfo(GameInfo *game, AsciiString options)
       oldFactionsOnly = ( val.compareNoCase( "Y" ) == 0 );
       sawOldFactions = TRUE;
     }
+		else if (key.compare("AF") == 0)
+		{
+			// AoC @feature 30/10/2026 simulation rate (D11 F15); only a rate other than 30 is written, but an explicit
+			// "AF=30" (strings from earlier F15 builds) is still accepted
+			simRate = atoi(val.str());
+		}
 		else if (key.getLength() == 1 && *key.str() == slotListID)
 		{
 			sawSlotlist = true;
@@ -1721,6 +1737,7 @@ Bool ParseAsciiStringToGameInfo(GameInfo *game, AsciiString options)
 		game->setSuperweaponRestriction(restriction);
 		game->setStartingCash(startingCash);
 		game->setOldFactionsOnly(oldFactionsOnly);
+		game->setAoCSimRate(simRate);
 
 		return true;
 	}

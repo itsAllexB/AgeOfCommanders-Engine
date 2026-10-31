@@ -29,6 +29,7 @@
 
 // INCLUDES ///////////////////////////////////////////////////////////////////////////////////////
 #include "PreRTS.h"	// This must go first in EVERY cpp file in the GameEngine
+#include "AoC/AoCSimRate.h"
 
 #include "GameClient/FXList.h"
 
@@ -655,7 +656,8 @@ protected:
 					Real delayInMsec = m_delay.getValue();
 					if (delayInMsec >= 0.0f)
 					{
-						UnsignedInt delayInFrames = REAL_TO_INT_CEIL(ConvertDurationFromMsecsToFrames(delayInMsec));
+						// AoC @tweak 30/10/2026 Particle systems step on retail frames (D11 F15).
+						UnsignedInt delayInFrames = REAL_TO_INT_CEIL(ConvertDurationFromMsecsToFrames(delayInMsec) / (Real)AoCSimRate::frameMultiplier());
 						sys->setInitialDelay(delayInFrames);
 					}
 

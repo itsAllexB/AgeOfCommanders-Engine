@@ -233,6 +233,11 @@ public:
   inline Bool oldFactionsOnly() const;
   inline void setOldFactionsOnly( Bool oldFactionsOnly );
 
+	// AoC @feature 30/10/2026 Simulation rate of this game, 30 or 60 Hz (D11 F15). Travels in the options string as
+	// "AF=<rate>;" next to the slot list, written only when the rate is not 30; a string without the key is a 30 Hz (stock) game.
+	Int getAoCSimRate() const { return m_aocSimRate; }
+	void setAoCSimRate( Int rate ) { m_aocSimRate = rate; }
+
 protected:
 	Int m_preorderMask;
 	Int m_crcInterval;
@@ -254,6 +259,7 @@ protected:
   Money         m_startingCash;
   UnsignedShort m_superweaponRestriction;
   Bool m_oldFactionsOnly; // Only USA, China, GLA -- not USA Air Force General, GLA Toxic General, et al
+	Int m_aocSimRate;	///< AoC F15: logic frames per second this game runs at
 };
 
 extern GameInfo *TheGameInfo;

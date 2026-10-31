@@ -30,6 +30,7 @@
 
 // INCLUDES ///////////////////////////////////////////////////////////////////////////////////////
 #include "PreRTS.h"	// This must go first in EVERY cpp file in the GameEngine
+#include "AoC/AoCSimRate.h"
 #define DEFINE_SLOWDEATHPHASE_NAMES
 #include "Common/GameLOD.h"
 #include "Common/INI.h"
@@ -295,6 +296,13 @@ void SlowDeathBehavior::beginSlowDeath(const DamageInfo *damageInfo)
 				Coord3D force;
 				calcRandomForce(d->m_flingForce, d->m_flingForce + d->m_flingForceVariance,
 												d->m_flingPitch, d->m_flingPitch + d->m_flingPitchVariance, force);
+				// AoC @tweak 30/10/2026 The fling is a velocity per frame (D11 F15 port list).
+				if (AoCSimRate::frameMultiplier() > 1)
+				{
+					force.x /= (Real)AoCSimRate::frameMultiplier();
+					force.y /= (Real)AoCSimRate::frameMultiplier();
+					force.z /= (Real)AoCSimRate::frameMultiplier();
+				}
 				physics->setAllowToFall(true);
 				physics->applyForce(&force);
 				physics->setExtraBounciness(-1.0);					// we don't want this guy to bounce at all

@@ -28,6 +28,7 @@
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 
 #include "PreRTS.h"	// This must go first in EVERY cpp file in the GameEngine
+#include "AoC/AoCSimRate.h"
 
 #include "Common/GameState.h"
 #include "Common/ThingFactory.h"
@@ -232,7 +233,7 @@ UpdateSleepTime SpawnBehavior::update()
 		return UPDATE_SLEEP_NONE;
 	}
 
-	m_framesToWait = SPAWN_UPDATE_RATE;
+	m_framesToWait = AoCSimRate::spawnUpdateFrames();	// AoC @hook 31/10/2026 runtime rate (D11 F15)
 
 	//Go through the list and make a spawn for each number that is less than now's frame
 	if( shouldTryToSpawn() )

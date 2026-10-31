@@ -54,6 +54,7 @@
 #include "GameClient/GameText.h"
 #include "GameClient/MapUtil.h"
 #include "GameClient/MessageBox.h"
+#include "AoC/AoCSimRate.h"
 #include "GameClient/InGameUI.h"
 #include "GameClient/ParticleSys.h"
 #include "GameClient/TerrainVisual.h"
@@ -733,6 +734,10 @@ SaveCode GameState::loadGame( AvailableGameInfo gameInfo )
 			TheGameLogic->clearGameData( FALSE );
 		TheGameEngine->reset();
 
+		// AoC @hook 30/10/2026 Name a simulation rate mismatch so the menu can say what to change (D11 F15).
+		if (AoCSimRate::consumeSaveMismatch() != 0)
+			return SC_AOC_SIMRATE_MISMATCH;
+
 		return SC_INVALID_DATA;	// you can't use a naked "throw" outside of a catch statement!
 
 	}
@@ -819,10 +824,14 @@ void GameState::loadQueuedSaveGame()
 	// this hides the shell, keeping the menu screens on the stack for when the game ends
 	TheGameLogic->prepareNewGame( GAME_SINGLE_PLAYER, DIFFICULTY_NORMAL, 0 );
 
-	if( loadGame( gameInfo ) != SC_OK )
+	const SaveCode loadCode = loadGame( gameInfo );
+	if( loadCode != SC_OK )
 	{
 		std::fprintf(stderr, "Failed to load save game '%s'\n", gameInfo.filename.str());
 		std::fflush(stderr);
+		// AoC @hook 30/10/2026 The simulation rate mismatch is the one failure the player can fix (D11 F15).
+		if( loadCode == SC_AOC_SIMRATE_MISMATCH && !TheGlobalData->m_headless )
+			MessageBoxOk(TheGameText->FETCH_OR_SUBSTITUTE("GUI:SaveGameLoadFailedTitle", L"CANNOT LOAD SAVE"), AoCSimRate::mismatchMessage("This saved game", AoCSimRate::lastSaveMismatchRate()), nullptr);
 		if( TheGameLogic->isInGame() )
 			TheGameLogic->clearGameData( FALSE );
 		TheGameEngine->reset();

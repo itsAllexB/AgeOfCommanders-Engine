@@ -70,7 +70,10 @@ int ReplaySimulation::simulateReplaysInThisProcess(const std::vector<AsciiString
 		// If we are not in headless mode, we need to run the replay in the engine.
 		for (; s_replayIndex < s_replayCount; ++s_replayIndex)
 		{
-			TheRecorder->playbackFile(filenames[s_replayIndex]);
+			// AoC @hook 31/10/2026 A replay that does not open (one refused for its simulation rate among them) counts as an
+			// error, as in the headless path below (D11 F15).
+			if (!TheRecorder->playbackFile(filenames[s_replayIndex]))
+				numErrors++;
 			TheGameEngine->execute();
 			if (TheRecorder->sawCRCMismatch())
 				numErrors++;
@@ -207,10 +210,12 @@ int ReplaySimulation::simulateReplaysInWorkerProcesses(const std::vector<AsciiSt
 			UnicodeString filenameWide;
 			filenameWide.translate(filenames[filenamePositionStarted]);
 			UnicodeString command;
-			command.format(L"\"%s\"%s%s -replay \"%s\"",
+			// AoC @tweak 31/10/2026 Workers run at this process's simulation rate, whether it came from -simrate or Options.ini (D11 F15).
+			command.format(L"\"%s\"%s%s -simrate %d -replay \"%s\"",
 				exePath,
 				TheGlobalData->m_windowed ? L" -win" : L"",
 				TheGlobalData->m_headless ? L" -headless" : L"",
+				LOGICFRAMES_PER_SECOND,
 				filenameWide.str());
 
 			processes.push_back(WorkerProcess());

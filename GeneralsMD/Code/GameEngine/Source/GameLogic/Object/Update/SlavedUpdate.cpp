@@ -31,6 +31,7 @@
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 
 #include "PreRTS.h"	// This must go first in EVERY cpp file in the GameEngine
+#include "AoC/AoCSimRate.h"
 
 #include "Common/RandomValue.h"
 #include "Common/Xfer.h"
@@ -120,7 +121,7 @@ UpdateSleepTime SlavedUpdate::update()
 		{
 			return UPDATE_SLEEP_NONE;
 		}
-		m_framesToWait = SLAVED_UPDATE_RATE;
+		m_framesToWait = AoCSimRate::slavedUpdateFrames();	// AoC @hook 31/10/2026 runtime rate (D11 F15)
 	}
 
 	if( m_slaver == INVALID_ID )
@@ -522,7 +523,7 @@ void SlavedUpdate::endRepair()
 	{
 		//Remove the state so we can start using the update timer again.
 		m_repairState = REPAIRSTATE_NONE;
-		m_framesToWait = SLAVED_UPDATE_RATE;
+		m_framesToWait = AoCSimRate::slavedUpdateFrames();	// AoC @hook 31/10/2026 runtime rate (D11 F15)
 		m_repairing = false;
 
 		//Set the packing state and clear any other states (to force the arm to fully retract)
@@ -570,15 +571,17 @@ void SlavedUpdate::setRepairState( RepairStates repairState )
 		return;
 	}
 
+	// AoC @hook 31/10/2026 The unpack, pack, extend and retract steps below are retail 30 Hz frame counts, so they are
+	// multiplied by the frame multiplier to keep their real-time length at 60 Hz (D11 F15).
 	switch( repairState )
 	{
 		case REPAIRSTATE_UNPACKING:
 			setRepairModelConditionStates( MODELCONDITION_UNPACKING );
-			m_framesToWait = 15;
+			m_framesToWait = 15 * AoCSimRate::frameMultiplier();
 			break;
 		case REPAIRSTATE_PACKING:
 			setRepairModelConditionStates( MODELCONDITION_PACKING );
-			m_framesToWait = 15;
+			m_framesToWait = 15 * AoCSimRate::frameMultiplier();
 			break;
 		case REPAIRSTATE_READY:
 		{
@@ -588,12 +591,12 @@ void SlavedUpdate::setRepairState( RepairStates repairState )
 					//We're not in a repair state -- so assume we need to unpack
 					setRepairModelConditionStates( MODELCONDITION_UNPACKING );
 					m_repairState = REPAIRSTATE_UNPACKING;
-					m_framesToWait = 15;
+					m_framesToWait = 15 * AoCSimRate::frameMultiplier();
 					break;
 				case REPAIRSTATE_WELDING:
 					//We are welding so retract before going into ready state.
 					m_repairState = REPAIRSTATE_RETRACTING;
-					m_framesToWait = 5;
+					m_framesToWait = 5 * AoCSimRate::frameMultiplier();
 					setRepairModelConditionStates( MODELCONDITION_FIRING_C );
 					moveToNewRepairSpot();
 					break;
@@ -609,7 +612,7 @@ void SlavedUpdate::setRepairState( RepairStates repairState )
 			if( m_repairState == REPAIRSTATE_READY )
 			{
 				m_repairState = REPAIRSTATE_EXTENDING;
-				m_framesToWait = 5;
+				m_framesToWait = 5 * AoCSimRate::frameMultiplier();
 				setRepairModelConditionStates( MODELCONDITION_FIRING_B );
 				break;
 			}
@@ -639,7 +642,8 @@ void SlavedUpdate::setRepairState( RepairStates repairState )
 							}
 
 							weldingSys->setPosition( &pos );
-							Real time = (Real)(m_framesToWait * static_cast<float>(LOGICFRAMES_PER_SECOND));
+							// AoC @tweak 30/10/2026 Particle lifetimes count retail frames; keep the stock real-time length (D11 F15).
+							Real time = (Real)(m_framesToWait * static_cast<float>(BaseFps)) / (Real)AoCSimRate::frameMultiplier();
 							weldingSys->setLifetimeRange( time, time );
 
 							AudioEventRTS soundToPlay = TheAudio->getMiscAudio()->m_repairSparks;

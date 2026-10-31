@@ -28,6 +28,7 @@
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 
 #include "PreRTS.h" // This must go first in EVERY cpp file in the GameEngine
+#include "AoC/AoCSimRate.h"
 
 #include "Common/GameAudio.h"
 #include "Common/GlobalData.h"
@@ -1218,7 +1219,7 @@ Bool SpecialAbilityUpdate::continuePreparation()
 
           Real denominator = MAX(1, data->m_preparationFrames);
           Real increment = 1.0f - ((Real)m_prepFrames / denominator );
-          m_captureFlashPhase += increment / 3.0f;
+          m_captureFlashPhase += increment / (3.0f * (Real)AoCSimRate::frameMultiplier());	// AoC @tweak 30/10/2026 flash cadence per retail frame (D11 F15)
 
           Bool thisPhase = ( ((Int)m_captureFlashPhase) & 1 );// are we in a flashy phase this frame?
 

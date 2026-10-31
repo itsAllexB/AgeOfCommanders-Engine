@@ -28,11 +28,13 @@
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 
 #include "PreRTS.h"	// This must go first in EVERY cpp file in the GameEngine
+#include "AoC/AoCSimRate.h"
 
 #define DEFINE_PARTICLE_SYSTEM_NAMES
 
 #include "Common/FramePacer.h"
 #include "Common/GameState.h"
+#include "Common/GameUtility.h"
 #include "Common/INI.h"
 #include "Common/PerfTimer.h"
 #include "Common/ThingFactory.h"
@@ -326,7 +328,7 @@ Particle::Particle( ParticleSystem *system, const ParticleInfo *info )
 
 	m_lifetime = info->m_lifetime;
 	m_lifetimeLeft = info->m_lifetime;
-	m_createTimestamp = TheGameClient->getFrame();
+	m_createTimestamp = AoCSimRate::legacyFrame(TheGameClient->getFrame());	// AoC F15: particle frames are retail frames
 	m_personality = 0;
 
 	m_size = info->m_size;
@@ -675,7 +677,7 @@ ParticlePriorityType Particle::getPriority()
 // ------------------------------------------------------------------------------------------------
 UnsignedInt Particle::getElapsedFrames() const
 {
-	return TheGameClient->getFrame() - m_createTimestamp;
+	return AoCSimRate::legacyFrame(TheGameClient->getFrame()) - m_createTimestamp;	// AoC F15
 }
 
 // ------------------------------------------------------------------------------------------------
@@ -1276,7 +1278,7 @@ ParticleSystem::ParticleSystem( const ParticleSystemTemplate *sysTemplate,
 
 	m_delayLeft = (UnsignedInt)sysTemplate->m_initialDelay.getValue();
 
-	m_startTimestamp = TheGameClient->getFrame();
+	m_startTimestamp = AoCSimRate::legacyFrame(TheGameClient->getFrame());	// AoC F15
 	m_systemLifetimeLeft = sysTemplate->m_systemLifetime;
 	if (sysTemplate->m_systemLifetime)
 		m_isForever = false;
@@ -1539,6 +1541,12 @@ void ParticleSystem::attachToDrawable( const Drawable *draw )
 		DEBUG_ASSERTCRASH( m_attachedToObjectID == INVALID_ID, ( "ParticleSystem is already attached to an Object" ) );
 		m_attachedToDrawableID = draw->getID();
 		m_attachedToObjectID = INVALID_ID;
+
+		// AoC @hook 31/10/2026 Particles step once per retail frame at 60 Hz, so a one-frame system attached to a drawable that
+		// is created and destroyed between two particle steps would lose its only burst; emit it now, as the owner's fork
+		// does (D11 F15). Client side only.
+		if (AoCSimRate::frameMultiplier() > 1 && m_systemLifetimeLeft == 1 && m_delayLeft == 0 && getParticleCount() == 0)
+			update(rts::getObservedOrLocalPlayerIndex_Safe());
 	}
 	else
 	{
@@ -2065,7 +2073,7 @@ Bool ParticleSystem::update( Int localPlayerIndex  )
 		// system actually "starts" once initial delay is over
 		/// @todo reset start time when system is stopped/started
 		if (m_delayLeft == 0)
-			m_startTimestamp = TheGameClient->getFrame();
+			m_startTimestamp = AoCSimRate::legacyFrame(TheGameClient->getFrame());	// AoC F15
 
 		return true;
 	}
@@ -3298,7 +3306,11 @@ void ParticleSystemManager::draw()
 {
 	// TheSuperHackers @tweak Integrate the part of the logic frame that the render time
 	// has advanced into since the last render update.
-	const Real logicFramePhase = TheFramePacer->getLogicFramePhase();
+	Real logicFramePhase = TheFramePacer->getLogicFramePhase();
+	// AoC @tweak 30/10/2026 Particles step once per retail frame (GameClient::update), so at 60 Hz one particle
+	// step spans two logic frames: the drawn phase runs over both (D11 F15).
+	if (AoCSimRate::frameMultiplier() > 1 && TheGameLogic != nullptr)
+		logicFramePhase = ((Real)(TheGameLogic->getFrame() % (UnsignedInt)AoCSimRate::frameMultiplier()) + logicFramePhase) / (Real)AoCSimRate::frameMultiplier();
 	if (logicFramePhase > m_drawnLogicFramePhase)
 	{
 		const Real timeScale = logicFramePhase - m_drawnLogicFramePhase;

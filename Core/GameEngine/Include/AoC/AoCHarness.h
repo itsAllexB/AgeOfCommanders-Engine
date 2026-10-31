@@ -34,10 +34,11 @@
 //                                   and replays alike (the stock GameLogic::getCRC values).
 //   -aiLog <dir>                    Every 900 logic frames write one CSV row per AI player to
 //                                   <dir>/ai_<playerIndex>.csv. Logic reads only.
-//   -simrate <30|60>                Reserved for D11 F15. 30 is accepted and stored in
-//                                   TheGlobalData->m_logicFramesPerSecond; 60 exits with code 3.
+//   -simrate <30|60>                Simulation rate for this process (D11 F15), overriding the
+//                                   Options.ini SimulationRate key. Any other value exits with code 3.
 //
-// Exit codes: 0 normal, 2 CRC mismatch seen, 3 unsupported -simrate, 4 -skirmish could not start.
+// Exit codes: 0 normal, 2 CRC mismatch seen, 3 unsupported -simrate, 4 -skirmish could not start,
+// 5 a replay or save made at the other simulation rate was refused.
 //
 // Everything lives in this class; stock files only gain one hook line each (see the "Hooks" section).
 // The harness never changes logic state and never branches on the local player, so stock replay CRCs
@@ -71,4 +72,12 @@ public:
 	static void pollQuit();
 	/// GameMain, before returning: maps the harness state to the process exit code.
 	static int finalExitCode( int exitcode );
+
+	/// RecorderClass::playbackFile / GameLogic::xfer: a replay or save at the other simulation rate was refused (D11 F15).
+	/// Under -quitAtFrame the process leaves with exit code 5 instead of idling in the shell.
+	static void onSimRateRefusal();
+
+	/// GameEngine::update, around TheGameLogic->UPDATE(): logic frame timing for -aiLog's timing.csv (D11 F15 test e).
+	static void logicUpdateBegin();
+	static void logicUpdateEnd();
 };

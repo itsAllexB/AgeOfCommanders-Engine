@@ -147,8 +147,9 @@ const UnsignedInt RenderFpsPreset::s_fpsValues[] = {
 	30, 50, 56, 60, 65, 70, 72, 75, 80, 85, 90, 100, 110, 120, 144, 240, 480, UncappedFpsValue };
 
 // The lowest selectable cap (30) must not drop below the logic rate, or input/render would starve
-// the fixed-rate simulation.
-static_assert(LOGICFRAMES_PER_SECOND <= 30, "Min FPS values need to be revisited!");
+// the fixed-rate simulation. AoC @tweak 30/10/2026 The rate is 30 or 60 at runtime (D11 F15), so
+// FramePacer::setFramesPerSecondLimit clamps the cap to at least LOGICFRAMES_PER_SECOND instead.
+static_assert(30 <= MAX_LOGICFRAMES_PER_SECOND, "Min FPS values need to be revisited!");
 
 UnsignedInt RenderFpsPreset::getNextFpsValue(UnsignedInt value)
 {

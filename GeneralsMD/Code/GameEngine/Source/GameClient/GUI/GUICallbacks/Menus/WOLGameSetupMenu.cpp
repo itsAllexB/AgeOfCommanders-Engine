@@ -2029,6 +2029,18 @@ void WOLGameSetupMenuUpdate( WindowLayout * layout, void *userData)
 				NGMP_OnlineServices_LobbyInterface* pLobbyInterface = NGMP_OnlineServicesManager::GetInterface<NGMP_OnlineServices_LobbyInterface>();
 				if (pLobbyInterface) {
 					TheNGMPGame->SyncWithLobby(pLobbyInterface->GetCurrentLobby());
+					// AoC @feature 31/10/2026 The joiner checks the host's executable CRC, as the GameSpy join does
+					// (WOLLobbyMenu): it differs for a different build or simulation rate, which would desync (D11 F15).
+					const UnsignedInt hostExeCRC = TheNGMPGame->getExeCRC();
+					if (!pLobbyInterface->IsHost() && hostExeCRC != 0 && hostExeCRC != TheGlobalData->m_exeCRC) {
+						fprintf(stderr, "[AoC] GeneralsOnline: host executable CRC %08X differs from ours %08X (another build or simulation rate); leaving the lobby\n",
+							hostExeCRC, TheGlobalData->m_exeCRC);
+						fflush(stderr);
+						buttonPushed = true;
+						GSMessageBoxOk(TheGameText->fetch("GUI:JoinFailedDefault"), TheGameText->fetch("GUI:JoinFailedCRCMismatch"));
+						PopBackToLobby();
+						return;
+					}
 				}
 				TheNGMPGame->UpdateSlotsFromCurrentLobby();
 			}

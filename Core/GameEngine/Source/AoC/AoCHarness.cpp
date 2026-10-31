@@ -22,6 +22,7 @@
 #include "PreRTS.h"	// This must go first in EVERY cpp file in the GameEngine
 
 #include "AoC/AoCHarness.h"
+#include "AoC/AoCSimRate.h"
 
 #include "Common/Energy.h"
 #include "Common/FileSystem.h"
@@ -44,6 +45,7 @@
 #include "GameNetwork/GameInfo.h"
 
 #include <algorithm>
+#include <chrono>
 #include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -55,9 +57,10 @@
 namespace
 {
 
-// Logic frames between two AI log rows (30 seconds at 30 Hz). D9 specifies its logging intervals in
-// seconds; when F15 lands this becomes a rate-derived value.
-const UnsignedInt AOC_AI_LOG_INTERVAL_FRAMES = 900;
+// Seconds of game time between two AI log rows (D9 specifies its logging intervals in seconds):
+// 900 frames at 30 Hz, 1800 at 60 Hz, so rows of the two rates line up by game time.
+const UnsignedInt AOC_AI_LOG_INTERVAL_SECONDS = 30;
+inline UnsignedInt aiLogIntervalFrames() { return AOC_AI_LOG_INTERVAL_SECONDS * (UnsignedInt)LOGICFRAMES_PER_SECOND; }
 
 // Fixed-size storage only: the options are set before the game memory manager owns the heap and are
 // read until after it has shut down, so nothing here may allocate.
@@ -88,7 +91,20 @@ struct HarnessState
 	Bool warnedAiLog;
 
 	int exitCodeOverride;	///< -1 when unused
+
+	// Logic frame timing for -aiLog/timing.csv (D11 F15 test e). Nanoseconds from std::chrono::steady_clock.
+	long long logicUpdateBeginNs;
+	long long logicNs;				///< sum of logic update durations in the current window
+	long long logicMaxNs;			///< longest logic update in the current window
+	UnsignedInt logicUpdates;	///< logic updates in the current window
+	UnsignedInt iterations;		///< engine loop iterations (rendered frames) in the current window
+	long long windowStartNs;
 };
+
+long long nowNs()
+{
+	return (long long)std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now().time_since_epoch()).count();
+}
 
 HarnessState &state()
 {
@@ -362,6 +378,45 @@ void writeAiLog( UnsignedInt frame )
 	}
 }
 
+void writeTimingLog( UnsignedInt frame )
+{
+	HarnessState &s = state();
+	std::string dir = s.aiLogDir;
+	if (!dir.empty() && dir[dir.size() - 1] != '\\' && dir[dir.size() - 1] != '/')
+		dir += '/';
+	const long long now = nowNs();
+	const double wallMs = s.windowStartNs ? (double)(now - s.windowStartNs) / 1.0e6 : 0.0;
+	const double logicMs = (double)s.logicNs / 1.0e6;
+
+	CsvRow row;
+	row.add("frame", frame);
+	row.add("rate_hz", LOGICFRAMES_PER_SECOND);
+	row.add("wall_ms", fmt("%.0f", wallMs));
+	row.add("engine_iterations", s.iterations);
+	row.add("render_fps", fmt("%.1f", wallMs > 0.0 ? (double)s.iterations * 1000.0 / wallMs : 0.0));
+	row.add("logic_updates", s.logicUpdates);
+	row.add("logic_avg_ms", fmt("%.3f", s.logicUpdates ? logicMs / (double)s.logicUpdates : 0.0));
+	row.add("logic_max_ms", fmt("%.3f", (double)s.logicMaxNs / 1.0e6));
+	row.add("logic_load_pct", fmt("%.1f", wallMs > 0.0 ? logicMs * 100.0 / wallMs : 0.0));
+
+	std::string path = dir + "timing.csv";
+	FILE *f = fopen(path.c_str(), "a");
+	if (f)
+	{
+		fseek(f, 0, SEEK_END);
+		if (ftell(f) == 0)
+			fprintf(f, "%s\n", row.header.c_str());
+		fprintf(f, "%s\n", row.values.c_str());
+		fclose(f);
+	}
+
+	s.windowStartNs = now;
+	s.logicNs = 0;
+	s.logicMaxNs = 0;
+	s.logicUpdates = 0;
+	s.iterations = 0;
+}
+
 } // namespace
 
 // --- command line -------------------------------------------------------------------------------
@@ -428,15 +483,9 @@ Int AoCHarness::parseSimRate( char *args[], int num )
 	if (num > 1)
 	{
 		const Int rate = atoi(args[1]);
-		if (rate == 30)
-		{
-			TheWritableGlobalData->m_logicFramesPerSecond = rate;
+		if (AoCSimRate::set(rate, "-simrate"))
 			return 2;
-		}
-		if (rate == 60)
-			logLine("60 Hz simulation is not implemented yet (D11 F15)");
-		else
-			logLine("-simrate accepts 30 or 60, not '%s'", args[1]);
+		logLine("-simrate accepts 30 or 60, not '%s'", args[1]);
 		exit(3);
 	}
 	return 1;
@@ -576,8 +625,11 @@ void AoCHarness::onLogicFrame( UnsignedInt frame, Bool crcGenerated, UnsignedInt
 		}
 	}
 
-	if (s.aiLogDir[0] != '\0' && (frame % AOC_AI_LOG_INTERVAL_FRAMES) == 0)
+	if (s.aiLogDir[0] != '\0' && (frame % aiLogIntervalFrames()) == 0)
+	{
 		writeAiLog(frame);
+		writeTimingLog(frame);
+	}
 
 	if (s.quitAtFrame != 0 && frame >= s.quitAtFrame && !s.quitRequested)
 	{
@@ -606,9 +658,46 @@ void AoCHarness::onCRCMismatch( UnsignedInt frame, UnsignedInt inGameCRC, Unsign
 		logLine("replay CRC mismatch at frame %u: in game %08X, replay %08X", frame, inGameCRC, replayCRC);
 }
 
+void AoCHarness::logicUpdateBegin()
+{
+	HarnessState &s = state();
+	if (s.anyFlag)
+		s.logicUpdateBeginNs = nowNs();
+}
+
+void AoCHarness::logicUpdateEnd()
+{
+	HarnessState &s = state();
+	if (!s.anyFlag || s.logicUpdateBeginNs == 0)
+		return;
+	const long long d = nowNs() - s.logicUpdateBeginNs;
+	s.logicUpdateBeginNs = 0;
+	s.logicNs += d;
+	if (d > s.logicMaxNs)
+		s.logicMaxNs = d;
+	s.logicUpdates++;
+}
+
+void AoCHarness::onSimRateRefusal()
+{
+	HarnessState &s = state();
+	if (!s.anyFlag)
+		return;	// a player at the menus keeps the message box and the shell
+	s.exitCodeOverride = 5;
+	logLine("leaving: a replay or save at the other simulation rate was refused (exit code 5)");
+	if (TheGameEngine)
+		TheGameEngine->setQuitting(TRUE);
+}
+
 void AoCHarness::pollQuit()
 {
 	HarnessState &s = state();
+	if (s.anyFlag)
+	{
+		s.iterations++;
+		if (s.windowStartNs == 0)
+			s.windowStartNs = nowNs();
+	}
 	if (s.quitAtFrame == 0 || s.quitDone)
 		return;
 

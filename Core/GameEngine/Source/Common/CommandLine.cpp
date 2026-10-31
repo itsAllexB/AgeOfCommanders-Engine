@@ -31,6 +31,7 @@
 #endif
 
 #include "AoC/AoCHarness.h"
+#include "AoC/AoCSimRate.h"
 #include "Common/ArchiveFileSystem.h"
 #include "Common/CommandLine.h"
 #include "Common/CRCDebug.h"
@@ -1205,7 +1206,7 @@ static CommandLineParam paramsForStartup[] =
 	{ "-setCwd", parseSetCwd },
 	{ "-useCwd", parseUseCwd },
 
-	// AoC @feature 30/10/2026 Reserved for the selectable simulation rate (D11 F15). 30 is accepted, 60 exits with code 3.
+	// AoC @feature 30/10/2026 Selectable simulation rate, 30 or 60 Hz (D11 F15); overrides Options.ini SimulationRate.
 	{ "-simrate", AoCHarness::parseSimRate },
 };
 
@@ -1479,8 +1480,13 @@ void CommandLine::parseCommandLineForStartup()
 		return;
 	TheWritableGlobalData->m_commandLineData.m_hasParsedCommandLineForStartup = true;
 
+	// AoC @hook 30/10/2026 The simulation rate comes from Options.ini before any INI loads; -simrate below overrides it (D11 F15).
+	AoCSimRate::readStartupOptions();
+
 	parseCommandLine(paramsForStartup, ARRAY_SIZE(paramsForStartup),
 		TheWritableGlobalData->m_commandLineData.m_parsedArguments);
+	// AoC @hook 31/10/2026 Options.ini and -simrate have been read; the rate is final before any INI loads (D11 F15).
+	AoCSimRate::lock();
 
 	// GeneralsX @bugfix fbraz 15/09/2026 Restrict default executable working directory fallback to Windows
 	// On POSIX/Linux/Flatpak, binaries reside in system paths (/app/bin) while game assets reside in CWD/data dirs.

@@ -276,10 +276,8 @@ public:
 typedef std::list<FloatingTextData *> FloatingTextList;
 typedef FloatingTextList::iterator	FloatingTextListIt;
 
-enum
-{
-	DEFAULT_FLOATING_TEXT_TIMEOUT = LOGICFRAMES_PER_SECOND/3,
-};
+// AoC @tweak 30/10/2026 Reads the runtime simulation rate (D11 F15); was an enum constant.
+#define DEFAULT_FLOATING_TEXT_TIMEOUT (LOGICFRAMES_PER_SECOND/3)
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 ///////////////////////////////////////////////////////////////////////////////////////////////////

@@ -27,6 +27,7 @@
 // Desc:   Implementation of missile behavior
 
 #include "PreRTS.h"	// This must go first in EVERY cpp file in the GameEngine
+#include "AoC/AoCSimRate.h"
 
 #include "Common/GameState.h"
 #include "Common/Thing.h"
@@ -249,7 +250,7 @@ void NeutronMissileUpdate::doLaunch()
 
 		FXList::doFXObj(getNeutronMissileUpdateModuleData()->m_launchFX, getObject());
 		m_heightAtLaunch = getObject()->getPosition()->z;
-		m_frameAtLaunch = TheGameLogic->getFrame();
+		m_frameAtLaunch = AoCSimRate::legacyFrame(TheGameLogic->getFrame());	// AoC F15: this update steps on retail frames
 
 	}
 
@@ -350,7 +351,9 @@ void NeutronMissileUpdate::doAttack()
 			//
 			// Orient toward destination
 			//
-			Real relAngle = calcTransform(getObject(), m_reachedIntermediatePos ? &m_targetPos : &m_intermedPos, getNeutronMissileUpdateModuleData()->m_maxTurnRate, &mx);
+			// AoC @hook 31/10/2026 MaxTurnRate is converted per live frame at parse time but this update steps once per
+			// retail frame, so one step turns by the rate of frameMultiplier() live frames (D11 F15).
+			Real relAngle = calcTransform(getObject(), m_reachedIntermediatePos ? &m_targetPos : &m_intermedPos, getNeutronMissileUpdateModuleData()->m_maxTurnRate * (Real)AoCSimRate::frameMultiplier(), &mx);
 
 			//
 			// Modulate speed according to turning. The more we have to turn, the slower we go
@@ -380,14 +383,17 @@ void NeutronMissileUpdate::doAttack()
 	Coord3D pos = *getObject()->getPosition();
 
 	const NeutronMissileUpdateModuleData* d = getNeutronMissileUpdateModuleData();
-	UnsignedInt now = TheGameLogic->getFrame();
-	if (d->m_specialSpeedTime > 0 && now <= m_frameAtLaunch + d->m_specialSpeedTime)
+	// AoC @tweak 30/10/2026 This update runs on retail frames (see update()), so its clock is the legacy frame and
+	// the duration is converted to retail frames (D11 F15 port list).
+	UnsignedInt now = AoCSimRate::legacyFrame(TheGameLogic->getFrame());
+	const UnsignedInt specialSpeedTime = d->m_specialSpeedTime / (UnsignedInt)AoCSimRate::frameMultiplier();
+	if (specialSpeedTime > 0 && now <= m_frameAtLaunch + specialSpeedTime)
 	{
 		getObject()->getDrawable()->setInstanceMatrix(nullptr);
 		UnsignedInt elapsed = now - m_frameAtLaunch;
-		if (elapsed < d->m_specialSpeedTime)
+		if (elapsed < specialSpeedTime)
 		{
-			Real timeFrac = (Real)elapsed / (Real)d->m_specialSpeedTime;
+			Real timeFrac = (Real)elapsed / (Real)specialSpeedTime;
 			Real accelFactor = d->m_specialAccelFactor;
 			if (accelFactor < 0.01f) accelFactor = 0.01f;
 			Coord3D newPos = pos;
@@ -471,6 +477,11 @@ void NeutronMissileUpdate::detonate()
  */
 UpdateSleepTime NeutronMissileUpdate::update()
 {
+	// AoC @tweak 30/10/2026 RelativeSpeed and ForwardDamping are per-frame constants from INI, so the missile
+	// integrates on the retail 30 Hz cadence at either rate (D11 F15 port list, as the owner's fork does).
+	if (!AoCSimRate::isLegacyFrameStep(TheGameLogic->getFrame()))
+		return UPDATE_SLEEP_NONE;
+
 	m_deliveryDecal.update();
 
 	if (!m_reachedIntermediatePos)

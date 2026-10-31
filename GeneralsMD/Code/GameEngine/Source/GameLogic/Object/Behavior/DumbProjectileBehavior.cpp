@@ -52,7 +52,7 @@
 //-----------------------------------------------------------------------------
 
 //-----------------------------------------------------------------------------
-const Int DEFAULT_MAX_LIFESPAN = 10 * LOGICFRAMES_PER_SECOND;
+#define DEFAULT_MAX_LIFESPAN ((Int)(10 * LOGICFRAMES_PER_SECOND))	// AoC @tweak 30/10/2026 runtime simulation rate, not a static initializer (D11 F15)
 
 //-----------------------------------------------------------------------------
 DumbProjectileBehaviorModuleData::DumbProjectileBehaviorModuleData() :

@@ -40,6 +40,7 @@
 #include "Common/AudioHandleSpecialValues.h"
 #include "Common/BuildAssistant.h"
 #include "AoC/AoCHarness.h"
+#include "AoC/AoCSimRate.h"
 #include "Common/CRCDebug.h"
 #include "Common/FramePacer.h"
 #include "Common/GameAudio.h"
@@ -5240,22 +5241,34 @@ void GameLogic::prepareLogicForObjectLoad()
 	* 9: Added m_rankPointsToAddAtGameStart, or else on a load game, your RestartGame button will forget your exp
   * 10: xfer m_superweaponRestriction
   * 11: TheSuperHackers @fix Save objects in reverse order so they load in correct order
+	* 12: AoC F15: the simulation rate the game was saved at (D11 F15). Every build writes version 12, which retail
+	*     cannot load, so every build also saves the objects in the version 11 order (newest first, no reversal on load)
 	*/
 // ------------------------------------------------------------------------------------------------
 void GameLogic::xfer( Xfer *xfer )
 {
 
 	// version
-#if RETAIL_COMPATIBLE_XFER_SAVE
-	const XferVersion currentVersion = 10;
-#else
-	const XferVersion currentVersion = 11;
-#endif
+	const XferVersion currentVersion = 12;
 	XferVersion version = currentVersion;
 	xfer->xferVersion( &version, currentVersion );
 
 	// logic frame number
 	xfer->xferUnsignedInt( &m_frame );
+
+	// AoC @feature 30/10/2026 Simulation rate of the saved game (D11 F15). The frame counts in every timer below are
+	// in frames of that rate, so a save loads only at the rate it was made at.
+	// AoC @hook 31/10/2026 A save from before version 12 has no rate field and was made at 30 Hz, so it is refused at 60 (D11 F15).
+	Int simRate = (version >= 12) ? LOGICFRAMES_PER_SECOND : BaseFps;
+	if (version >= 12)
+		xfer->xferInt( &simRate );
+	if (xfer->getXferMode() == XFER_LOAD && simRate != LOGICFRAMES_PER_SECOND)
+	{
+		AoCSimRate::logMismatch("This saved game", simRate);
+		AoCSimRate::noteSaveMismatch(simRate);
+		AoCHarness::onSimRateRefusal();
+		throw XFER_INVALID_VERSION;
+	}
 
 	//
 	// note that we do not do the id counter here, we did it in the game state block because
@@ -5283,17 +5296,15 @@ void GameLogic::xfer( Xfer *xfer )
 	ObjectTOCEntry *tocEntry;
 	if( xfer->getXferMode() == XFER_SAVE )
 	{
-#if !RETAIL_COMPATIBLE_XFER_SAVE
 		// TheSuperHackers @fix bobtista 07/03/2026 Save objects in reverse order (newest first)
 		// so they load in the correct order (oldest objects at head of list).
+		// AoC @fix 31/10/2026 Unconditional since version 12 (D11 F15): the load below reverses only versions up to 10,
+		// and retail cannot read version 12 anyway, so the retail-compatible build must not keep the retail order.
 		Object *lastObj = nullptr;
 		for( obj = getFirstObject(); obj; obj = obj->getNextObject() )
 			lastObj = obj;
 
 		for( obj = lastObj; obj; obj = obj->getPrevObject() )
-#else
-		for( obj = getFirstObject(); obj; obj = obj->getNextObject() )
-#endif
 		{
 
 			// get the object TOC entry for this template

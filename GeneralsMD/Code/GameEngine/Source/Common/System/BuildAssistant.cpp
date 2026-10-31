@@ -161,8 +161,8 @@ void BuildAssistant::reset()
 
 }
 
-static const Real FRAMES_TO_ALLOW_SCAFFOLD = static_cast<float>(LOGICFRAMES_PER_SECOND) * 1.5f;
-static const Real TOTAL_FRAMES_TO_SELL_OBJECT = static_cast<float>(LOGICFRAMES_PER_SECOND) * 3.0f;
+#define FRAMES_TO_ALLOW_SCAFFOLD ((Real)(static_cast<float>(LOGICFRAMES_PER_SECOND) * 1.5f))	// AoC @tweak 30/10/2026 runtime simulation rate, not a static initializer (D11 F15)
+#define TOTAL_FRAMES_TO_SELL_OBJECT ((Real)(static_cast<float>(LOGICFRAMES_PER_SECOND) * 3.0f))	// AoC @tweak 30/10/2026 runtime simulation rate, not a static initializer (D11 F15)
 //-------------------------------------------------------------------------------------------------
 /** Update phase for the build assistant */
 //-------------------------------------------------------------------------------------------------

@@ -103,6 +103,7 @@ public:
 		RET_GAME_GONE,			// OnGameJoin
 		RET_BUSY,						// OnGameCreate/Join/etc if another action is in progress
 		RET_UNKNOWN,				// Default message for oddity
+		RET_AOC_SIMRATE_MISMATCH,	// OnGameJoin: the joiner runs the other simulation rate (AoC F15)
 	};
 	UnicodeString getErrorStringFromReturnType( ReturnType ret );
 
@@ -225,6 +226,7 @@ struct LANMessage
 			UnsignedInt exeCRC;
 			UnsignedInt iniCRC;
 			char serial[g_maxSerialLength];
+			Int aocSimRate;	///< AoC F15: the joiner's simulation rate, checked by the host like the CRCs
 		} GameToJoin;
 
 		// GameJoined is sent with JOIN_ACCEPT

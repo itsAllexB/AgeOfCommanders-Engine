@@ -28,6 +28,7 @@
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 
 #include "PreRTS.h"
+#include "AoC/AoCSimRate.h"
 
 #include "Common/Player.h"
 #include "Common/ThingFactory.h"
@@ -784,7 +785,8 @@ UpdateSleepTime RailroadBehavior::update()
 			TheAudio->removeAudioEvent( m_runningSound.getPlayingHandle() );
 		}
 
-		conductorPullInfo.trackDistance += conductorPullInfo.speed ;
+		// AoC @tweak 30/10/2026 Track speed is a distance per retail frame (D11 F15 port list).
+		conductorPullInfo.trackDistance += conductorPullInfo.speed / (Real)AoCSimRate::frameMultiplier();
 		// only normalize track position for a looping track, otherwise, let train exit by exceeding tracklength
 		while ( (conductorPullInfo.trackDistance > m_track->m_length) && m_track->m_isLooping)
 			conductorPullInfo.trackDistance -= m_track->m_length;

@@ -29,6 +29,7 @@
 
 // INCLUDES ///////////////////////////////////////////////////////////////////////////////////////
 #include "PreRTS.h"	// This must go first in EVERY cpp file in the GameEngine
+#include "AoC/AoCSimRate.h"
 
 #define DEFINE_SHADOW_NAMES								// for TheShadowNames[]
 #define DEFINE_WEAPONSLOTTYPE_NAMES
@@ -590,6 +591,9 @@ static void calcRandomForce(Real minMag, Real maxMag, Real minPitch, Real maxPit
 	Real angle = GameLogicRandomValueReal(0, 2*PI);
 	Real pitch = GameLogicRandomValueReal(minPitch, maxPitch);
 	Real mag = GameLogicRandomValueReal(minMag, maxMag);
+	// AoC @tweak 30/10/2026 Impulses are velocities per frame (D11 F15 port list).
+	if (AoCSimRate::frameMultiplier() > 1)
+		mag /= (Real)AoCSimRate::frameMultiplier();
 
 	Matrix3D mtx(1);
 	mtx.Scale(mag);
@@ -1156,6 +1160,13 @@ protected:
 				Real yaw = GameLogicRandomValueReal( -yawRate, yawRate );
 				Real roll = GameLogicRandomValueReal( -rollRate, rollRate );
 				Real pitch = GameLogicRandomValueReal( -pitchRate, pitchRate );
+				// AoC @tweak 30/10/2026 Spin rates are per frame (D11 F15 port list).
+				if (AoCSimRate::frameMultiplier() > 1)
+				{
+					yaw /= (Real)AoCSimRate::frameMultiplier();
+					roll /= (Real)AoCSimRate::frameMultiplier();
+					pitch /= (Real)AoCSimRate::frameMultiplier();
+				}
 				DUMPREAL(yaw);
 				DUMPREAL(roll);
 				DUMPREAL(pitch);
@@ -1165,6 +1176,11 @@ protected:
 				{
 					Real horizForce = 4.0f * m_dispositionIntensity;		// 2
 					Real vertForce = 3.0f * m_dispositionIntensity;		// 3
+					if (AoCSimRate::frameMultiplier() > 1)	// AoC F15: velocity per frame
+					{
+						horizForce /= (Real)AoCSimRate::frameMultiplier();
+						vertForce /= (Real)AoCSimRate::frameMultiplier();
+					}
 					force.x = GameLogicRandomValueReal( -horizForce, horizForce );
 					force.y = GameLogicRandomValueReal( -horizForce, horizForce );
 					force.z = GameLogicRandomValueReal( vertForce * 0.33f, vertForce );
@@ -1176,6 +1192,11 @@ protected:
 				{
 					Real horizForce = 2.0f * m_dispositionIntensity;
 					Real vertForce = 4.0f * m_dispositionIntensity;
+					if (AoCSimRate::frameMultiplier() > 1)	// AoC F15: velocity per frame
+					{
+						horizForce /= (Real)AoCSimRate::frameMultiplier();
+						vertForce /= (Real)AoCSimRate::frameMultiplier();
+					}
 
 					force.x = GameLogicRandomValueReal( -horizForce, horizForce );
 					force.y = GameLogicRandomValueReal( -horizForce, horizForce );
