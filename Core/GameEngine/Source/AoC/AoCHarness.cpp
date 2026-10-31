@@ -711,6 +711,12 @@ Int AoCHarness::parseAocUiScript( char *args[], int num )
 		return 1;
 	}
 	HarnessState &s = state();
+	if (TheGlobalData && TheGlobalData->m_headless)
+	{
+		// the dummy window manager has no command buttons, but a select would still reach the logic
+		logLine("-aocUiScript needs a window and is ignored under -headless");
+		return 2;
+	}
 	FILE *f = fopen(args[1], "r");
 	if (f == nullptr)
 	{
