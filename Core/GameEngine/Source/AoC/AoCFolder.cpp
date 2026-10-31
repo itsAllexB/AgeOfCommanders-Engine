@@ -102,8 +102,9 @@ void ControlBar::aocCloseFolder()
 
 void ControlBar::aocOpenFolder( const CommandButton *folderButton, Object *obj )
 {
-	// a folder belongs to one object: in a multi-selection (no object) the button does nothing
-	if( obj == nullptr || AoCFolder::folderSetOf( folderButton ) == nullptr )
+	// a folder belongs to one object: in a multi-selection (no object) the button does nothing. Folders are
+	// one level deep (D6 3.2), as the logic's folder lookups are: a folder button inside a folder does nothing.
+	if( obj == nullptr || m_aocOpenFolder.isNotEmpty() || AoCFolder::folderSetOf( folderButton ) == nullptr )
 		return;
 	m_aocOpenFolder = folderButton->getAoCFolderSet();
 	m_aocFolderOwner = obj->getID();
