@@ -283,4 +283,62 @@ TEST_F(AoCCostTest, ScriptComparisons)
 	EXPECT_FALSE(AoCRules::compareInts(-1, 1, 2)) << "an unknown comparison is false";
 }
 
+// An INI fed from a string with a chosen load type, the way INI::load feeds a file: the block's first
+// line is read and its keyword consumed, then the block parser reads the rest of the block.
+class TextINI : public INI
+{
+public:
+	TextINI(const char *text, INILoadType loadType)
+	{
+		const size_t length = strlen(text);
+		m_readBuffer = new char[length];
+		memcpy(m_readBuffer, text, length);
+		m_readBufferNext = 0;
+		m_readBufferUsed = (unsigned)length;
+		m_filename = "test.ini";
+		m_loadType = loadType;
+	}
+	~TextINI() { unPrepFile(); }
+
+	void parseBlock(void (*parse)(INI *))
+	{
+		readLine();
+		::strtok(m_buffer, getSeps());
+		parse(this);
+	}
+};
+
+TEST_F(AoCCostTest, MapIniCannotDefineResourceTypes)
+{
+	// Review finding 2: map.ini and solo.ini load with INI_LOAD_CREATE_OVERRIDES. A block there is
+	// consumed and ignored on every machine, so a map cannot switch the feature on for the session.
+	const char *block = "AoCResourceType Wood\n  DisplayName = GUI:AoCWood\n  CashEquivalent = 1200\nEnd\n";
+	{
+		TextINI mapIni(block, INI_LOAD_CREATE_OVERRIDES);
+		mapIni.parseBlock(AoCRules::parseResourceTypeDefinition);
+		EXPECT_EQ(mapIni.getLineNum(), 4u) << "the whole block is consumed";
+	}
+	EXPECT_FALSE(m_rules->isEnabled());
+	EXPECT_EQ(m_rules->getTypeCount(), 1);
+	EXPECT_EQ(m_rules->findType("Wood"), -1);
+
+	// The global load (Data\INI\AoCResources.ini) defines it.
+	{
+		TextINI globalIni(block, INI_LOAD_OVERWRITE);
+		globalIni.parseBlock(AoCRules::parseResourceTypeDefinition);
+	}
+	EXPECT_TRUE(m_rules->isEnabled());
+	EXPECT_EQ(m_rules->findType("Wood"), 1);
+	EXPECT_EQ(m_rules->getCashEquivalentPerMille(1), 1200);
+	EXPECT_STREQ(m_rules->getDisplayLabel(1).str(), "GUI:AoCWood");
+
+	// A map cannot redefine a global type either.
+	{
+		TextINI mapIni("AoCResourceType Wood\n  CashEquivalent = 5000\nEnd\n", INI_LOAD_CREATE_OVERRIDES);
+		mapIni.parseBlock(AoCRules::parseResourceTypeDefinition);
+	}
+	EXPECT_EQ(m_rules->getCashEquivalentPerMille(1), 1200);
+	EXPECT_EQ(m_rules->getTypeCount(), 2);
+}
+
 } // namespace

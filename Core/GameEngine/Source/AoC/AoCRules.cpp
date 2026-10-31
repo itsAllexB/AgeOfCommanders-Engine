@@ -214,6 +214,17 @@ Int AoCRules::remapLoadedType( Int loadedType ) const
 	scratch.order = -1;
 	ini->initFromINI(&scratch, fieldParse);
 
+	// The type set is global and survives game resets (reset() keeps it), so only the global INI load
+	// may define it. A map's map.ini or solo.ini loads with INI_LOAD_CREATE_OVERRIDES; a block there
+	// would switch the feature on for the rest of the session on the machines that loaded that map and
+	// desync them against peers that did not. The block is consumed above and ignored on every machine.
+	if (ini->getLoadType() == INI_LOAD_CREATE_OVERRIDES)
+	{
+		DEBUG_CRASH(("AoCResourceType '%s' in '%s' ignored: resource types are global and cannot be defined by a map",
+			name.str(), ini->getFilename().str()));
+		return;
+	}
+
 	if (TheAoCRules)
 		TheAoCRules->defineType(name, scratch.displayLabel, scratch.iconName, scratch.cashEquivalentPerMille, scratch.isCash, scratch.order);
 }

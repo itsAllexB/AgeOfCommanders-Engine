@@ -81,7 +81,9 @@ public:
 	/// Save-game support: the index a type had in the loaded file mapped to its current index, -1 if gone.
 	Int remapLoadedType( Int loadedType ) const;
 
-	/// INI block parser for "AoCResourceType <Name>" (registered in INI.cpp's block table).
+	/// INI block parser for "AoCResourceType <Name>" (registered in INI.cpp's block table). A block read
+	/// with INI_LOAD_CREATE_OVERRIDES (a map's map.ini or solo.ini) is consumed and ignored: the type set
+	/// is global and outlives the game.
 	static void parseResourceTypeDefinition( INI *ini );
 
 	// Helpers that tolerate a missing singleton (unit tests, tools, the base Generals game).
