@@ -5241,8 +5241,8 @@ void GameLogic::prepareLogicForObjectLoad()
 	* 9: Added m_rankPointsToAddAtGameStart, or else on a load game, your RestartGame button will forget your exp
   * 10: xfer m_superweaponRestriction
   * 11: TheSuperHackers @fix Save objects in reverse order so they load in correct order
-	* 12: AoC F15: the simulation rate the game was saved at (D11 F15); both the retail-compatible and the
-	*     reverse-order save now write version 12, the reverse order itself stays gated on RETAIL_COMPATIBLE_XFER_SAVE
+	* 12: AoC F15: the simulation rate the game was saved at (D11 F15). Every build writes version 12, which retail
+	*     cannot load, so every build also saves the objects in the version 11 order (newest first, no reversal on load)
 	*/
 // ------------------------------------------------------------------------------------------------
 void GameLogic::xfer( Xfer *xfer )
@@ -5297,17 +5297,15 @@ void GameLogic::xfer( Xfer *xfer )
 	ObjectTOCEntry *tocEntry;
 	if( xfer->getXferMode() == XFER_SAVE )
 	{
-#if !RETAIL_COMPATIBLE_XFER_SAVE
 		// TheSuperHackers @fix bobtista 07/03/2026 Save objects in reverse order (newest first)
 		// so they load in the correct order (oldest objects at head of list).
+		// AoC @fix 31/10/2026 Unconditional since version 12 (D11 F15): the load below reverses only versions up to 10,
+		// and retail cannot read version 12 anyway, so the retail-compatible build must not keep the retail order.
 		Object *lastObj = nullptr;
 		for( obj = getFirstObject(); obj; obj = obj->getNextObject() )
 			lastObj = obj;
 
 		for( obj = lastObj; obj; obj = obj->getPrevObject() )
-#else
-		for( obj = getFirstObject(); obj; obj = obj->getNextObject() )
-#endif
 		{
 
 			// get the object TOC entry for this template
