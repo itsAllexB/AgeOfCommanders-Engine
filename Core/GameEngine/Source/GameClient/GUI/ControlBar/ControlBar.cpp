@@ -2534,7 +2534,7 @@ void ControlBar::setControlCommand( GameWindow *button, const CommandButton *com
 	else
 		GadgetButtonSetText( button, L"" );
 
-	// AoC @hook 31/10/2026 caption over folder and Back cameos; reads the button's previous command, so before SetData (D11 F5).
+	// AoC @hook 31/10/2026 caption over folder and Back cameos; clears a caption a folder left on this window (D11 F5).
 	aocSetCaption( button, commandButton );
 
 	// save the command in the user data of the window

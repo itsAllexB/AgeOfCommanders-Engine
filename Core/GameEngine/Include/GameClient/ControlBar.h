@@ -272,7 +272,8 @@ static const char *const TheGuiCommandNames[] =
 	"SPECIAL_POWER_CONSTRUCT",
 	"SPECIAL_POWER_CONSTRUCT_FROM_SHORTCUT",
 	"SELECT_ALL_UNITS_OF_TYPE",
-	"AOC_FOLDER",				// AoC @hook 31/10/2026 command bar folders (D11 F5).
+	// AoC @hook 31/10/2026 command bar folders: the INI names of the two command types above (D11 F5).
+	"AOC_FOLDER",
 	"AOC_FOLDER_BACK",
 
 	nullptr
@@ -403,7 +404,7 @@ private:
 	AsciiString										m_buttonImageName;
 	GameWindow*										m_window;											///< used during the run-time assignment of a button to a gadget button window
 	AudioEventRTS									m_unitSpecificSound;					///< Unit sound played whenever button is clicked.
-	AsciiString										m_aocFolderSet;								///< AoC @hook 31/10/2026 the command set an AOC_FOLDER button shows (D11 F5).
+	AsciiString										m_aocFolderSet;								// AoC @hook 31/10/2026 the command set an AOC_FOLDER button shows (D11 F5).
 
 	// bleah. shouldn't be mutable, but is. sue me. (srj)
 	mutable const Image*					m_buttonImage;								///< button image
@@ -894,7 +895,6 @@ public:
 
 	// AoC @hook 31/10/2026 command bar folders, client view state only; implemented in Source/AoC/AoCFolder.cpp (D11 F5).
 	Bool aocFolderBack();																			///< Back button and Backspace: close the open folder; FALSE when none is open
-	Bool aocIsFolderOpen() const { return m_aocOpenFolder.isNotEmpty(); }
 	const AsciiString& aocShownCommandSet() const;							///< the set on the command buttons, empty outside the command context
 
 protected:
