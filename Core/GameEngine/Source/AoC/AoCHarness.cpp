@@ -305,6 +305,25 @@ const char *canMakeName( Int canMakeType )
 	return "OTHER";
 }
 
+// F4: the objects that make up a player's population, by template, for the over-the-cap stderr line
+void populationByTemplate( Object *obj, void *userData )
+{
+	std::vector< std::pair<std::string, Int> > *list = (std::vector< std::pair<std::string, Int> > *)userData;
+	const Int cost = AoCPopulation::costOf(obj->getTemplate());
+	if (cost == 0)
+		return;
+	const std::string name = obj->getTemplate()->getName().str();
+	for (size_t i = 0; i < list->size(); ++i)
+	{
+		if ((*list)[i].first == name)
+		{
+			(*list)[i].second += cost;
+			return;
+		}
+	}
+	list->push_back(std::make_pair(name, cost));
+}
+
 // F4: "NO_HOUSING:12|NO_MONEY:1" for the refusals counted since the previous row, then reset
 std::string takeBlockedBuild( Int playerIndex )
 {
@@ -449,6 +468,17 @@ void writeAiLog( UnsignedInt frame )
 			row.add("pop_reserved", pop->getReserved());
 			row.add("pop_cap", pop->getCap());
 			row.add("blocked_build", takeBlockedBuild((Int)p->getPlayerIndex()));
+			if (pop->getUsed() + pop->getReserved() > pop->getCap())
+			{
+				std::vector< std::pair<std::string, Int> > parts;
+				p->iterateObjects(populationByTemplate, &parts);
+				std::sort(parts.begin(), parts.end());
+				std::string what;
+				for (size_t n = 0; n < parts.size(); ++n)
+					what += fmt(" %s:%d", parts[n].first.c_str(), (int)parts[n].second);
+				logLine("population over the cap, frame %u, player %d: used %d reserved %d cap %d; by template%s", frame,
+					(int)p->getPlayerIndex(), pop->getUsed(), pop->getReserved(), pop->getCap(), what.c_str());
+			}
 		}
 
 		std::string path = dir + fmt("ai_%d.csv", (int)p->getPlayerIndex());

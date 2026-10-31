@@ -205,7 +205,8 @@ void AoCPopulation::release( Int amount )
 		return;
 	if (amount > m_reserved)
 	{
-		// Only a save from before F4 with units already queued gets here (it carries no reservation).
+		// Should not happen: every queued unit entry holds its reservation (a save without the population
+		// block takes it from the queues). Never below zero.
 		DEBUG_CRASH(("AoCPopulation: releasing %d population with only %d reserved", amount, m_reserved));
 		amount = m_reserved;
 	}

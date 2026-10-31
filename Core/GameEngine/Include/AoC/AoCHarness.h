@@ -40,7 +40,8 @@
 //                                   blocked_build (unit queue refusals since the previous row, by reason,
 //                                   e.g. NO_HOUSING:12). With -aiLog, stderr also gets each AI player's
 //                                   population when -saveAtFrame saves and at the first frame of a loaded
-//                                   game.
+//                                   game, and, at a row where used + reserved is above the cap, what the
+//                                   population is made of (template x count).
 //   -saveAtFrame <N> <name>         F1: write the stock save game <name>.sav (the save menu's path,
 //                                   TheGameState->saveGame) once logic frame N (1 or more) has run, from the
 //                                   engine loop. Load it with the stock -loadsave <name>.sav at the same
