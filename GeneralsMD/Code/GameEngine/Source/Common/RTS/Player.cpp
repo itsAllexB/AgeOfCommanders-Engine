@@ -302,6 +302,7 @@ Player::Player( Int playerIndex )
 
 	m_playerIndex = playerIndex;
 	m_aocBank.init( &m_money );	// AoC @hook F1: cash stays in m_money, the bank proxies it
+	m_aocPopulation.init( this );	// AoC @hook 31/10/2026 The population reports its at-cap edges to this player (D11 F4).
 
 	// allocate new relation map pools
 	m_playerRelations = newInstance(PlayerRelationMap);
@@ -357,6 +358,7 @@ void Player::init(const PlayerTemplate* pt)
 	m_skillPointsModifier = 1.0f;
 	m_attackedFrame = 0;
 	m_aocBank.reset();	// AoC @hook F1
+	m_aocPopulation.reset();	// AoC @hook 31/10/2026 A new game starts with no population, housing or reservation (D11 F4).
 
 	m_isPreorder = FALSE;
 	m_isPlayerDead = FALSE;
@@ -697,6 +699,9 @@ void Player::update()
 		onPowerBrownOutChange( !m_energy.hasSufficientPower() );
 	}
 
+	// AoC @hook 31/10/2026 The at-cap edge, once per frame, so a unit trading its reservation for its place never reports a false edge (D11 F4).
+	m_aocPopulation.reportBlockChange();
+
 	//Update the academy stats (this only checks applicable things that require a polling method)
 	getAcademyStats()->update();
 
@@ -1032,6 +1037,12 @@ void Player::becomingTeamMember(Object *obj, Bool yes)
 	{
 		obj->friend_adjustPowerForPlayer(yes);
 	}
+
+	// AoC @hook 31/10/2026 Population cost enters and leaves with team membership (capture, defect, hijack, death), housing only for completed buildings, a factory's queued units with the factory (D11 F4).
+	if( yes )
+		m_aocPopulation.objectEnteringInfluence( obj );
+	else
+		m_aocPopulation.objectLeavingInfluence( obj );
 
 	// when we capture a building, we need to see if there's an AutoDepositUpdate hooked to it,
 	// if so, award the cash bonus
@@ -3311,6 +3322,20 @@ void Player::onPowerBrownOutChange( Bool brownOut )
 	iterateObjects( doPowerDisable, &brownOut );// This function is so cool.
 }
 
+//-------------------------------------------------------------------------------------------------
+/** AoC @feature 31/10/2026 The edge into and out of "at cap" (D11 F4). Production needs no help here: it waits
+	* through BuildAssistant::canMakeUnit (CANMAKE_NO_HOUSING) until the headroom returns. The only effect is the
+	* local player's warning, a client write in the stock pattern of the floating-text blocks (D11 1.2). */
+//-------------------------------------------------------------------------------------------------
+void Player::onAoCPopulationBlockChange( Bool atCap )
+{
+	if( atCap && this == ThePlayerList->getLocalPlayer() && TheGameLogic->isInGame() &&
+			!TheGameLogic->isLoadingMap() && !TheGameLogic->isLoadingSave() && !TheGameLogic->isClearingGameData() )
+	{
+		AoCPopulation::showLocalWarning();
+	}
+}
+
 
 
 
@@ -4039,6 +4064,9 @@ void Player::crc( Xfer *xfer )
 	// AoC @hook F1: the bank writes nothing while no resource types are defined
 	xfer->xferSnapshot( &m_aocBank );
 
+	// AoC @hook 31/10/2026 Population used, capacity, reserved and the lobby cap; nothing while every counter is zero, as with stock data (D11 F4).
+	xfer->xferSnapshot( &m_aocPopulation );
+
 }
 
 // ------------------------------------------------------------------------------------------------
@@ -4053,13 +4081,14 @@ void Player::crc( Xfer *xfer )
 	* 7: added Preorder flag
 	* 8: Save m_disabledSciences & m_hiddenSciences. jba.
 	* 9: AoC F1: the resource bank (count byte and non-cash amounts) at the end.
+	* 10: AoC F4: the population (used, capacity, reserved) after the bank.
 	*/
 // ------------------------------------------------------------------------------------------------
 void Player::xfer( Xfer *xfer )
 {
 
 	// version
-	const XferVersion currentVersion = 9;	// AoC @hook F1: 8 to 9
+	const XferVersion currentVersion = 10;	// AoC @hook F1: 8 to 9; AoC @hook 31/10/2026 9 to 10, the population (D11 F4).
 	XferVersion version = currentVersion;
 	xfer->xferVersion( &version, currentVersion );
 
@@ -4599,6 +4628,12 @@ void Player::xfer( Xfer *xfer )
 	else if( xfer->getXferMode() == XFER_LOAD )
 		m_aocBank.reset();	// AoC @hook 31/10/2026 A pre-F1 save has no bank: drop the starting stock Player::init deposited (D11 F1).
 
+	// AoC @hook 31/10/2026 The population; loadPostProcess recounts used and capacity, and a save without it takes reserved from the queues (D11 F4).
+	if (version >= 10)
+		xfer->xferSnapshot( &m_aocPopulation );
+	else if( xfer->getXferMode() == XFER_LOAD )
+		m_aocPopulation.reset();
+
 }
 
 // ------------------------------------------------------------------------------------------------
@@ -4606,6 +4641,9 @@ void Player::xfer( Xfer *xfer )
 // ------------------------------------------------------------------------------------------------
 void Player::loadPostProcess()
 {
+
+	// AoC @hook 31/10/2026 Used and capacity recounted from the objects so older saves self-heal; reserved stays as saved (D11 F4).
+	m_aocPopulation.recountFromOwner();
 
 }
 
