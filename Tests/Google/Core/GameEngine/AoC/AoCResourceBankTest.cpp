@@ -207,9 +207,9 @@ TEST_F(AoCResourceBankTest, Shortfall)
 	EXPECT_TRUE(missing.isZero());
 }
 
-TEST_F(AoCResourceBankTest, CashEquivalentForTheWealthTimers)
+TEST_F(AoCResourceBankTest, CashEquivalentWeighsEveryType)
 {
-	// Feature off: exactly the cash on hand, which keeps the stock AI wealth checks and PLAYER_HAS_CREDITS identical.
+	// Feature off: exactly the cash on hand, so the -aiLog cash_equivalent column equals money.
 	m_bank.deposit(AOC_RESOURCE_CASH, 1234, FALSE, FALSE);
 	EXPECT_EQ(m_bank.cashEquivalent(), 1234u);
 

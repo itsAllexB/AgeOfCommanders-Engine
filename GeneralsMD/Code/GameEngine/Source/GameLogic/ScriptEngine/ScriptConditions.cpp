@@ -973,12 +973,12 @@ Bool ScriptConditions::evaluatePlayerHasCredits(Parameter *pCreditsParm, Paramet
 	if (pPlayer && pPlayer->getMoney()) {
 		switch (pComparisonParm->getInt())
 		{
-			case Parameter::LESS_THAN :			return (pCreditsParm->getInt() < pPlayer->getAoCBank()->cashEquivalent()); break;
-			case Parameter::LESS_EQUAL :		return (pCreditsParm->getInt() <= pPlayer->getAoCBank()->cashEquivalent()); break;
-			case Parameter::EQUAL :					return (pCreditsParm->getInt() == pPlayer->getAoCBank()->cashEquivalent()); break;
-			case Parameter::GREATER_EQUAL :	return (pCreditsParm->getInt() >= pPlayer->getAoCBank()->cashEquivalent()); break;
-			case Parameter::GREATER :				return (pCreditsParm->getInt() > pPlayer->getAoCBank()->cashEquivalent()); break;
-			case Parameter::NOT_EQUAL :			return (pCreditsParm->getInt() != pPlayer->getAoCBank()->cashEquivalent()); break;
+			case Parameter::LESS_THAN :			return (pCreditsParm->getInt() < pPlayer->getMoney()->countMoney()); break;
+			case Parameter::LESS_EQUAL :		return (pCreditsParm->getInt() <= pPlayer->getMoney()->countMoney()); break;
+			case Parameter::EQUAL :					return (pCreditsParm->getInt() == pPlayer->getMoney()->countMoney()); break;
+			case Parameter::GREATER_EQUAL :	return (pCreditsParm->getInt() >= pPlayer->getMoney()->countMoney()); break;
+			case Parameter::GREATER :				return (pCreditsParm->getInt() > pPlayer->getMoney()->countMoney()); break;
+			case Parameter::NOT_EQUAL :			return (pCreditsParm->getInt() != pPlayer->getMoney()->countMoney()); break;
 		}
 	}
 

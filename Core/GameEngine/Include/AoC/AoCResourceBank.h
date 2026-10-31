@@ -25,8 +25,9 @@
 // Semantics: canAfford compares every component; withdraw of a vector with typed components is
 // all-or-nothing across every component, cash included, while a cash-only vector goes through
 // Money::withdraw with the stock clamp exactly as the stock sites did (callers check canAfford first,
-// as stock does); deposit adds. cashEquivalent() weighs every type by its
-// CashEquivalent per mille for the stock wealth checks (AI timers, PLAYER_HAS_CREDITS).
+// as stock does); deposit adds. cashEquivalent() weighs every type by its CashEquivalent per mille
+// for reporting (the -aiLog cash_equivalent column, display); the stock cash checks (PLAYER_HAS_CREDITS,
+// the AI poor/wealthy timers) stay cash only.
 
 #pragma once
 

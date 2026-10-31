@@ -803,9 +803,9 @@ void AIPlayer::processBaseBuilding()
 
 						m_readyToBuildStructure = false;
 						m_structureTimer = TheAI->getAiData()->m_structureSeconds*static_cast<float>(LOGICFRAMES_PER_SECOND);
-						if (m_player->getAoCBank()->cashEquivalent() < TheAI->getAiData()->m_resourcesPoor) {
+						if (m_player->getMoney()->countMoney() < TheAI->getAiData()->m_resourcesPoor) {
 							m_structureTimer = m_structureTimer/TheAI->getAiData()->m_structuresPoorMod;
-						}	else if (m_player->getAoCBank()->cashEquivalent() > TheAI->getAiData()->m_resourcesWealthy) {
+						}	else if (m_player->getMoney()->countMoney() > TheAI->getAiData()->m_resourcesWealthy) {
 							m_structureTimer = m_structureTimer/TheAI->getAiData()->m_structuresWealthyMod;
 						}
 						m_frameLastBuildingBuilt = TheGameLogic->getFrame();
@@ -840,9 +840,9 @@ void AIPlayer::processBaseBuilding()
 
 								m_readyToBuildStructure = false;
 								m_structureTimer = TheAI->getAiData()->m_structureSeconds*LOGICFRAMES_PER_SECOND;
-								if (m_player->getAoCBank()->cashEquivalent() < TheAI->getAiData()->m_resourcesPoor) {
+								if (m_player->getMoney()->countMoney() < TheAI->getAiData()->m_resourcesPoor) {
 									m_structureTimer = m_structureTimer/TheAI->getAiData()->m_structuresPoorMod;
-								}	else if (m_player->getAoCBank()->cashEquivalent() > TheAI->getAiData()->m_resourcesWealthy) {
+								}	else if (m_player->getMoney()->countMoney() > TheAI->getAiData()->m_resourcesWealthy) {
 									m_structureTimer = m_structureTimer/TheAI->getAiData()->m_structuresWealthyMod;
 								}
 								m_frameLastBuildingBuilt = TheGameLogic->getFrame();
@@ -1778,9 +1778,9 @@ Bool AIPlayer::selectTeamToBuild()
 		buildSpecificAITeam(teamProto, false);
 		m_readyToBuildTeam = false;
 		m_teamTimer = m_teamSeconds*LOGICFRAMES_PER_SECOND;
-		if (m_player->getAoCBank()->cashEquivalent() < TheAI->getAiData()->m_resourcesPoor) {
+		if (m_player->getMoney()->countMoney() < TheAI->getAiData()->m_resourcesPoor) {
 			m_teamTimer = m_teamTimer/TheAI->getAiData()->m_teamPoorMod;
-		}	else if (m_player->getAoCBank()->cashEquivalent() > TheAI->getAiData()->m_resourcesWealthy) {
+		}	else if (m_player->getMoney()->countMoney() > TheAI->getAiData()->m_resourcesWealthy) {
 			m_teamTimer = m_teamTimer/TheAI->getAiData()->m_teamWealthyMod;
 		}
 		return true;
