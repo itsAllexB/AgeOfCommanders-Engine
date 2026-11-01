@@ -24,7 +24,7 @@
 //
 // -crcLog lines. Without -crcEvery and -crcWindow a line is written at each frame the engine itself computes the CRC
 // (every 100 logic frames in a skirmish or a replay), "frame,CRC", as since F1. With -crcEvery <n> a line is written at
-// every frame that is a multiple of n instead, and with -crcWindow <from> <to> also at every frame from <from> to <to>
+// every frame that is a multiple of n instead (frame 0 too where the engine computed it, as in a stock log), and with -crcWindow <from> <to> also at every frame from <from> to <to>
 // (both included); the CRC of a frame the engine did not compute is computed at the same point of the logic update
 // (GameLogic::getCRC, after the scripts and the terrain update, before the objects update). With either flag every line
 // is "frame,CRC,SEED": SEED is GetGameLogicRandomSeedCRC, the logic random seed's CRC that the light CRC covers, so a

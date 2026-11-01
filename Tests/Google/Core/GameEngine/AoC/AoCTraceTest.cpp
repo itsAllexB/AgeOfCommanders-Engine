@@ -64,6 +64,7 @@ TEST(AoCTrace, EveryNReplacesTheEngineInterval)
 	EXPECT_TRUE(AoCTrace::crcLineDue(every1, 1, FALSE));
 	EXPECT_TRUE(AoCTrace::crcLineDue(every1, 6101, FALSE));
 	EXPECT_FALSE(AoCTrace::crcLineDue(every1, 0, FALSE));
+	EXPECT_TRUE(AoCTrace::crcLineDue(every1, 0, TRUE));	// the engine's frame-0 line stays, as in a stock log
 
 	const AoCTrace::CrcSchedule every300 = schedule(300, 0, 0);
 	EXPECT_TRUE(AoCTrace::crcLineDue(every300, 300, FALSE));

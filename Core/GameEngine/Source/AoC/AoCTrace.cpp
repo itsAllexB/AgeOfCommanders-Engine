@@ -51,7 +51,7 @@ Bool crcLineDue( const CrcSchedule &schedule, UnsignedInt frame, Bool engineComp
 	if (inWindow(schedule.windowFrom, schedule.windowTo, frame))
 		return TRUE;
 	if (schedule.every != 0)
-		return frame != 0 && (frame % schedule.every) == 0;
+		return (frame % schedule.every) == 0 && (frame != 0 || engineComputed);	// frame 0 only where the engine computed it
 	return engineComputed;
 }
 
