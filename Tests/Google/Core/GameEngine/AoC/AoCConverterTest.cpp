@@ -23,6 +23,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <string>
+#include <vector>
 #include <gtest/gtest.h>
 
 #include "AoC/AoCConverterUpdate.h"
@@ -44,25 +45,34 @@ namespace
 
 enum { CASH = AOC_RESOURCE_CASH, FOOD = 1, WOOD = 2, IRON = 3, STEEL = 4 };
 
-// The runtime fields as the module saves them: AoCConverterUpdate::xfer writes its version byte (1), the UpdateModule
-// block, then AoCConverterState::xfer; its crc writes AoCConverterState::crc after the base class.
+// The runtime fields through the very calls the module makes: AoCConverterUpdate::xfer writes its version byte
+// (AoCConverterState::XFER_VERSION) and the UpdateModule block, then calls AoCConverterState::xfer with that version;
+// its crc calls AoCConverterState::crc. The holder calls only the state's own helpers, with no stand-in fields, so the
+// bytes it writes are exactly the state's part of the module's block (review F3, finding 4).
 class StateHolder : public Snapshot
 {
 public:
 	AoCConverterState state;
-	Int stockBefore;	///< stands in for the UpdateModule block, so the fields are read in step with what precedes them
-	StateHolder() : stockBefore( 0 ) {}
+	XferVersion version;	///< the block version the module would have read
+	StateHolder() : version( AoCConverterState::XFER_VERSION ) {}
 protected:
 	virtual void crc( Xfer *xfer ) override { state.crc(xfer); }
-	virtual void xfer( Xfer *xfer ) override
-	{
-		XferVersion version = 1;
-		xfer->xferVersion( &version, 1 );
-		xfer->xferInt( &stockBefore );
-		state.xfer( xfer );
-	}
+	virtual void xfer( Xfer *xfer ) override { state.xfer( xfer, version ); }
 	virtual void loadPostProcess() override {}
 };
+
+std::vector<unsigned char> readFile( const std::string &path )
+{
+	std::vector<unsigned char> bytes;
+	FILE *f = fopen(path.c_str(), "rb");
+	if (f == nullptr)
+		return bytes;
+	int c;
+	while ((c = fgetc(f)) != EOF)
+		bytes.push_back((unsigned char)c);
+	fclose(f);
+	return bytes;
+}
 
 class AoCConverterTest : public ::testing::Test
 {
@@ -465,7 +475,7 @@ TEST_F(AoCConverterTest, PassiveProducerGivesTwelveFoodPerMinute)
 		EXPECT_EQ(bank.count(IRON), 0u);
 	}
 
-	// A passive producer still respects the object: no food while under construction or neutral.
+	// A passive producer still respects the object: no food while neutral (under construction: the next test).
 	AoCSimRate::g_framesPerSecond = 30;
 	const AoCConverterRecipe r = farm();
 	AoCResourceBank bank;
@@ -475,6 +485,204 @@ TEST_F(AoCConverterTest, PassiveProducerGivesTwelveFoodPerMinute)
 	neutral.neutral = TRUE;
 	EXPECT_FALSE(AoCConverter::endCycle(state, r, neutral, &bank, 150).ran);
 	EXPECT_EQ(bank.count(FOOD), 0u);
+}
+
+// Review F3, finding 4: a farm being built gives no food, one idle line for the whole build, then food from the first
+// retry after completion.
+TEST_F(AoCConverterTest, PassiveProducerWaitsForConstruction)
+{
+	defineStandardTypes();
+	AoCSimRate::g_framesPerSecond = 30;
+	const AoCConverterRecipe r = farm();
+	AoCResourceBank bank;
+	bank.init(nullptr);
+	AoCConverterState state;
+	state.cycleEndFrame = r.cycleFrames;	// placed at frame 0, first cycle end at 150
+	AoCConverterFacts building;
+	building.underConstruction = TRUE;
+	Int idleLines = 0;
+	while (state.cycleEndFrame <= 600)	// construction ends at frame 600
+	{
+		const AoCConverterStep step = AoCConverter::endCycle(state, r, building, &bank, state.cycleEndFrame);
+		EXPECT_FALSE(step.ran);
+		idleLines += step.logIdle ? 1 : 0;
+	}
+	EXPECT_EQ(idleLines, 1);
+	EXPECT_EQ(state.idleReason, (Int)AOC_CONVERTER_IDLE_UNDER_CONSTRUCTION);
+	EXPECT_FALSE(state.running);
+	EXPECT_EQ(bank.count(FOOD), 0u) << "no food while under construction";
+	EXPECT_EQ(state.cycleEndFrame, 630u);
+
+	AoCConverterFacts ready;
+	EXPECT_TRUE(AoCConverter::endCycle(state, r, ready, &bank, state.cycleEndFrame).ran);
+	EXPECT_EQ(bank.count(FOOD), 1u);
+	EXPECT_EQ(state.cycleEndFrame, 780u) << "then whole cycles of 150 frames";
+}
+
+// Review F3, finding 3: from creation until its first cycle end a converter reports STARTING (running FALSE), and the
+// first cycle end replaces it with what happened, logging an idle line only when it idles.
+TEST_F(AoCConverterTest, StartingUntilTheFirstCycleEnd)
+{
+	defineStandardTypes();
+	AoCSimRate::g_framesPerSecond = 30;
+	const AoCConverterRecipe r = mill();
+	AoCConverterState fresh;
+	EXPECT_FALSE(fresh.running);
+	EXPECT_EQ(fresh.idleReason, (Int)AOC_CONVERTER_IDLE_STARTING);
+	EXPECT_STREQ(AoCConverter::reasonName(AOC_CONVERTER_IDLE_STARTING), "starting");
+
+	AoCResourceBank empty;
+	empty.init(nullptr);
+	AoCConverterFacts facts;
+	AoCConverterState a;
+	AoCConverterStep step = AoCConverter::endCycle(a, r, facts, &empty, 120);
+	EXPECT_TRUE(step.logIdle) << "starting to no input: one idle line";
+	EXPECT_EQ(a.idleReason, (Int)AOC_CONVERTER_IDLE_NO_INPUT);
+
+	AoCResourceBank iron;
+	iron.init(nullptr);
+	iron.deposit(IRON, 2);
+	AoCConverterState b;
+	step = AoCConverter::endCycle(b, r, facts, &iron, 120);
+	EXPECT_TRUE(step.ran);
+	EXPECT_FALSE(step.logIdle);
+	EXPECT_EQ(b.idleReason, (Int)AOC_CONVERTER_IDLE_NONE);
+	EXPECT_TRUE(b.running);
+}
+
+// Review F3, finding 2: any disable but the two power types (EMP, hacked, subdued, a script's disable) pauses the cycle
+// with the running state cleared and the reason DISABLED, whatever RequiresPower says; it ranks after neutral and before
+// no power; the first retry after it lifts converts again.
+TEST_F(AoCConverterTest, DisabledPausesAndClearsRunning)
+{
+	defineStandardTypes();
+	AoCSimRate::g_framesPerSecond = 30;
+	const AoCConverterRecipe powered = mill(TRUE);
+	const AoCConverterRecipe unpowered = mill(FALSE);
+	EXPECT_STREQ(AoCConverter::reasonName(AOC_CONVERTER_IDLE_DISABLED), "disabled");
+
+	AoCConverterFacts f;
+	f.disabled = TRUE;
+	EXPECT_EQ(AoCConverter::blockedReason(unpowered, f), AOC_CONVERTER_IDLE_DISABLED) << "RequiresPower = No still stops";
+	f.underpowered = TRUE;
+	EXPECT_EQ(AoCConverter::blockedReason(powered, f), AOC_CONVERTER_IDLE_DISABLED) << "disabled before no power";
+	f.neutral = TRUE;
+	EXPECT_EQ(AoCConverter::blockedReason(powered, f), AOC_CONVERTER_IDLE_NEUTRAL) << "neutral before disabled";
+
+	AoCResourceBank bank;
+	bank.init(nullptr);
+	bank.deposit(IRON, 10);
+	AoCConverterState state;
+	AoCConverterFacts ok;
+	EXPECT_TRUE(AoCConverter::endCycle(state, unpowered, ok, &bank, 120).ran);
+	EXPECT_TRUE(state.running);
+
+	AoCConverterFacts emp;
+	emp.disabled = TRUE;
+	AoCConverterStep step = AoCConverter::endCycle(state, unpowered, emp, &bank, 240);
+	EXPECT_FALSE(step.ran);
+	EXPECT_TRUE(step.logIdle);
+	EXPECT_FALSE(state.running) << "the running condition clears (D8 3.5: smoke only while converting)";
+	EXPECT_EQ(state.idleReason, (Int)AOC_CONVERTER_IDLE_DISABLED);
+	EXPECT_EQ(bank.count(IRON), 8u) << "nothing withdrawn while disabled";
+	EXPECT_EQ(step.sleepFrames, 30u) << "retry in one second";
+	step = AoCConverter::endCycle(state, unpowered, emp, &bank, 270);
+	EXPECT_FALSE(step.logIdle) << "still disabled: no second line";
+
+	step = AoCConverter::endCycle(state, unpowered, ok, &bank, 300);
+	EXPECT_TRUE(step.ran) << "the first retry after the disable lifts converts";
+	EXPECT_EQ(bank.count(IRON), 6u);
+}
+
+// Review F3, finding 4: a converter that was running loses its power: one idle line, running cleared, the bank kept.
+TEST_F(AoCConverterTest, RunningThenLosingPower)
+{
+	defineStandardTypes();
+	AoCSimRate::g_framesPerSecond = 30;
+	const AoCConverterRecipe r = mill(TRUE);
+	AoCResourceBank bank;
+	bank.init(nullptr);
+	bank.deposit(IRON, 10);
+	AoCConverterState state;
+	AoCConverterFacts ok;
+	EXPECT_TRUE(AoCConverter::endCycle(state, r, ok, &bank, 120).ran);
+	EXPECT_TRUE(AoCConverter::endCycle(state, r, ok, &bank, 240).ran);
+
+	AoCConverterFacts brownout;
+	brownout.underpowered = TRUE;
+	AoCConverterStep step = AoCConverter::endCycle(state, r, brownout, &bank, 360);
+	EXPECT_FALSE(step.ran);
+	EXPECT_TRUE(step.logIdle) << "running to no power: one idle line";
+	EXPECT_FALSE(state.running);
+	EXPECT_EQ(state.idleReason, (Int)AOC_CONVERTER_IDLE_NO_POWER);
+	EXPECT_EQ(bank.count(IRON), 6u);
+	EXPECT_EQ(bank.count(STEEL), 2u);
+	step = AoCConverter::endCycle(state, r, brownout, &bank, 390);
+	EXPECT_FALSE(step.logIdle);
+}
+
+// Review F3, finding 1: two converters of one player due in the same frame, with input for one of them. Whichever the
+// scheduler runs first converts and the other idles, so the order decides the bank. The heap order of same-frame
+// updates is deterministic in an uninterrupted game but is rebuilt by a load (stock GameLogic::loadPostProcess), so a
+// loaded game can part from the saving run here; F14 has to keep that order across a save.
+TEST_F(AoCConverterTest, TwoConvertersOnOneBankTheOrderDecides)
+{
+	defineStandardTypes();
+	AoCSimRate::g_framesPerSecond = 30;
+	const AoCConverterRecipe own = mill();	// 2 iron to 1 steel
+	AoCConverterRecipe captured;	// a captured China mill, 3 iron to 2 steel (D11 2.3: the ratio is data)
+	parse(AoCConverterRecipe::parseInputType, captured, "InputType = Iron");
+	parse(AoCConverterRecipe::parseInputAmount, captured, "InputAmount = 3");
+	parse(AoCConverterRecipe::parseOutputType, captured, "OutputType = Steel");
+	parse(AoCConverterRecipe::parseOutputAmount, captured, "OutputAmount = 2");
+	parse(AoCConverterRecipe::parseCycleTime, captured, "CycleTime = 4000");
+	captured.finish();
+	AoCConverterFacts facts;
+
+	// Own mill first.
+	AoCResourceBank first;
+	first.init(nullptr);
+	first.deposit(IRON, 3);
+	AoCConverterState ownA, capturedA;
+	EXPECT_TRUE(AoCConverter::endCycle(ownA, own, facts, &first, 120).ran);
+	EXPECT_FALSE(AoCConverter::endCycle(capturedA, captured, facts, &first, 120).ran);
+	EXPECT_EQ(capturedA.idleReason, (Int)AOC_CONVERTER_IDLE_NO_INPUT);
+	EXPECT_EQ(first.count(IRON), 1u);
+	EXPECT_EQ(first.count(STEEL), 1u);
+
+	// Captured mill first.
+	AoCResourceBank second;
+	second.init(nullptr);
+	second.deposit(IRON, 3);
+	AoCConverterState ownB, capturedB;
+	EXPECT_TRUE(AoCConverter::endCycle(capturedB, captured, facts, &second, 120).ran);
+	EXPECT_FALSE(AoCConverter::endCycle(ownB, own, facts, &second, 120).ran);
+	EXPECT_EQ(ownB.idleReason, (Int)AOC_CONVERTER_IDLE_NO_INPUT);
+	EXPECT_EQ(second.count(IRON), 0u);
+	EXPECT_EQ(second.count(STEEL), 2u);
+
+	EXPECT_NE(first.count(STEEL), second.count(STEEL)) << "the same frame, the same bank, another order: another bank";
+	EXPECT_NE(ownA.cycleEndFrame, ownB.cycleEndFrame) << "and the two converters' next cycle ends swap";
+}
+
+// Review F3, finding 5: the retry is converted once at parse time, like the cycle, so a cycle end only adds integers.
+TEST_F(AoCConverterTest, RetryFramesAreSetAtParseTime)
+{
+	defineStandardTypes();
+	AoCSimRate::g_framesPerSecond = 30;
+	AoCConverterRecipe at30 = mill();
+	EXPECT_EQ(at30.retryFrames, 30u);
+	AoCSimRate::g_framesPerSecond = 60;
+	AoCConverterRecipe at60 = mill();
+	EXPECT_EQ(at60.retryFrames, 60u);
+	// A cycle end uses the stored value, not the live rate: the 30 Hz recipe still retries in 30 frames.
+	AoCResourceBank empty;
+	empty.init(nullptr);
+	AoCConverterState state;
+	AoCConverterFacts facts;
+	EXPECT_EQ(AoCConverter::endCycle(state, at30, facts, &empty, 120).sleepFrames, 30u);
+	AoCConverterRecipe unfinished;
+	EXPECT_EQ(unfinished.retryFrames, 0u) << "set only by finish";
 }
 
 TEST_F(AoCConverterTest, CostTextForTheLog)
@@ -492,13 +700,15 @@ TEST_F(AoCConverterTest, CostTextForTheLog)
 	EXPECT_STREQ(text, "Food:1 Iron:2");
 }
 
-// Decision 2: the three runtime fields round-trip through the module's own versioned block, and the CRC covers each.
-TEST_F(AoCConverterTest, StateRoundTripsAndEntersTheCrc)
+// Decision 2 and review F3, finding 4: the three runtime fields round-trip through AoCConverterState::xfer, the call the
+// module's xfer makes after its version byte and the UpdateModule block; the bytes are exactly the three fields in their
+// order (so a reordering in the state shows here); a reason outside the enum is clamped on load; a block older than
+// version 1 carries none; and the CRC covers each field.
+TEST_F(AoCConverterTest, StateRoundTripsThroughItsXfer)
 {
 	const std::string path = ::testing::TempDir() + "AoCConverterStateRoundTrip.sav";
 	{
 		StateHolder holder;
-		holder.stockBefore = 77;
 		holder.state.cycleEndFrame = 1920;
 		holder.state.running = FALSE;
 		holder.state.idleReason = AOC_CONVERTER_IDLE_NO_POWER;
@@ -508,13 +718,22 @@ TEST_F(AoCConverterTest, StateRoundTripsAndEntersTheCrc)
 		save.close();
 	}
 	{
+		const std::vector<unsigned char> bytes = readFile(path);
+		ASSERT_EQ(bytes.size(), sizeof(UnsignedInt) + sizeof(Bool) + sizeof(Int)) << "the three fields and nothing else";
+		UnsignedInt frame = 0;
+		Int reason = 0;
+		memcpy(&frame, &bytes[0], sizeof(frame));
+		memcpy(&reason, &bytes[sizeof(UnsignedInt) + sizeof(Bool)], sizeof(reason));
+		EXPECT_EQ(frame, 1920u) << "first the cycle end frame";
+		EXPECT_EQ(bytes[sizeof(UnsignedInt)], 0u) << "then running";
+		EXPECT_EQ(reason, (Int)AOC_CONVERTER_IDLE_NO_POWER) << "then the idle reason";
+
 		StateHolder loaded;
 		XferLoad load;
 		load.setOptions(XO_NO_POST_PROCESSING);
 		load.open(path.c_str());
 		load.xferSnapshot(&loaded);
 		load.close();
-		EXPECT_EQ(loaded.stockBefore, 77);
 		EXPECT_EQ(loaded.state.cycleEndFrame, 1920u) << "the sleep resumes from the saved cycle end";
 		EXPECT_FALSE(loaded.state.running);
 		EXPECT_EQ(loaded.state.idleReason, (Int)AOC_CONVERTER_IDLE_NO_POWER);
@@ -523,6 +742,7 @@ TEST_F(AoCConverterTest, StateRoundTripsAndEntersTheCrc)
 		StateHolder holder;
 		holder.state.cycleEndFrame = 240;
 		holder.state.running = TRUE;
+		holder.state.idleReason = AOC_CONVERTER_IDLE_NONE;
 		XferSave save;
 		save.open(path.c_str());
 		save.xferSnapshot(&holder);
@@ -537,7 +757,61 @@ TEST_F(AoCConverterTest, StateRoundTripsAndEntersTheCrc)
 		EXPECT_EQ(loaded.state.idleReason, (Int)AOC_CONVERTER_IDLE_NONE);
 	}
 	remove(path.c_str());
+}
 
+TEST_F(AoCConverterTest, LoadClampsAnUnknownReasonAndOlderBlocksCarryNone)
+{
+	const std::string path = ::testing::TempDir() + "AoCConverterStateClamp.sav";
+	const Int bad[2] = { 99, -3 };
+	for (Int n = 0; n < 2; ++n)
+	{
+		for (Int running = 0; running < 2; ++running)
+		{
+			StateHolder holder;
+			holder.state.cycleEndFrame = 300;
+			holder.state.running = running ? TRUE : FALSE;
+			holder.state.idleReason = bad[n];
+			XferSave save;
+			save.open(path.c_str());
+			save.xferSnapshot(&holder);
+			save.close();
+			StateHolder loaded;
+			XferLoad load;
+			load.setOptions(XO_NO_POST_PROCESSING);
+			load.open(path.c_str());
+			load.xferSnapshot(&loaded);
+			load.close();
+			EXPECT_EQ(loaded.state.cycleEndFrame, 300u);
+			EXPECT_EQ(loaded.state.idleReason, running ? (Int)AOC_CONVERTER_IDLE_NONE : (Int)AOC_CONVERTER_IDLE_STARTING)
+				<< "reason " << bad[n] << ", running " << running;
+		}
+	}
+
+	// A block of version 0 (none exists; the rule for any field added later) reads nothing and keeps the constructor's state.
+	{
+		StateHolder holder;
+		holder.version = 0;
+		holder.state.cycleEndFrame = 777;
+		XferSave save;
+		save.open(path.c_str());
+		save.xferSnapshot(&holder);
+		save.close();
+		EXPECT_EQ(readFile(path).size(), 0u);
+		StateHolder loaded;
+		loaded.version = 0;
+		XferLoad load;
+		load.setOptions(XO_NO_POST_PROCESSING);
+		load.open(path.c_str());
+		load.xferSnapshot(&loaded);
+		load.close();
+		EXPECT_EQ(loaded.state.cycleEndFrame, 0u);
+		EXPECT_EQ(loaded.state.idleReason, (Int)AOC_CONVERTER_IDLE_STARTING);
+	}
+	remove(path.c_str());
+}
+
+TEST_F(AoCConverterTest, CrcCoversEachField)
+{
 	StateHolder a, b;
 	const UnsignedInt base = crcOf(a);
 	EXPECT_EQ(crcOf(b), base);
