@@ -141,8 +141,9 @@
 //                                                        the click ending a drag from world point 1 to point 2 sends: the
 //                                                        click's checks (one segment affordable, the start legal), then
 //                                                        MSG_DOZER_CONSTRUCT_LINE with the template, the start, the angle
-//                                                        of the start-to-end vector and the end; placement mode ends; a
-//                                                        refused click is reported and keeps placement mode
+//                                                        of the start-to-end vector (not force-attack mode's 45-degree
+//                                                        snap) and the end; placement mode ends; a refused click is
+//                                                        reported and keeps placement mode
 //                                     drag <x1> <y1> <x2> <y2>  F10, client only: anchors the pending placement at point
 //                                                        1's screen position and sets the engine's mouse position (not
 //                                                        the system cursor) to point 2's, so the stock drag path draws

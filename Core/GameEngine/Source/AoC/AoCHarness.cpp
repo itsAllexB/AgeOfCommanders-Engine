@@ -922,7 +922,8 @@ Bool uiParseLinePoints( const HarnessState::UiLine &l, Coord3D &start, Coord3D &
 /// placement anchored): the click's affordability check (canMakeUnit, one segment) and its location check of the start,
 /// then MSG_DOZER_CONSTRUCT_LINE with the template, the start on the ground, the angle of the start-to-end vector (the
 /// angle InGameUI::handleBuildPlacements gives the anchored icon, Coord2D::toAngle of end - start, which the click reads
-/// back through getPlacementAngle) and the end on the ground; placement mode ends. A refused click is reported and keeps
+/// back through getPlacementAngle; not the 45-degree snap that function applies in force-attack mode) and the end on the
+/// ground; placement mode ends. A refused click is reported and keeps
 /// placement mode (the translator also ends it on a CanMakeType other than money, queue, parking or unit limit; not
 /// reproduced, as in place). Only line builds; the translator's special-power branch (sneak attack) is not reproduced.
 Int uiLine( const HarnessState::UiLine &l )

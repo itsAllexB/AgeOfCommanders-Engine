@@ -147,8 +147,11 @@ TEST_F(AoCWallTest, HugeRequestSaturates)
 	m_bank.setAmount(WOOD, 0xFFFFFFFFu);
 	EXPECT_EQ(429496729, AoCWall::affordableCount(m_bank, cost("Wood:10"), INT_MAX));
 	EXPECT_EQ(INT_MAX, AoCWall::affordableCount(m_bank, cost("Wood:1"), INT_MAX));
-	m_bank.setAmount(WOOD, 0xFFFFFFFFu);
 	EXPECT_EQ(1431655765, AoCWall::affordableCount(m_bank, cost("Wood:3"), INT_MAX));	// 3 x 1431655766 > 0xFFFFFFFF
+	// the saturated product of one segment more passes canAfford: why the count divides instead
+	AoCWall::multiply(cost("Wood:3"), 1431655766, total);
+	EXPECT_EQ(0xFFFFFFFFu, total.amount[WOOD]);
+	EXPECT_TRUE(m_bank.canAfford(total));
 }
 
 TEST_F(AoCWallTest, NFoldVector)
