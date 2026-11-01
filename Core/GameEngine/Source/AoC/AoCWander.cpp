@@ -58,6 +58,7 @@ AoCWanderData::AoCWanderData()
 	minPauseFrames = msecsToFrames(2000);
 	maxPauseFrames = msecsToFrames(8000);
 	anchorToProducer = TRUE;
+	clearProducerFootprint = TRUE;
 }
 
 // ------------------------------------------------------------------------------------------------
@@ -69,6 +70,7 @@ AoCWanderData::AoCWanderData()
 		{ "MinPause",					INI::parseDurationUnsignedInt,	nullptr, offsetof( AoCWanderData, minPauseFrames ) },
 		{ "MaxPause",					INI::parseDurationUnsignedInt,	nullptr, offsetof( AoCWanderData, maxPauseFrames ) },
 		{ "AnchorToProducer",	INI::parseBool,									nullptr, offsetof( AoCWanderData, anchorToProducer ) },
+		{ "ClearProducerFootprint", INI::parseBool,						nullptr, offsetof( AoCWanderData, clearProducerFootprint ) },
 		{ nullptr, nullptr, nullptr, 0 }
 	};
 	return dataFieldParse;
@@ -82,6 +84,9 @@ AoCWanderState::AoCWanderState()
 	clearance = 0.0f;
 	nextMoveFrame = 0;
 	moving = FALSE;
+	dest.zero();
+	watchPos.zero();
+	watchFrame = 0;
 }
 
 // ------------------------------------------------------------------------------------------------
@@ -98,6 +103,26 @@ void AoCWanderState::xfer( Xfer *xfer )
 	xfer->xferReal(&clearance);
 	xfer->xferUnsignedInt(&nextMoveFrame);
 	xfer->xferBool(&moving);
+	xfer->xferCoord3D(&dest);
+	xfer->xferCoord3D(&watchPos);
+	xfer->xferUnsignedInt(&watchFrame);
+}
+
+// ------------------------------------------------------------------------------------------------
+/** The module's save block.
+	* Version Info:
+	* 1: Initial version: the stock AI block, then anchored, anchor, clearance, next move frame, move in flight,
+	*    destination, watch position, watch frame */
+// ------------------------------------------------------------------------------------------------
+void AoCWanderState::xferBlock( Xfer *xfer, StockBlock stock, void *context )
+{
+	XferVersion currentVersion = AOC_WANDER_XFER_VERSION;
+	XferVersion version = currentVersion;
+	xfer->xferVersion( &version, currentVersion );
+
+	if (stock)
+		stock(xfer, context);
+	AoCWanderState::xfer(xfer);
 }
 
 // ------------------------------------------------------------------------------------------------
@@ -165,12 +190,91 @@ UnsignedInt AoCWander::checkFrames( UnsignedInt minPauseFrames )
 }
 
 // ------------------------------------------------------------------------------------------------
+Real AoCWander::anchorClearance( Bool anchoredToProducer, Bool clearFootprint, Real producerBoundingRadius )
+{
+	if (!anchoredToProducer || !clearFootprint || producerBoundingRadius < 0.0f)
+		return 0.0f;
+	return producerBoundingRadius;
+}
+
+// ------------------------------------------------------------------------------------------------
 Bool AoCWander::withinReach( const Coord3D &anchor, Real reach, Real slack, const Coord3D &pos )
 {
 	const Real dx = pos.x - anchor.x;
 	const Real dy = pos.y - anchor.y;
 	const Real limit = reach + slack;
 	return dx * dx + dy * dy <= limit * limit;
+}
+
+// ------------------------------------------------------------------------------------------------
+void AoCWander::fixAnchor( AoCWanderState &s, UnsignedInt now, const Coord3D &anchor, Real clearance, const Coord3D &pos )
+{
+	s.anchored = TRUE;
+	s.anchor = anchor;
+	s.clearance = clearance;
+	s.nextMoveFrame = now;
+	s.moving = FALSE;
+	s.watchPos = pos;
+	s.watchFrame = now;
+}
+
+// ------------------------------------------------------------------------------------------------
+Bool AoCWander::watchStuck( AoCWanderState &s, UnsignedInt now, Bool inStockMove, const Coord3D &pos, UnsignedInt stuckFrames )
+{
+	const Real dx = pos.x - s.watchPos.x;
+	const Real dy = pos.y - s.watchPos.y;
+	const Real progress = AOC_WANDER_PROGRESS_DISTANCE;
+	if (!inStockMove || dx * dx + dy * dy > progress * progress || now < s.watchFrame)
+	{
+		s.watchPos = pos;
+		s.watchFrame = now;
+		return FALSE;
+	}
+	if (!s.moving && now < s.nextMoveFrame)
+		return FALSE;		// pausing: a stock move then is not the module's business yet
+	if (now - s.watchFrame < (stuckFrames < 1 ? 1u : stuckFrames))
+		return FALSE;
+	s.moving = FALSE;
+	s.nextMoveFrame = now;
+	s.watchPos = pos;
+	s.watchFrame = now;
+	return TRUE;
+}
+
+// ------------------------------------------------------------------------------------------------
+Bool AoCWander::wantsMove( const AoCWanderState &s, UnsignedInt now, Bool idle, Bool dead )
+{
+	return !s.moving && now >= s.nextMoveFrame && idle && !dead;
+}
+
+// ------------------------------------------------------------------------------------------------
+void AoCWander::moveStarted( AoCWanderState &s, UnsignedInt now, const Coord3D &pos, const Coord3D &dest )
+{
+	s.moving = TRUE;
+	s.dest = dest;
+	s.watchPos = pos;
+	s.watchFrame = now;
+}
+
+// ------------------------------------------------------------------------------------------------
+Bool AoCWander::moveEnded( const AoCWanderState &s, Bool idle )
+{
+	return s.moving && idle;
+}
+
+// ------------------------------------------------------------------------------------------------
+void AoCWander::pauseFor( AoCWanderState &s, UnsignedInt now, UnsignedInt pauseFrames )
+{
+	s.moving = FALSE;
+	s.nextMoveFrame = now + pauseFrames;
+}
+
+// ------------------------------------------------------------------------------------------------
+UnsignedInt AoCWander::sleepFrames( const AoCWanderState &s, UnsignedInt now, UnsignedInt minPauseFrames )
+{
+	if (!s.moving && now < s.nextMoveFrame)
+		return s.nextMoveFrame - now;
+	return checkFrames(minPauseFrames);
 }
 
 // ------------------------------------------------------------------------------------------------
@@ -188,11 +292,31 @@ Bool AoCWander::logEnabled()
 }
 
 // ------------------------------------------------------------------------------------------------
-void AoCWander::logArrival( UnsignedInt objectId, Int dist, UnsignedInt pauseFrames, Int maxDist )
+void AoCWander::logArrival( UnsignedInt objectId, Int dist, Int destDist, UnsignedInt pauseFrames, Int maxDist )
 {
 	if (!logEnabled())
 		return;
-	fprintf(stderr, "[AoC wander] frame %u %u dist=%d pause=%u max=%d\n", TheGameLogic ? TheGameLogic->getFrame() : 0u,
-		objectId, (int)dist, pauseFrames, (int)maxDist);
+	fprintf(stderr, "[AoC wander] frame %u %u dist=%d dest=%d pause=%u max=%d\n", TheGameLogic ? TheGameLogic->getFrame() : 0u,
+		objectId, (int)dist, (int)destDist, pauseFrames, (int)maxDist);
+	fflush(stderr);
+}
+
+// ------------------------------------------------------------------------------------------------
+void AoCWander::logPickFailed( UnsignedInt objectId, UnsignedInt pauseFrames, Int maxDist )
+{
+	if (!logEnabled())
+		return;
+	fprintf(stderr, "[AoC wander] frame %u %u pick failed pause=%u max=%d\n", TheGameLogic ? TheGameLogic->getFrame() : 0u,
+		objectId, pauseFrames, (int)maxDist);
+	fflush(stderr);
+}
+
+// ------------------------------------------------------------------------------------------------
+void AoCWander::logUnstuck( UnsignedInt objectId, Int dist, Int maxDist )
+{
+	if (!logEnabled())
+		return;
+	fprintf(stderr, "[AoC wander] frame %u %u unstuck dist=%d max=%d\n", TheGameLogic ? TheGameLogic->getFrame() : 0u,
+		objectId, (int)dist, (int)maxDist);
 	fflush(stderr);
 }

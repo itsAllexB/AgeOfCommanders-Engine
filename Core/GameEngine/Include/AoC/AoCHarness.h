@@ -57,9 +57,12 @@
 //                                   bank <Type>=<n>... player <index> [<condition> on|off]" at each cycle end that converts
 //                                   and "... idle <reason> bank ..." (no-input, no-power, under-construction, sold, neutral, disabled)
 //                                   once per change of reason. Nothing in a stock run; logic never reads it.
-//                                   F9: one stderr line per ended wander move (AoCWanderAIUpdate), "[AoC wander]
-//                                   frame N <objectId> dist=<distance from the anchor> pause=<frames> max=<the
-//                                   farthest a pick can lie: the anchor's clearance plus WanderRadius>".
+//                                   F9 (AoCWanderAIUpdate): "[AoC wander] frame N <objectId> dist=<d> dest=<d>
+//                                   pause=<frames> max=<m>" per ended stroll (dist: where the walker stands, dest:
+//                                   the destination issued, both from the anchor; max: the farthest a pick can lie,
+//                                   the anchor's clearance plus WanderRadius), "... pick failed pause=<frames>
+//                                   max=<m>" when no draw gave a usable destination, "... unstuck dist=<d> max=<m>"
+//                                   when the watchdog takes over a walker locked in a stock move.
 //   -saveAtFrame <N> <name>         F1: write the stock save game <name>.sav (the save menu's path,
 //                                   TheGameState->saveGame) once logic frame N (1 or more) has run, from the
 //                                   engine loop. Load it with the stock -loadsave <name>.sav at the same

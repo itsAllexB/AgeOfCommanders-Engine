@@ -27,6 +27,7 @@
 #include "Common/Xfer.h"
 #include "GameLogic/AI.h"
 #include "GameLogic/AIPathfind.h"
+#include "GameLogic/AIStateMachine.h"
 #include "GameLogic/GameLogic.h"
 #include "GameLogic/Object.h"
 #include "WWMath/wwmath.h"
@@ -70,32 +71,39 @@ AoCWanderAIUpdate::~AoCWanderAIUpdate()
 }
 
 //-------------------------------------------------------------------------------------------------
-// The anchor is fixed once: the producer's position (SpawnBehavior sets the producer) with its footprint as the
-// clearance, when AnchorToProducer is on and the producer exists, else the walker's own position.
+Int AoCWanderAIUpdate::maxDistForLog() const
+{
+	const AoCWanderData &data = getAoCWanderAIUpdateModuleData()->m_wander;
+	return (Int)WWMath::Ceil(AoCWander::outerRadius(m_wander.clearance, data.wanderRadius));
+}
+
+//-------------------------------------------------------------------------------------------------
+// The anchor is fixed once: the producer's position (SpawnBehavior sets the producer), with its footprint as the
+// clearance unless ClearProducerFootprint = No, when AnchorToProducer is on and the producer exists; else the walker's
+// own position with clearance 0.
 void AoCWanderAIUpdate::fixAnchor()
 {
 	const AoCWanderData &data = getAoCWanderAIUpdateModuleData()->m_wander;
 	Object *obj = getObject();
-	m_wander.anchor = *obj->getPosition();
-	m_wander.clearance = 0.0f;
+	Coord3D anchor = *obj->getPosition();
+	Real clearance = 0.0f;
 	if (data.anchorToProducer)
 	{
 		const Object *producer = TheGameLogic->findObjectByID(obj->getProducerID());
 		if (producer != nullptr && producer != obj)
 		{
-			m_wander.anchor = *producer->getPosition();
-			m_wander.clearance = producer->getGeometryInfo().getBoundingCircleRadius();
+			anchor = *producer->getPosition();
+			clearance = AoCWander::anchorClearance(TRUE, data.clearProducerFootprint, producer->getGeometryInfo().getBoundingCircleRadius());
 		}
 	}
-	m_wander.anchored = TRUE;
-	m_wander.nextMoveFrame = TheGameLogic->getFrame();
+	AoCWander::fixAnchor(m_wander, TheGameLogic->getFrame(), anchor, clearance, *obj->getPosition());
 }
 
 //-------------------------------------------------------------------------------------------------
 // Pick a point and issue the move. The pathfinder moves a destination off obstacles and other units' goals; the
 // adjusted spot is taken only within one pathfinder cell of the outer radius, so a pick that falls inside another
-// building cannot send the walker round to its far side. FALSE when no draw gave such a spot.
-Bool AoCWanderAIUpdate::startMove()
+// building cannot send the walker round to its far side. When no draw gives such a spot, pause again (and say so).
+void AoCWanderAIUpdate::pickAndWalk( UnsignedInt now )
 {
 	const AoCWanderData &data = getAoCWanderAIUpdateModuleData()->m_wander;
 	Object *obj = getObject();
@@ -109,9 +117,13 @@ Bool AoCWanderAIUpdate::startMove()
 		if (!AoCWander::withinReach(m_wander.anchor, outer, PATHFIND_CELL_SIZE_F, dest))
 			continue;
 		aiMoveToPosition(&dest, CMD_FROM_AI);
-		return TRUE;
+		AoCWander::moveStarted(m_wander, now, *obj->getPosition(), dest);
+		return;
 	}
-	return FALSE;
+	const UnsignedInt pause = AoCWander::drawPause(data.minPauseFrames, data.maxPauseFrames, random);
+	AoCWander::pauseFor(m_wander, now, pause);
+	if (AoCWander::logEnabled())
+		AoCWander::logPickFailed(obj->getID(), pause, maxDistForLog());
 }
 
 //-------------------------------------------------------------------------------------------------
@@ -120,44 +132,42 @@ UpdateSleepTime AoCWanderAIUpdate::update()
 	const AoCWanderData &data = getAoCWanderAIUpdateModuleData()->m_wander;
 	Object *obj = getObject();
 	const UnsignedInt now = TheGameLogic->getFrame();
-	LogicRandom random;
+	const Bool dead = obj->isEffectivelyDead();
 
 	if (!m_wander.anchored)
 		fixAnchor();
 
-	// The pause is over and the stock AI has nothing else to do: walk.
-	if (!m_wander.moving && now >= m_wander.nextMoveFrame && isIdle() && !obj->isEffectivelyDead())
+	// 1. The watchdog: a walker sitting in a stock move without getting anywhere for MaxPause frames (two units locked
+	// on one spot by the stock collision code) is sent idle and picks again. Panic, pushes and death are other states.
+	if (!dead && AoCWander::watchStuck(m_wander, now, getAIStateType() == AI_MOVE_TO, *obj->getPosition(), data.maxPauseFrames))
 	{
-		if (startMove())
-			m_wander.moving = TRUE;
-		else
-			m_wander.nextMoveFrame = now + AoCWander::drawPause(data.minPauseFrames, data.maxPauseFrames, random);
+		if (AoCWander::logEnabled())
+			AoCWander::logUnstuck(obj->getID(), AoCWander::distanceForLog(m_wander.anchor, *obj->getPosition()), maxDistForLog());
+		aiIdle(CMD_FROM_AI);
 	}
 
-	// extend
+	// 2. The pause is over and the stock AI has nothing else to do: walk.
+	if (AoCWander::wantsMove(m_wander, now, isIdle(), dead))
+		pickAndWalk(now);
+
+	// 3. extend
 	UpdateSleepTime sleep = AIUpdateInterface::update();
 
-	// The move has ended: arrived, failed, or replaced by stock behaviour (panic, a push, a repulsor) that has since
+	// 4. The move has ended: arrived, failed, or replaced by stock behaviour (panic, a push, a repulsor) that has since
 	// finished. Pause, then pick again.
-	if (m_wander.moving && isIdle())
+	if (AoCWander::moveEnded(m_wander, isIdle()))
 	{
-		m_wander.moving = FALSE;
+		LogicRandom random;
 		const UnsignedInt pause = AoCWander::drawPause(data.minPauseFrames, data.maxPauseFrames, random);
-		m_wander.nextMoveFrame = now + pause;
+		AoCWander::pauseFor(m_wander, now, pause);
 		if (AoCWander::logEnabled())
-		{
-			const Int maxDist = (Int)WWMath::Ceil(AoCWander::outerRadius(m_wander.clearance, data.wanderRadius));
-			AoCWander::logArrival(obj->getID(), AoCWander::distanceForLog(m_wander.anchor, *obj->getPosition()), pause, maxDist);
-		}
+			AoCWander::logArrival(obj->getID(), AoCWander::distanceForLog(m_wander.anchor, *obj->getPosition()),
+				AoCWander::distanceForLog(m_wander.anchor, m_wander.dest), pause, maxDistForLog());
 	}
 
-	// Sleep the rest of the pause; while a move is in flight (or the AI is busy past the pause) look again after a
+	// 5. Sleep the rest of the pause; while a move is in flight (or the AI is busy past the pause) look again after a
 	// quarter of MinPause. The stock AI's own request wins when it is sooner (every frame while the locomotor runs).
-	UnsignedInt mine;
-	if (!m_wander.moving && now < m_wander.nextMoveFrame)
-		mine = m_wander.nextMoveFrame - now;
-	else
-		mine = AoCWander::checkFrames(data.minPauseFrames);
+	const UnsignedInt mine = AoCWander::sleepFrames(m_wander, now, data.minPauseFrames);
 	if (UPDATE_SLEEP(mine) < sleep)
 		sleep = UPDATE_SLEEP(mine);
 	return sleep;
@@ -173,20 +183,18 @@ void AoCWanderAIUpdate::crc( Xfer *xfer )
 	m_wander.crc(xfer);
 }
 
+//-------------------------------------------------------------------------------------------------
+/*static*/ void AoCWanderAIUpdate::xferStockAI( Xfer *xfer, void *context )
+{
+	static_cast<AoCWanderAIUpdate *>(context)->AIUpdateInterface::xfer(xfer);
+}
+
 // ------------------------------------------------------------------------------------------------
-/** Xfer method
-	* Version Info:
-	* 1: Initial version: the stock AI, then the anchor, its clearance, the next move frame and the move flag */
+/** Xfer method: AoCWanderState::xferBlock (version 1: the stock AI block, then the walker's fields) */
 // ------------------------------------------------------------------------------------------------
 void AoCWanderAIUpdate::xfer( Xfer *xfer )
 {
-	XferVersion currentVersion = 1;
-	XferVersion version = currentVersion;
-	xfer->xferVersion( &version, currentVersion );
-
-	// extend base class
-	AIUpdateInterface::xfer(xfer);
-	m_wander.xfer(xfer);
+	m_wander.xferBlock(xfer, xferStockAI, this);
 }
 
 // ------------------------------------------------------------------------------------------------

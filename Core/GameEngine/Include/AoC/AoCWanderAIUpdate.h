@@ -22,14 +22,17 @@
 // drifts away and never returns) and updates every frame. This one strolls between random points around a fixed
 // anchor and pauses between moves; the keys, the anchor rule and the picker are in AoCWander.h.
 //
-// Each update: on the first, fix the anchor. When the pause is over and the stock AI is idle, pick a point (up to
-// AOC_WANDER_PICK_ATTEMPTS draws until the pathfinder's adjusted destination lies within one cell of the outer radius)
-// and issue aiMoveToPosition (CMD_FROM_AI). Then the stock AI update runs. When the AI is idle again with a move in
-// flight, the move has ended (arrived, failed, or replaced by stock behaviour that has since finished): draw a pause
-// of MinPause to MaxPause. The module returns the shorter of its own sleep and the stock AI's: the pause while
-// pausing, a quarter of MinPause while a move is in flight. A moving unit's stock AI asks for every frame (the
-// locomotor), an idle one sleeps on its own scan interval, so a pausing walker costs nothing between its idle scans.
-// Panic, repulsors, death and every other stock command stay stock AI behaviour.
+// Each update (the steps and their pure transitions are listed in AoCWander.h): on the first, fix the anchor. A walker
+// sitting in a stock move (AI_MOVE_TO) without progress for MaxPause frames while it has a stroll in flight or its
+// pause is over is stuck (two units locked on one spot by the stock collision code): the module sends the stock AI
+// idle (aiIdle, CMD_FROM_AI) and picks again at once. When the pause is over and the stock AI is idle, pick a point (up
+// to AOC_WANDER_PICK_ATTEMPTS draws until the pathfinder's adjusted destination lies within one cell of the outer
+// radius) and issue aiMoveToPosition (CMD_FROM_AI); with no usable draw, pause again. Then the stock AI update runs.
+// When the AI is idle again with a move in flight, the move has ended (arrived, failed, or replaced by stock behaviour
+// that has since finished): draw a pause of MinPause to MaxPause. The module returns the shorter of its own sleep and
+// the stock AI's: the pause while pausing, a quarter of MinPause while a move is in flight. A moving unit's stock AI
+// asks for every frame (the locomotor), an idle one sleeps on its own scan interval, so a pausing walker costs nothing
+// between its idle scans. Panic, repulsors, pushes, death and every other stock command stay stock AI behaviour.
 //
 // The module lives in Core and is compiled into both game targets: the base classes it uses (AIUpdateInterface,
 // AIUpdateModuleData, the pathfinder) have the same interface in Generals and Zero Hour. Registered in both
@@ -74,7 +77,9 @@ public:
 private:
 
 	void fixAnchor();
-	Bool startMove();
+	void pickAndWalk( UnsignedInt now );
+	Int maxDistForLog() const;
+	static void xferStockAI( Xfer *xfer, void *context );	///< AoCWanderState::xferBlock's stock AI block
 
 	AoCWanderState m_wander;
 };
