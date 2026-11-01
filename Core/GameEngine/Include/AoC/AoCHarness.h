@@ -145,10 +145,12 @@
 //                                   before -setCwd changes it (AoCUserData.h has the rules). -loadsave <name> and
 //                                   -loadreplay <name> resolve inside it, and so do user maps: copy the maps a run
 //                                   needs into <dir>\Maps first. A folder that cannot be made exits with code 6.
-//   (-headless)                     F12a: a -headless process with any harness flag runs unthrottled: the engine steps
-//                                   the logic at every engine iteration and the frame pacer does not wait, so the game
-//                                   runs as fast as the CPU allows. Only wall-clock pacing changes: the logic still
-//                                   counts 30 or 60 frames per game second and the CRC log equals a windowed run's.
+//   (-headless)                     F12a: a -headless process with any harness flag runs unthrottled: the frame pacer
+//                                   does not wait for the render cap and counts each engine iteration as one render step
+//                                   of it (1/60 s), so the engine sees a game rendering at exactly the cap and runs as
+//                                   fast as the CPU allows. Only wall-clock pacing changes: the logic counts 30 or 60
+//                                   frames per game second, the client's time scale is a windowed game's, and the CRC
+//                                   log equals a windowed run's.
 //
 // Exit codes: 0 normal, 2 CRC mismatch seen, 3 unsupported -simrate, 4 -skirmish could not start,
 // 5 a replay or save made at the other simulation rate was refused, 6 the -aocUserData folder is unusable.
@@ -181,10 +183,15 @@ public:
 	/// TRUE when any harness flag was given on the command line.
 	static Bool isActive();
 
-	/// F12a: TRUE in a -headless process with any harness flag. GameEngine::canUpdateRegularGameLogic then steps the logic
-	/// at every engine iteration and FramePacer::isActualFramesPerSecondLimitEnabled says no, so nothing waits on the wall
-	/// clock; the logic frame count and every CRC stay those of a windowed run.
+	/// F12a: TRUE in a -headless process with any harness flag. FramePacer::update then neither waits for the render cap nor
+	/// measures the wall clock: each engine iteration counts as one render step of the cap (unthrottledStepSeconds), so the
+	/// logic time step, the client's time scale and the logic frame count are those of a game rendering at exactly the cap,
+	/// and the game runs as fast as the CPU allows.
 	static Bool isUnthrottled();
+
+	/// F12a: the duration FramePacer::update reports for one engine iteration of an unthrottled run: one render step of the
+	/// frame limit in effect (1/60 s at the stock cap), or one logic frame when the limit is off or unset.
+	static Real unthrottledStepSeconds( UnsignedInt maxFps );
 
 	/// F12a: the folder -aocUserData installed, with its trailing separator; nullptr without the flag.
 	static const char *userDataOverride();

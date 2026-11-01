@@ -35,6 +35,7 @@
 #include "Common/BuildAssistant.h"
 #include "Common/Energy.h"
 #include "Common/FileSystem.h"
+#include "Common/FrameRateLimit.h"
 #include "Common/GameEngine.h"
 #include "Common/GameState.h"
 #include "Common/GlobalData.h"
@@ -1275,6 +1276,14 @@ Bool AoCHarness::isActive()
 Bool AoCHarness::isUnthrottled()
 {
 	return state().anyFlag && TheGlobalData != nullptr && TheGlobalData->m_headless;
+}
+
+Real AoCHarness::unthrottledStepSeconds( UnsignedInt maxFps )
+{
+	// A windowed game at the cap measures about this per iteration; the logic accumulator, the client's time scale and the
+	// logic frame phase then advance as there. An uncapped (or unset) limit would make the step vanishingly small.
+	const UnsignedInt fps = (maxFps > 0 && maxFps < (UnsignedInt)RenderFpsPreset::UncappedFpsValue) ? maxFps : (UnsignedInt)LOGICFRAMES_PER_SECOND;
+	return 1.0f / (Real)fps;
 }
 
 const char *AoCHarness::userDataOverride()

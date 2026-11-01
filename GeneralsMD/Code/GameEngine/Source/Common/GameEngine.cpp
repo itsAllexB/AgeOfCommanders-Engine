@@ -1018,10 +1018,6 @@ Bool GameEngine::canUpdateRegularGameLogic(UnsignedInt logicTimeQueryFlags)
 		return false;
 	}
 
-	// AoC @hook 02/11/2026 A headless harness run steps the logic at every engine iteration, unthrottled (D11 F12).
-	if (AoCHarness::isUnthrottled())
-		return true;
-
 	const Bool enabled = TheFramePacer->isLogicTimeScaleEnabled();
 	const Int maxRenderFps = TheFramePacer->getActualFramesPerSecondLimit();
 
