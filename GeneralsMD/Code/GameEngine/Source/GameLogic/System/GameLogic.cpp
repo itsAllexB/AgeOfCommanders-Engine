@@ -276,6 +276,7 @@ GameLogic::GameLogic()
 	m_aocPopulationCap = 0;	// AoC @hook 31/10/2026 No lobby population cap until a game sets one (D11 F4).
 	m_aocAmbientCivilians = TRUE;	// AoC @hook 01/11/2026 Ambient civilians on and conquest until a game sets them (D11 F7).
 	m_aocVictory = AOC_VICTORY_CONQUEST;
+	m_aocRichnessPerMille = AOC_RICHNESS_DEFAULT_PER_MILLE;	// AoC @hook 01/11/2026 No richness until a game sets one (D11 F7, review of PR #6, finding 4).
 
 	for(Int i = 0; i < MAX_SLOTS; i++)
 	{
@@ -546,6 +547,7 @@ void GameLogic::reset()
 	m_aocPopulationCap = 0;	// AoC @hook 31/10/2026 No lobby population cap until a game sets one (D11 F4).
 	m_aocAmbientCivilians = TRUE;	// AoC @hook 01/11/2026 Ambient civilians on and conquest until a game sets them (D11 F7).
 	m_aocVictory = AOC_VICTORY_CONQUEST;
+	m_aocRichnessPerMille = AOC_RICHNESS_DEFAULT_PER_MILLE;	// AoC @hook 01/11/2026 No richness until a game sets one (D11 F7, review of PR #6, finding 4).
 }
 
 static Object * placeObjectAtPosition(Int slotNum, AsciiString objectTemplateName, Coord3D& pos, Player *pPlayer,
@@ -1347,13 +1349,21 @@ void GameLogic::tryStartNewGame( Bool loadingSaveGame )
       m_superweaponRestriction = 0;
     }
     // AoC @hook 01/11/2026 The lobby fields the logic reads during play, before any player or object exists: the cap (the
-    // chosen AoCPopulationCapChoice, else GameData.ini AoCDefaultPopulationCap, F4), ambient civilians and victory. A save
-    // restores them in GameLogic::xfer and never re-reads them here (D11 F7).
+    // chosen AoCPopulationCapChoice, else GameData.ini AoCDefaultPopulationCap, F4), ambient civilians, victory and the
+    // richness factor. A save restores them in GameLogic::xfer and never re-reads them here (D11 F7).
     {
+      // Every lobby screen lands here: storing the settings again makes the starting cash follow the chosen stock on the
+      // host as on every peer, whichever screen set the cash (review of PR #6, finding 5: the GameSpy and GeneralsOnline
+      // setup screens still set it from the money list). Without a stock list the cash is left alone.
+      if ( TheGameInfo )
+      {
+        TheGameInfo->setAoCLobbySettings( TheGameInfo->getAoCLobbySettings() );
+      }
       const AoCLobbySettings aocLobby = TheGameInfo ? TheGameInfo->getAoCLobbySettings() : AoCLobbyRules::defaults();
       m_aocPopulationCap = AoCLobbyRules::populationCapFor( aocLobby, TheGlobalData->m_aocDefaultPopulationCap );
       m_aocAmbientCivilians = aocLobby.ambientCivilians;
       m_aocVictory = aocLobby.victory;
+      m_aocRichnessPerMille = AoCLobbyRules::richnessPerMilleFor( aocLobby );
     }
   }
   AoCPopulation::resetLocalWarning();	// AoC @hook 31/10/2026 Client side: a new or loaded game shows its first housing warning at once (D11 F4).
@@ -2586,8 +2596,7 @@ void GameLogic::tryStartNewGame( Bool loadingSaveGame )
 // ------------------------------------------------------------------------------------------------
 void GameLogic::aocApplyRichness()
 {
-	const AoCLobbySettings aocLobby = TheGameInfo ? TheGameInfo->getAoCLobbySettings() : AoCLobbyRules::defaults();
-	const Int perMille = AoCLobbyRules::richnessPerMilleFor( aocLobby );
+	const Int perMille = m_aocRichnessPerMille;	// copied from the lobby earlier in startNewGame (review of PR #6, finding 4)
 	static const NameKeyType key_warehouseUpdate = NAMEKEY("SupplyWarehouseDockUpdate");
 	Int scaled = 0;
 	Int firstBefore = 0;
@@ -5089,11 +5098,14 @@ void GameLogic::crc( Xfer *xfer )
 	// AoC @hook 31/10/2026 The lobby population cap, when one is set (D11 F4). Every active player's population CRC carries it too.
 	if( m_aocPopulationCap != 0 )
 		xfer->xferInt( &m_aocPopulationCap );
-	// AoC @hook 01/11/2026 Ambient civilians and victory, each only when not the default, so stock stays silent (D11 F7).
+	// AoC @hook 01/11/2026 Ambient civilians, victory and the richness factor, each only when not the default, so stock stays
+	// silent (D11 F7). This CRC is not part of the per-frame CRC; PlayerList::crc carries the same fields for that.
 	if( !m_aocAmbientCivilians )
 		xfer->xferBool( &m_aocAmbientCivilians );
 	if( m_aocVictory != AOC_VICTORY_CONQUEST )
 		xfer->xferInt( &m_aocVictory );
+	if( m_aocRichnessPerMille != AOC_RICHNESS_DEFAULT_PER_MILLE )
+		xfer->xferInt( &m_aocRichnessPerMille );
 
 }
 
@@ -5308,7 +5320,7 @@ void GameLogic::prepareLogicForObjectLoad()
 	* 12: AoC F15: the simulation rate the game was saved at (D11 F15). Every build writes version 12, which retail
 	*     cannot load, so every build also saves the objects in the version 11 order (newest first, no reversal on load)
 	* 13: AoC F4: m_aocPopulationCap, the lobby population cap (D11 F4).
-	* 14: AoC F7: m_aocAmbientCivilians and m_aocVictory, the lobby fields the logic reads (D11 F7).
+	* 14: AoC F7: m_aocAmbientCivilians, m_aocVictory and m_aocRichnessPerMille, the lobby fields the logic reads (D11 F7).
 	*/
 // ------------------------------------------------------------------------------------------------
 void GameLogic::xfer( Xfer *xfer )
@@ -5682,16 +5694,19 @@ void GameLogic::xfer( Xfer *xfer )
 		xfer->xferInt( &m_aocPopulationCap );
 	else if( xfer->getXferMode() == XFER_LOAD )
 		m_aocPopulationCap = 0;
-	// AoC @hook 01/11/2026 Ambient civilians and victory; a save from before F7 had neither (on, conquest) (D11 F7).
+	// AoC @hook 01/11/2026 Ambient civilians, victory and the richness factor; a save from before F7 had none (on, conquest,
+	// 1000 per mille) (D11 F7).
 	if( version >= 14 )
 	{
 		xfer->xferBool( &m_aocAmbientCivilians );
 		xfer->xferInt( &m_aocVictory );
+		xfer->xferInt( &m_aocRichnessPerMille );
 	}
 	else if( xfer->getXferMode() == XFER_LOAD )
 	{
 		m_aocAmbientCivilians = TRUE;
 		m_aocVictory = AOC_VICTORY_CONQUEST;
+		m_aocRichnessPerMille = AOC_RICHNESS_DEFAULT_PER_MILLE;
 	}
 }
 

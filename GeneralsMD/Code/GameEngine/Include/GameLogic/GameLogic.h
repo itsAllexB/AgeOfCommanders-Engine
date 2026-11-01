@@ -243,6 +243,9 @@ public:
 	/// saved with the game; the logic reads them here, never from TheGameInfo (D11 F7).
 	Bool getAoCAmbientCivilians() const { return m_aocAmbientCivilians; }
 	Int getAoCVictory() const { return m_aocVictory; }
+	/// AoC @feature 01/11/2026 The lobby richness, per mille, copied at the start of a new game and saved with it, so nodes
+	/// created during play can scale later without the lobby object (D11 F7, review of PR #6, finding 4).
+	Int getAoCRichnessPerMille() const { return m_aocRichnessPerMille; }
 
 #ifdef DUMP_PERF_STATS
 	void getAIMetricsStatistics( UnsignedInt *numAI, UnsignedInt *numMoving, UnsignedInt *numAttacking, UnsignedInt *numWaitingForPath, UnsignedInt *overallFailedPathfinds );
@@ -453,6 +456,7 @@ public:
 	Int m_aocPopulationCap;		///< AoC @feature 31/10/2026 Lobby population cap, 0 = none; lives here because TheGameInfo is not saved for every mode (D11 F4).
 	Bool m_aocAmbientCivilians;	///< AoC @feature 01/11/2026 Lobby ambient civilians, on by default (D11 F7).
 	Int m_aocVictory;						///< AoC @feature 01/11/2026 Lobby victory mode, AoCVictoryMode (D11 F7).
+	Int m_aocRichnessPerMille;	///< AoC @feature 01/11/2026 Lobby richness factor, 1000 = none (D11 F7).
 	void aocApplyRichness();		///< AoC @feature 01/11/2026 Scales the flagged warehouses at the start of a new game (D11 F7).
 
 	LoadScreen *getLoadScreen( Bool loadSaveGame );
