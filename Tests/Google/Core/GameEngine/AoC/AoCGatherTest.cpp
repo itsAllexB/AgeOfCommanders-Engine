@@ -16,7 +16,7 @@
 **	along with this program.  If not, see <http://www.gnu.org/licenses/>.
 */
 
-// AoC F2: the pure parts of typed gathering (design D11 section 2.2): the per-type capacity and delay lookup with
+// AoC F2: the pure parts of typed gathering (design D11 section 2.2) and the review fixes: the per-type capacity and delay lookup with
 // the stock fall-backs, the INI parsers of the new module fields, the cargo type-switch rule, the node search's
 // type rule, the gather rate multiplication point, and the save round trip and CRC rule of the runtime fields.
 
@@ -28,6 +28,7 @@
 #include "AoC/AoCCost.h"
 #include "AoC/AoCGather.h"
 #include "AoC/AoCRules.h"
+#include "AoC/AoCSimRate.h"
 #include "Common/GameCommon.h"
 #include "Common/INI.h"
 #include "Common/Snapshot.h"
@@ -50,6 +51,31 @@ public:
 protected:
 	virtual void crc( Xfer *xfer ) override { state.crc(xfer); }
 	virtual void xfer( Xfer *xfer ) override { state.xfer(xfer); }
+	virtual void loadPostProcess() override {}
+};
+
+// A module's versioned block in miniature, as SupplyTruckAIUpdate::xfer (fields since 2) and WorkerAIUpdate::xfer
+// (fields since 3) write it: a version byte, the stock fields (here one Int each side), the typed fields through
+// AoCCargoState::xferSince. A holder saved with an older currentVersion is an older save.
+class VersionedBlockHolder : public Snapshot
+{
+public:
+	VersionedBlockHolder( UnsignedByte currentVersion, UnsignedByte sinceVersion ) : m_current( currentVersion ), m_since( sinceVersion ), stockBefore( 11 ), stockAfter( 22 ) {}
+	AoCCargoState state;
+	UnsignedByte m_current;
+	UnsignedByte m_since;
+	Int stockBefore;
+	Int stockAfter;
+protected:
+	virtual void crc( Xfer *xfer ) override {}
+	virtual void xfer( Xfer *xfer ) override
+	{
+		XferVersion version = m_current;
+		xfer->xferVersion( &version, m_current );
+		xfer->xferInt( &stockBefore );
+		state.xferSince( xfer, version, m_since );
+		xfer->xferInt( &stockAfter );
+	}
 	virtual void loadPostProcess() override {}
 };
 
@@ -135,9 +161,9 @@ TEST_F(AoCGatherTest, PerTypeCapacityAndDelayLookup)
 	EXPECT_EQ(data.maxUnitsFor(FOOD, 1), 1) << "a type not named falls back to MaxBoxes";
 	EXPECT_EQ(data.maxUnitsFor(CASH, 4), 4);
 
-	AoCCost zero = cost("Wood:0", &mask);
-	data.setMaxUnits(zero, mask);
-	EXPECT_EQ(data.maxUnitsFor(WOOD, 7), 0) << "an explicit 0 is a capacity of 0, not the fall-back";
+	AoCCost woodOnly = cost("Wood:4", &mask);
+	data.setMaxUnits(woodOnly, mask);
+	EXPECT_EQ(data.maxUnitsFor(WOOD, 7), 4);
 	EXPECT_EQ(data.maxUnitsFor(IRON, 7), 7) << "a second AoCMaxUnits line replaces the first";
 
 	AoCCost msecs = cost("Wood:3000 Iron:5000", &mask);
@@ -312,6 +338,113 @@ TEST_F(AoCGatherTest, CrcIsSilentWhileDisabledAndCoversBothFieldsWhenEnabled)
 	EXPECT_NE(crcOf(c), crcOf(d)) << "the cargo type is in the CRC";
 	EXPECT_NE(crcOf(c), crcOf(e)) << "the assigned type is in the CRC";
 	EXPECT_NE(crcOf(d), crcOf(e));
+}
+
+// Review F2, finding 7: an older save (a truck block of version 1, a worker block of version 2) carries no typed
+// fields, so the loaded gatherer keeps cash and no assignment, and the stock fields around them stay in step.
+TEST_F(AoCGatherTest, OldSaveBlocksKeepCashAndNoAssignment)
+{
+	defineStandardTypes();
+	struct Case { const char *name; UnsignedByte savedVersion; UnsignedByte currentVersion; UnsignedByte since; Bool fieldsLoaded; };
+	const Case cases[] = {
+		{ "truck block v1", 1, 2, 2, FALSE },
+		{ "worker block v2", 2, 3, 3, FALSE },
+		{ "truck block v2", 2, 2, 2, TRUE },
+		{ "worker block v3", 3, 3, 3, TRUE },
+	};
+	for (const Case &c : cases)
+	{
+		const std::string path = ::testing::TempDir() + "AoCGatherVersionGate.sav";
+		{
+			VersionedBlockHolder saved( c.savedVersion, c.since );
+			saved.state.cargoType = WOOD;
+			saved.state.assignedType = IRON;
+			XferSave save;
+			save.open(path.c_str());
+			save.xferSnapshot(m_rules);
+			save.xferSnapshot(&saved);
+			save.close();
+		}
+		VersionedBlockHolder loaded( c.currentVersion, c.since );
+		loaded.stockBefore = 0;
+		loaded.stockAfter = 0;
+		XferLoad load;
+		load.setOptions(XO_NO_POST_PROCESSING);
+		load.open(path.c_str());
+		load.xferSnapshot(m_rules);
+		load.xferSnapshot(&loaded);
+		load.close();
+		remove(path.c_str());
+		EXPECT_EQ(loaded.stockBefore, 11) << c.name;
+		EXPECT_EQ(loaded.stockAfter, 22) << c.name << ": the stock field after the typed ones stays in step";
+		EXPECT_EQ(loaded.state.cargoType, c.fieldsLoaded ? (Int)WOOD : (Int)CASH) << c.name;
+		EXPECT_EQ(loaded.state.assignedType, c.fieldsLoaded ? (Int)IRON : -1) << c.name;
+	}
+}
+
+// Review F2, finding 7: the delay conversion at both simulation rates (F15): 3000 ms is 90 frames at 30 Hz and 180
+// at 60 Hz, through the module data and through the one delay helper the gatherer modules call.
+TEST_F(AoCGatherTest, DelaysFollowTheSimulationRate)
+{
+	defineStandardTypes();
+	// The rate is fixed once startup has read it (AoCSimRate::lock), and the test process has locked it, so the test
+	// sets the live value the conversion reads directly and puts it back.
+	const Int startRate = AoCSimRate::g_framesPerSecond;
+	UnsignedInt mask = 0;
+	AoCCost msecs = cost("Wood:3000 Iron:5000", &mask);
+
+	AoCSimRate::g_framesPerSecond = 30;
+	AoCCargoData at30;
+	at30.setGatherDelayMsecs(msecs, mask);
+	EXPECT_EQ(AoCGather::msecsToFrames(3000), 90u);
+	EXPECT_EQ(at30.gatherDelayFor(WOOD, 4u), 90u);
+	EXPECT_EQ(at30.gatherDelayFor(IRON, 4u), 150u);
+
+	AoCSimRate::g_framesPerSecond = 60;
+	AoCCargoData at60;
+	at60.setGatherDelayMsecs(msecs, mask);
+	EXPECT_EQ(AoCGather::msecsToFrames(3000), 180u);
+	EXPECT_EQ(at60.gatherDelayFor(WOOD, 4u), 180u);
+	EXPECT_EQ(AoCGather::gatherDelayFrames(at60, WOOD, 4u, nullptr), 180u) << "the helper: the node type's delay, rate 1000 per mille";
+	EXPECT_EQ(AoCGather::gatherDelayFrames(at60, FOOD, 8u, nullptr), 8u) << "the helper: the stock delay for a type not named";
+	EXPECT_EQ(AoCGather::gatherDelayFrames(at60, CASH, 8u, nullptr), 8u);
+
+	AoCSimRate::g_framesPerSecond = startRate;
+}
+
+// Review F2, finding 2: AoCValuePerUnit is a whole number of at least 1; a negative value used to wrap into a huge
+// deposit, and 0 would pay nothing. Both are INI errors, as an unknown type name is.
+TEST_F(AoCGatherTest, ValuePerUnitMustBeAtLeastOne)
+{
+	char buffer[256];
+	UnsignedInt value = 1;
+	startLine(buffer, sizeof(buffer), "AoCValuePerUnit = 3");
+	AoCGather::parsePositiveUnsignedInt(nullptr, nullptr, &value, nullptr);
+	EXPECT_EQ(value, 3u);
+
+	startLine(buffer, sizeof(buffer), "AoCValuePerUnit = -1");
+	EXPECT_THROW(AoCGather::parsePositiveUnsignedInt(nullptr, nullptr, &value, nullptr), decltype(INI_INVALID_DATA)) << "negative";
+	startLine(buffer, sizeof(buffer), "AoCValuePerUnit = 0");
+	EXPECT_THROW(AoCGather::parsePositiveUnsignedInt(nullptr, nullptr, &value, nullptr), decltype(INI_INVALID_DATA)) << "zero";
+	EXPECT_EQ(value, 3u) << "a refused line leaves the field as it was";
+}
+
+// Review F2, finding 5: a capacity of 0 for a carried type would dock and fail the pick-up forever, so every
+// AoCMaxUnits entry must be at least 1 (a stock MaxBoxes of 0 is the stock fall-back and stays stock).
+TEST_F(AoCGatherTest, MaxUnitsZeroIsRefused)
+{
+	defineStandardTypes();
+	char buffer[256];
+	AoCCargoData data;
+	startLine(buffer, sizeof(buffer), "AoCMaxUnits = Wood:10");
+	AoCCargoData::parseMaxUnits(nullptr, nullptr, &data, nullptr);
+	startLine(buffer, sizeof(buffer), "AoCMaxUnits = Wood:0 Iron:5");
+	EXPECT_THROW(AoCCargoData::parseMaxUnits(nullptr, nullptr, &data, nullptr), decltype(INI_INVALID_DATA));
+	EXPECT_EQ(data.maxUnitsFor(WOOD, 1), 10) << "a refused line leaves the field as it was";
+	EXPECT_EQ(data.maxUnitsFor(IRON, 1), 1);
+	EXPECT_EQ(data.maxUnitsFor(WOOD, 0), 10);
+	AoCCargoData stock;
+	EXPECT_EQ(stock.maxUnitsFor(CASH, 0), 0) << "MaxBoxes = 0 without AoCMaxUnits is the stock value";
 }
 
 } // namespace
