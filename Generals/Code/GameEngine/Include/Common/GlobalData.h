@@ -622,6 +622,8 @@ public:
 
 	// the trailing '\' is included!
 	AsciiString getPath_UserData() const;
+	// AoC @hook 02/11/2026 -aocUserData replaces the folder for one process, before anything reads it (D11 F12).
+	void setPath_UserData( const AsciiString &dir ) { m_userDataDir = dir; }
 
 private:
 

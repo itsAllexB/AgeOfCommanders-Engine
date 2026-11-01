@@ -18,6 +18,8 @@
 #include "PreRTS.h"
 #include "GameClient/ClientInstance.h"
 
+#include "AoC/AoCHarness.h"	// AoC @hook 02/11/2026 the instance mutex per -aocUserData folder (D11 F12)
+
 #define GENERALS_GUID "685EAFF2-3216-4265-B047-251C5F4B82F3"
 
 namespace rts
@@ -44,7 +46,7 @@ bool ClientInstance::initialize()
 	{
 		if (isMultiInstance())
 		{
-			std::string guidStr = getFirstInstanceName();
+			std::string guidStr = AoCHarness::instanceMutexName(getFirstInstanceName());	// AoC @hook 02/11/2026 per user-data folder (D11 F12)
 			if (s_instanceIndex > 0u)
 			{
 				char idStr[33];
@@ -67,7 +69,8 @@ bool ClientInstance::initialize()
 		}
 		else
 		{
-			s_mutexHandle = CreateMutex(nullptr, FALSE, getFirstInstanceName());
+			// AoC @hook 02/11/2026 With -aocUserData the rule is one game per user-data folder (D11 F12).
+			s_mutexHandle = CreateMutex(nullptr, FALSE, AoCHarness::instanceMutexName(getFirstInstanceName()));
 			if (GetLastError() == ERROR_ALREADY_EXISTS)
 			{
 				if (s_mutexHandle != nullptr)

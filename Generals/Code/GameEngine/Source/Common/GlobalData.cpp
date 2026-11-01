@@ -46,6 +46,7 @@
 #define DEFINE_BODYDAMAGETYPE_NAMES
 #define DEFINE_PANNING_NAMES
 
+#include "AoC/AoCHarness.h"	// AoC @hook 02/11/2026 -aocUserData (D11 F12)
 #include "AoC/AoCSimRate.h"
 #include "Common/AddonCompat.h"
 #include "Common/crc.h"
@@ -1252,6 +1253,8 @@ void GlobalData::parseGameDataDefinition( INI* ini )
 	// GeneralsX @feature Bender 01/04/2026 Cross-platform user data directory handling
 	// Adopts upstream refactoring with extended cross-platform support
 	TheWritableGlobalData->m_userDataDir = BuildUserDataPathFromIni();
+	// AoC @hook 02/11/2026 The folder -aocUserData installed at startup survives GameData.ini (D11 F12).
+	if (AoCHarness::userDataOverride() != nullptr) TheWritableGlobalData->m_userDataDir = AoCHarness::userDataOverride();
 	CreateDirectory(TheWritableGlobalData->m_userDataDir.str(), nullptr);
 
 	// override INI values with user preferences

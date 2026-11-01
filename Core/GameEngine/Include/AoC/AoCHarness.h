@@ -135,8 +135,29 @@
 //                                   Refused under -headless (no windows). Over 64 lines or a line over 511
 //                                   characters is reported on stderr and skipped.
 //
+//   -aocUserData <dir>              F12a: the user-data folder of this process (created if missing) instead of the one
+//                                   the registry names (Documents\Command and Conquer Generals Zero Hour Data), so a
+//                                   run's saves, replays (Replays\00000000.rep), preferences (Options.ini, Skirmish.ini,
+//                                   Network.ini, SagePatch.ini), map cache (Maps\MapCache.ini), screenshots, crash files
+//                                   and Debug dumps land in a folder of its own and several games can run at once.
+//                                   Parsed in a pass of its own before anything reads the folder (Options.ini's
+//                                   SimulationRate included); a relative path is taken against the working directory
+//                                   before -setCwd changes it (AoCUserData.h has the rules). -loadsave <name> and
+//                                   -loadreplay <name> resolve inside it, and so do user maps: copy the maps a run
+//                                   needs into <dir>\Maps first. Exit code 6 when the folder is unusable: no or an
+//                                   unsafe name, longer than 180 characters once resolved (the engine's 260-byte path
+//                                   buffers, AoCUserData::MAX_FOLDER_LENGTH), not creatable, a file, or not writable.
+//                                   Not for LAN tests with several clients on one machine: every folder's game is its
+//                                   folder's first instance, so RTS_MULTI_INSTANCE builds give them all one address.
+//   (-headless)                     F12a: a -headless process with any harness flag runs unthrottled: the frame pacer
+//                                   does not wait for the render cap and counts each engine iteration as one render step
+//                                   of it (1/60 s), so the engine sees a game rendering at exactly the cap and runs as
+//                                   fast as the CPU allows. Only wall-clock pacing changes: the logic counts 30 or 60
+//                                   frames per game second, the client's time scale is a windowed game's, and the CRC
+//                                   log equals a windowed run's.
+//
 // Exit codes: 0 normal, 2 CRC mismatch seen, 3 unsupported -simrate, 4 -skirmish could not start,
-// 5 a replay or save made at the other simulation rate was refused.
+// 5 a replay or save made at the other simulation rate was refused, 6 the -aocUserData folder is unusable.
 //
 // Everything lives in this class; stock files only gain one hook line each (see the "Hooks" section).
 // The harness never changes logic state and never branches on the local player, so stock replay CRCs
@@ -161,9 +182,27 @@ public:
 	static Int parseSaveAtFrame( char *args[], int num );	// AoC F1
 	static Int parseAocUiScript( char *args[], int num );	// AoC F5
 	static Int parseAocOptions( char *args[], int num );	// AoC F7
+	static Int parseAocUserData( char *args[], int num );	// AoC F12a: in a pass of its own, before Options.ini is read
 
 	/// TRUE when any harness flag was given on the command line.
 	static Bool isActive();
+
+	/// F12a: TRUE in a -headless process with any harness flag. FramePacer::update then neither waits for the render cap nor
+	/// measures the wall clock: each engine iteration counts as one render step of the cap (unthrottledStepSeconds), so the
+	/// logic time step, the client's time scale and the logic frame count are those of a game rendering at exactly the cap,
+	/// and the game runs as fast as the CPU allows.
+	static Bool isUnthrottled();
+
+	/// F12a: the duration FramePacer::update reports for one engine iteration of an unthrottled run: one render step of the
+	/// frame limit in effect (1/60 s at the stock cap), or one logic frame when the limit is off or unset.
+	static Real unthrottledStepSeconds( UnsignedInt maxFps );
+
+	/// F12a: the folder -aocUserData installed, with its trailing separator; nullptr without the flag.
+	static const char *userDataOverride();
+
+	/// F12a: rts::ClientInstance::initialize, the instance mutex name: the stock name without -aocUserData, else the name
+	/// of the first instance of that folder (AoCUserData::instanceName), so one game runs per user-data folder.
+	static const char *instanceMutexName( const char *firstInstanceName );
 
 	// Hooks, one call each in a stock file:
 	/// GameEngine::init, right after the RTS_DEBUG-only -file block: builds TheSkirmishGameInfo and sends MSG_NEW_GAME.

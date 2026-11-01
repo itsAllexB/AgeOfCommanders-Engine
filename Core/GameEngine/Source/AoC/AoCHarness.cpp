@@ -28,12 +28,14 @@
 #include "AoC/AoCResourceBank.h"
 #include "AoC/AoCRules.h"
 #include "AoC/AoCSimRate.h"
+#include "AoC/AoCUserData.h"
 #include "AoC/AoCWanderAIUpdate.h"
 
 #include "Common/ActionManager.h"
 #include "Common/BuildAssistant.h"
 #include "Common/Energy.h"
 #include "Common/FileSystem.h"
+#include "Common/FrameRateLimit.h"
 #include "Common/GameEngine.h"
 #include "Common/GameState.h"
 #include "Common/GlobalData.h"
@@ -101,6 +103,8 @@ struct HarnessState
 	char skirmishSlots[1024];
 	Int skirmishSeed;
 	char aocOptions[512];		///< F7: options string keys -aocOptions appends to the -skirmish string, "" when unused
+
+	char userDataDir[1024];	///< F12a: the folder -aocUserData installed (trailing separator), "" when unused
 
 	UnsignedInt quitAtFrame;
 	Bool quitRequested;		///< frame N was reached inside the logic update
@@ -1167,6 +1171,32 @@ Int AoCHarness::parseAocOptions( char *args[], int num )
 	return 2;
 }
 
+Int AoCHarness::parseAocUserData( char *args[], int num )
+{
+	// Runs in a pass of its own at the start of CommandLine::parseCommandLineForStartup, before Options.ini is read and
+	// before -setCwd, with TheGlobalData just created. A run that asked for its own folder never falls back to the shared
+	// one: an unusable folder ends the process (exit code 6).
+	HarnessState &s = state();
+	// The base of a relative argument is the working directory now: this pass runs before the startup table, so before
+	// -setCwd, and before setExecutableWorkingDirectory (CommandLine::parseCommandLineForStartup). Runners pass absolute
+	// paths; this order is what makes a relative one mean "relative to where the process was started".
+	std::error_code ec;
+	const std::filesystem::path cwd = std::filesystem::current_path(ec);
+	const std::string base = ec ? std::string() : cwd.string();
+	std::string dir;
+	const AoCUserData::PrepareResult result = AoCUserData::prepare(num < 2 ? nullptr : args[1], base.c_str(), dir);
+	if (result != AoCUserData::PREPARE_OK || dir.size() >= sizeof(s.userDataDir))
+	{
+		logLine("-aocUserData '%s': %s; leaving (exit code 6)", num < 2 ? "" : args[1], AoCUserData::describe(result));
+		exit(6);
+	}
+	copyArg(s.userDataDir, sizeof(s.userDataDir), dir.c_str());
+	TheWritableGlobalData->setPath_UserData(AsciiString(s.userDataDir));
+	s.anyFlag = TRUE;
+	logLine("user data folder: %s (-aocUserData)", s.userDataDir);
+	return 2;
+}
+
 Int AoCHarness::parseAocUiScript( char *args[], int num )
 {
 	if (num < 2)
@@ -1231,6 +1261,35 @@ Int AoCHarness::parseAocUiScript( char *args[], int num )
 Bool AoCHarness::isActive()
 {
 	return state().anyFlag;
+}
+
+Bool AoCHarness::isUnthrottled()
+{
+	return state().anyFlag && TheGlobalData != nullptr && TheGlobalData->m_headless;
+}
+
+Real AoCHarness::unthrottledStepSeconds( UnsignedInt maxFps )
+{
+	// A windowed game at the cap measures about this per iteration; the logic accumulator, the client's time scale and the
+	// logic frame phase then advance as there. An uncapped (or unset) limit would make the step vanishingly small.
+	const UnsignedInt fps = (maxFps > 0 && maxFps < (UnsignedInt)RenderFpsPreset::UncappedFpsValue) ? maxFps : (UnsignedInt)LOGICFRAMES_PER_SECOND;
+	return 1.0f / (Real)fps;
+}
+
+const char *AoCHarness::userDataOverride()
+{
+	const HarnessState &s = state();
+	return s.userDataDir[0] != '\0' ? s.userDataDir : nullptr;
+}
+
+const char *AoCHarness::instanceMutexName( const char *firstInstanceName )
+{
+	const HarnessState &s = state();
+	if (s.userDataDir[0] == '\0')
+		return firstInstanceName;
+	static char name[160];	// fixed storage, like the rest of the harness state
+	copyArg(name, sizeof(name), AoCUserData::instanceName(firstInstanceName, s.userDataDir).c_str());
+	return name;
 }
 
 // --- skirmish start -----------------------------------------------------------------------------

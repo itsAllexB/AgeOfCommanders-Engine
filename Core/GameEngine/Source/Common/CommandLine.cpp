@@ -1177,6 +1177,12 @@ Int parseClearDebugLevel(char *args[], int num)
 }
 #endif
 
+// AoC @feature 02/11/2026 Per-run user-data folder (D11 F12), parsed on its own before anything reads the folder.
+static CommandLineParam paramsForUserData[] =
+{
+	{ "-aocUserData", AoCHarness::parseAocUserData },
+};
+
 // Initial Params are parsed before Windows Creation.
 // Note that except for TheGlobalData, no other global objects exist yet when these are parsed.
 static CommandLineParam paramsForStartup[] =
@@ -1482,6 +1488,9 @@ void CommandLine::parseCommandLineForStartup()
 	if (TheGlobalData->m_commandLineData.m_hasParsedCommandLineForStartup)
 		return;
 	TheWritableGlobalData->m_commandLineData.m_hasParsedCommandLineForStartup = true;
+
+	// AoC @hook 02/11/2026 -aocUserData replaces the user-data folder before anything reads it, Options.ini included (D11 F12).
+	parseCommandLine(paramsForUserData, ARRAY_SIZE(paramsForUserData), TheWritableGlobalData->m_commandLineData.m_parsedArguments);
 
 	// AoC @hook 30/10/2026 The simulation rate comes from Options.ini before any INI loads; -simrate below overrides it (D11 F15).
 	AoCSimRate::readStartupOptions();

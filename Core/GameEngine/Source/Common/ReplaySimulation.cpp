@@ -20,6 +20,7 @@
 
 #include "Common/ReplaySimulation.h"
 
+#include "AoC/AoCHarness.h"	// AoC @hook 02/11/2026 -aocUserData for the replay workers (D11 F12)
 #include "Common/GameEngine.h"
 #include "Common/LocalFileSystem.h"
 #include "Common/Recorder.h"
@@ -210,11 +211,21 @@ int ReplaySimulation::simulateReplaysInWorkerProcesses(const std::vector<AsciiSt
 			UnicodeString filenameWide;
 			filenameWide.translate(filenames[filenamePositionStarted]);
 			UnicodeString command;
+			// AoC @tweak 02/11/2026 Workers share this process's -aocUserData folder, where replay names resolve (D11 F12).
+			// "<dir>." rather than "<dir>": a trailing backslash before the closing quote would escape it.
+			UnicodeString userDataArg;
+			if (AoCHarness::userDataOverride() != nullptr)
+			{
+				UnicodeString userDataDir;
+				userDataDir.translate(AsciiString(AoCHarness::userDataOverride()));
+				userDataArg.format(L" -aocUserData \"%s.\"", userDataDir.str());
+			}
 			// AoC @tweak 31/10/2026 Workers run at this process's simulation rate, whether it came from -simrate or Options.ini (D11 F15).
-			command.format(L"\"%s\"%s%s -simrate %d -replay \"%s\"",
+			command.format(L"\"%s\"%s%s%s -simrate %d -replay \"%s\"",
 				exePath,
 				TheGlobalData->m_windowed ? L" -win" : L"",
 				TheGlobalData->m_headless ? L" -headless" : L"",
+				userDataArg.str(),
 				LOGICFRAMES_PER_SECOND,
 				filenameWide.str());
 

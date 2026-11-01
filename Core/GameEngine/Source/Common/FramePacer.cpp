@@ -17,6 +17,7 @@
 */
 #include "PreRTS.h"
 
+#include "AoC/AoCHarness.h"	// AoC @hook 02/11/2026 unthrottled headless harness runs (D11 F12)
 #include "Common/FramePacer.h"
 
 #include "GameClient/View.h"
@@ -62,7 +63,8 @@ void FramePacer::update()
 {
 	// Uses a high resolution counter to cap the frame rate more accurately to the desired limit than retail did.
 	const UnsignedInt maxFps = getActualFramesPerSecondLimit();
-	m_updateTime = m_frameRateLimit.wait(maxFps);
+	// AoC @hook 02/11/2026 A headless harness run counts one render step of the cap without waiting for it (D11 F12).
+	m_updateTime = AoCHarness::isUnthrottled() ? AoCHarness::unthrottledStepSeconds(maxFps) : m_frameRateLimit.wait(maxFps);
 
 	if (TheGameLogic != nullptr)
 	{
