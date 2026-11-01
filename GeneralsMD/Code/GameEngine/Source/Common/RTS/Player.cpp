@@ -4084,13 +4084,14 @@ void Player::crc( Xfer *xfer )
 	* 8: Save m_disabledSciences & m_hiddenSciences. jba.
 	* 9: AoC F1: the resource bank (count byte and non-cash amounts) at the end.
 	* 10: AoC F4: the population (used, capacity, reserved) after the bank.
+	* 11: AoC F14a: m_logicalRetaliationModeEnabled, the retaliation mode the logic runs with.
 	*/
 // ------------------------------------------------------------------------------------------------
 void Player::xfer( Xfer *xfer )
 {
 
 	// version
-	const XferVersion currentVersion = 10;	// AoC @hook F1: 8 to 9; AoC @hook 31/10/2026 9 to 10, the population (D11 F4).
+	const XferVersion currentVersion = 11;	// AoC @hook F1: 8 to 9; 9 to 10, the population (D11 F4); AoC @hook 01/11/2026 10 to 11, retaliation mode (D11 F14).
 	XferVersion version = currentVersion;
 	xfer->xferVersion( &version, currentVersion );
 
@@ -4635,6 +4636,12 @@ void Player::xfer( Xfer *xfer )
 		xfer->xferSnapshot( &m_aocPopulation );
 	else if( xfer->getXferMode() == XFER_LOAD )
 		m_aocPopulation.reset();
+
+	// AoC @hook 01/11/2026 The retaliation mode the logic runs with. Not saved before, so a loaded game ran without it until the
+	// local player's once-a-second check sent MSG_ENABLE_RETALIATION_MODE again, and that message's group moved every later
+	// AI group id (D11 F14).
+	if (version >= 11)
+		xfer->xferBool( &m_logicalRetaliationModeEnabled );
 
 }
 

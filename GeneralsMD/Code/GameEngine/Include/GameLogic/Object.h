@@ -426,6 +426,10 @@ public:
 	Bool hasGhostObject() const; ///< This object has a ghost object. This does not imply that a ghost snapshot is taken or active.
 
 	void onPartitionCellChange();///< We have moved a 'significant' amount, so do maintenance that can be considered 'cell-based'
+	// AoC @hook 01/11/2026 The first cell update of a loaded object: the value and threat maps (not saved) are built again, the
+	// look and shroud stay as the save holds them in the cells and in m_partitionLastLook; an object that had not looked yet
+	// at the save takes the stock path (D11 F14).
+	void friend_aocOnPartitionCellAfterLoad();
 	void handlePartitionCellMaintenance();					///< Undo and redo all shroud actions.  Call when something has changed, like position or ownership or Death
 
 	Real getVisionRange() const;				///< How far can you see?  This is dynamic so it is in Object.

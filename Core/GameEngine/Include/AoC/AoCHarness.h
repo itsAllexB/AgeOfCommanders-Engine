@@ -90,6 +90,13 @@
 //                                   cap=<n> ambient=<Y|N> victory=<name>" and "[AoC lobby] richness scaled <n>
 //                                   warehouses (<before> to <after> boxes in the first)", and the first line again at
 //                                   the first frame of a loaded game. Nothing is printed with stock data.
+//   -crcDump <frame>|<first>:<last> <file>
+//                                   F14a: write a text decomposition of the logic CRC at that frame (or at every frame
+//                                   of the range) to <file>: the frame's CRC against the same sequence recomputed, the
+//                                   four sections of GameLogic::getCRC, one line per object with its Object::crc and
+//                                   the parts it covers, and at the single (or last) frame each module's crc, each
+//                                   player, each row of partition cells and the AI's pathfinder, data and groups
+//                                   (AoCCrcDump.h). Read only: crc functions and getters, never a save-mode xfer.
 //   -simrate <30|60>                Simulation rate for this process (D11 F15), overriding the
 //                                   Options.ini SimulationRate key. Any other value exits with code 3.
 //   -aocUiScript <file>             F5: client UI steps for unattended UI tests. Lines "<frame> <command> [arg]"
@@ -183,6 +190,7 @@ public:
 	static Int parseAocUiScript( char *args[], int num );	// AoC F5
 	static Int parseAocOptions( char *args[], int num );	// AoC F7
 	static Int parseAocUserData( char *args[], int num );	// AoC F12a: in a pass of its own, before Options.ini is read
+	static Int parseCrcDump( char *args[], int num );	// AoC F14a
 
 	/// TRUE when any harness flag was given on the command line.
 	static Bool isActive();

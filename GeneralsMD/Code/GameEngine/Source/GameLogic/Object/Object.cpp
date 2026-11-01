@@ -31,6 +31,7 @@
 #include "PreRTS.h"	// This must go first in EVERY cpp file in the GameEngine
 #include <cmath>	// For isnan() on Linux
 #include "AoC/AoCFolder.h"	// AoC @feature F5
+#include "AoC/AoCRules.h"	// AoC @hook 01/11/2026 Module CRCs in mod games (D11 F14).
 #define DEFINE_WEAPONCONDITIONMAP
 #include "Common/BitFlagsIO.h"
 #include "Common/BuildAssistant.h"
@@ -4097,6 +4098,14 @@ void Object::crc( Xfer *xfer )
 	if( m_aocPopulationFreed )
 		xfer->xferBool( &m_aocPopulationFreed );
 
+	// AoC @hook 01/11/2026 With resource types defined, every behaviour module's crc too (stock modules included), so a desync
+	// in module state (F2 cargo, F3 cycle, F9 anchor) shows at the next CRC frame; a stock game's CRC is unchanged (D11 F14).
+	if( AoCRules::enabled() )
+	{
+		for( BehaviorModule** b = m_behaviors; *b; ++b )
+			xfer->xferSnapshot( *b );
+	}
+
 }
 
 //-------------------------------------------------------------------------------------------------
@@ -4112,6 +4121,7 @@ void Object::crc( Xfer *xfer )
 	* 8: Kris: Conversion of object status bits from UnsignedInt to BitFlags<>
 	* 9: Extra sighting for reveal to all with different range units
 	* 10: AoC F4: m_aocPopulationFreed, population and housing freed at death (D11 F4)
+	* 11: AoC F14a: Thing's cached orientation, direction and altitudes (Thing::xferAoCTransformCache, D11 F14)
 	*/
 //-------------------------------------------------------------------------------------------------
 void Object::xfer( Xfer *xfer )
@@ -4127,7 +4137,7 @@ void Object::xfer( Xfer *xfer )
 #endif
 
 #else
-	const XferVersion currentVersion = 10;	// AoC @hook 31/10/2026 9 to 10, m_aocPopulationFreed (D11 F4).
+	const XferVersion currentVersion = 11;	// AoC @hook 01/11/2026 10 to 11, Thing's cached orientation and altitudes (D11 F14).
 #endif
 	XferVersion version = currentVersion;
 	xfer->xferVersion( &version, currentVersion );
@@ -4143,7 +4153,11 @@ void Object::xfer( Xfer *xfer )
 	{
 		Matrix3D mtx = *getTransformMatrix();
 		xfer->xferMatrix3D(&mtx);
-		setTransformMatrix(&mtx);
+		// AoC @fix 01/11/2026 Only a load sets the matrix. Setting it while saving made Thing recompute the cached angle from
+		// the matrix (atan2, a few bits off the angle setOrientation stored) and drop the other caches, so every save
+		// changed the game it saved: a unit made later at a building got another matrix (D11 F14).
+		if( xfer->getXferMode() == XFER_LOAD )
+			setTransformMatrix(&mtx);
 	}
 	else
 	{
@@ -4157,6 +4171,10 @@ void Object::xfer( Xfer *xfer )
 		xfer->xferReal( &orientation );
 		setOrientation( orientation );
 	}
+	// AoC @hook 01/11/2026 Version 11: Thing's cached orientation, direction and altitudes as the saving game had them, which
+	// the matrix alone does not give back; read after the stock layout, which versions 7 to 10 keep (D11 F14).
+	if( version >= 11 )
+		xferAoCTransformCache( xfer );
 
 	// team
 	TeamID teamID = m_team ? m_team->getID() : TEAM_ID_INVALID;
@@ -4991,6 +5009,22 @@ Bool Object::hasGhostObject() const
 void Object::onPartitionCellChange()
 {
 	handlePartitionCellMaintenance();
+}
+
+//-------------------------------------------------------------------------------------------------
+// AoC @hook 01/11/2026 The first cell update of an object loaded from a save. Its look and shroud are already in the saved
+// cells, so only the value and threat maps (not saved) are built again. An object made after the saving frame's partition
+// update (a pilot ejected by delayed damage) had not looked yet: no look, no shroud to keep, so it takes the stock path and
+// looks now, as the stock load does (the saving game looks in the next frame's update) (D11 F14).
+void Object::friend_aocOnPartitionCellAfterLoad()
+{
+	if( m_partitionLastLook->isInvalid() && m_partitionLastShroud->isInvalid() )
+	{
+		onPartitionCellChange();
+		return;
+	}
+	handleValueMap();
+	handleThreatMap();
 }
 
 //-------------------------------------------------------------------------------------------------

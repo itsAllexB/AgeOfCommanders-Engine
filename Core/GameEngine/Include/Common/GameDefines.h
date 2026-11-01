@@ -136,6 +136,15 @@
 #define RETAIL_COMPATIBLE_XFER_SAVE (1) // Game is expected to be Xfer Save compatible with retail Generals 1.08, Zero Hour 1.04
 #endif
 
+// AoC @hook 01/11/2026 Zero Hour saves are not readable by retail since GameLogic::xfer version 12 (D11 F15), so every
+// save-only RETAIL_COMPATIBLE_XFER_SAVE site writes its newest version, with the state upstream added to it (a builder's
+// action machine, a turret's machine, delayed scripts' next frame, ...). RETAIL_COMPATIBLE_XFER_SAVE itself stays 1: it
+// also selects the retail jet takeoff logic (JetPauseBeforeTakeoffState, with RETAIL_COMPATIBLE_CRC), which stock replays
+// need as it is. The base Generals target keeps the retail save versions (D11 F14).
+#ifndef AOC_FULL_XFER_SAVE
+#define AOC_FULL_XFER_SAVE (RTS_ZEROHOUR)
+#endif
+
 // This is here to easily toggle between the retail compatible with fixed pathfinding fallback and pure fixed pathfinding mode
 #ifndef RETAIL_COMPATIBLE_PATHFINDING
 #define RETAIL_COMPATIBLE_PATHFINDING (0)

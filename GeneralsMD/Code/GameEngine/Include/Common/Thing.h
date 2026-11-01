@@ -63,6 +63,7 @@
 //-----------------------------------------------------------------------------
 
 class Object;
+class Xfer;	// AoC @hook 01/11/2026 Thing::xferAoCTransformCache (D11 F14).
 class AIObject;
 class Drawable;
 class Team;
@@ -140,6 +141,10 @@ public:
 	const Matrix3D* getTransformMatrix() const { return &m_transform; }		///< return the world transformation matrix
 
 	void transformPoint( const Coord3D *in, Coord3D *out );								///< transform this point using the m_transform matrix of this thing
+
+	// AoC @hook 01/11/2026 The cached orientation, direction, altitudes and their flags in the save (Object::xfer version 11): a
+	// matrix set on load gives back the angle only to a few bits, and the altitudes only as recomputed, not as kept (D11 F14).
+	void xferAoCTransformCache( Xfer *xfer );
 
 protected:
 

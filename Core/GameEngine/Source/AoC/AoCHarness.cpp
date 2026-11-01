@@ -22,6 +22,7 @@
 #include "PreRTS.h"	// This must go first in EVERY cpp file in the GameEngine
 
 #include "AoC/AoCConverterUpdate.h"
+#include "AoC/AoCCrcDump.h"
 #include "AoC/AoCHarness.h"
 #include "AoC/AoCLobbyRules.h"
 #include "AoC/AoCPopulation.h"
@@ -113,6 +114,13 @@ struct HarnessState
 
 	char crcLogPath[1024];
 	FILE *crcLog;
+
+	// F14a -crcDump: the frames to dump (first == last for one frame), the file, open from the first dumped frame
+	UnsignedInt crcDumpFirst;	///< 0 when unused
+	UnsignedInt crcDumpLast;
+	char crcDumpPath[1024];
+	FILE *crcDump;
+	Bool warnedCrcDump;
 
 	char aiLogDir[1024];
 	Bool aiLogDirCreated;
@@ -213,6 +221,11 @@ void closeLogs()
 	{
 		fclose(s.crcLog);
 		s.crcLog = nullptr;
+	}
+	if (s.crcDump)
+	{
+		fclose(s.crcDump);
+		s.crcDump = nullptr;
 	}
 }
 
@@ -1107,6 +1120,31 @@ Int AoCHarness::parseCrcLog( char *args[], int num )
 	return 1;
 }
 
+Int AoCHarness::parseCrcDump( char *args[], int num )
+{
+	if (num < 3)
+	{
+		logLine("usage: -crcDump <frame>|<first>:<last> <file>; flag ignored");
+		return 1;
+	}
+	HarnessState &s = state();
+	char *end = nullptr;
+	const UnsignedInt first = (UnsignedInt)strtoul(args[1], &end, 10);
+	UnsignedInt last = first;
+	if (end && *end == ':')
+		last = (UnsignedInt)strtoul(end + 1, nullptr, 10);
+	if (first == 0 || last < first || args[2][0] == '\0')
+	{
+		logLine("-crcDump needs a frame (or first:last, first at least 1) and a file, not '%s' '%s'; no dump will be written", args[1], args[2]);
+		return 3;
+	}
+	s.crcDumpFirst = first;
+	s.crcDumpLast = last;
+	copyArg(s.crcDumpPath, sizeof(s.crcDumpPath), args[2]);
+	s.anyFlag = TRUE;
+	return 3;
+}
+
 Int AoCHarness::parseAiLog( char *args[], int num )
 {
 	if (num > 1)
@@ -1429,6 +1467,31 @@ void AoCHarness::onLogicFrame( UnsignedInt frame, Bool crcGenerated, UnsignedInt
 		{
 			fprintf(s.crcLog, "%u,%08X\n", frame, crc);
 			fflush(s.crcLog);
+		}
+	}
+
+	// F14a: -crcDump, at the same point of the frame as the CRC just taken; reads only.
+	if (s.crcDumpFirst != 0 && frame >= s.crcDumpFirst && frame <= s.crcDumpLast)
+	{
+		if (s.crcDump == nullptr && !s.warnedCrcDump)
+		{
+			s.crcDump = fopen(s.crcDumpPath, "w");
+			if (s.crcDump == nullptr)
+			{
+				s.warnedCrcDump = TRUE;
+				logLine("-crcDump: cannot open '%s' (relative paths resolve against the working directory; the folder must exist)", s.crcDumpPath);
+			}
+		}
+		if (s.crcDump)
+		{
+			AoCCrcDump::write(s.crcDump, frame, crcGenerated, crc, frame == s.crcDumpLast);
+			if (frame == s.crcDumpLast)
+			{
+				fclose(s.crcDump);
+				s.crcDump = nullptr;
+				s.warnedCrcDump = TRUE;	// done: never reopened (a loaded game counts its frames again)
+				logLine("crcDump: frames %u to %u written to '%s'", s.crcDumpFirst, s.crcDumpLast, s.crcDumpPath);
+			}
 		}
 	}
 

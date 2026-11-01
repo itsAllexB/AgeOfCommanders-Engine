@@ -43,6 +43,7 @@
 #include "Common/Player.h"
 #include "Common/PlayerList.h"
 #include "Common/Team.h"
+#include "Common/Xfer.h"	// AoC @hook 01/11/2026 Thing::xferAoCTransformCache (D11 F14).
 #include "Lib/trig.h"
 #include "GameLogic/TerrainLogic.h"
 
@@ -269,6 +270,20 @@ void Thing::setTransformMatrix( const Matrix3D *mx )
 
 	reactToTransformChange(&oldMtx, &oldPos, oldAngle);
 	DEBUG_ASSERTCRASH(!(_isnan(getPosition()->x) || _isnan(getPosition()->y) || _isnan(getPosition()->z)), ("Drawable/Object position NAN! '%s'", m_template->getName().str() ));
+}
+
+//=============================================================================
+/** AoC @hook 01/11/2026 The caches Object::xfer saves after the matrix (version 11) and restores after setTransformMatrix on
+	* load, which recomputes the angle from the matrix (a few bits off the angle setOrientation stored) and clears the rest;
+	* the altitudes are kept incrementally by setPosition and setPositionZ, so a fresh one can differ too (D11 F14). */
+//=============================================================================
+void Thing::xferAoCTransformCache( Xfer *xfer )
+{
+	xfer->xferReal( &m_cachedAngle );
+	xfer->xferCoord3D( &m_cachedDirVector );
+	xfer->xferReal( &m_cachedAltitudeAboveTerrain );
+	xfer->xferReal( &m_cachedAltitudeAboveTerrainOrWater );
+	xfer->xferInt( &m_cacheFlags );
 }
 
 //-------------------------------------------------------------------------------------------------

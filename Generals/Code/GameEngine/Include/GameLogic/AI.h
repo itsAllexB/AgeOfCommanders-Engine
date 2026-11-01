@@ -289,6 +289,10 @@ public:
 	static void parseScience( INI* ini, void *instance, void *store, const void *userData );					///< Parse the image part of the INI file
 
 	UnsignedInt getNextGroupID() { return ++m_nextGroupID; }
+	// AoC @hook 01/11/2026 Read-only views of the group list and the group id counter for the -crcDump harness flag (D11 F14).
+	const std::list<AIGroup *> &getAoCGroupList() const { return m_groupList; }
+	UnsignedInt getAoCLastGroupID() const { return m_nextGroupID; }
+	void setAoCLastGroupID( UnsignedInt id ) { m_nextGroupID = id; }	// AoC @hook 01/11/2026 Restored by a load (D11 F14).
 
 protected:
 	Pathfinder *m_pathfinder;							///< the pathfinding system
@@ -967,6 +971,13 @@ public:
 	const VecObjectID& getAllIDs () const;
 
 	void recomputeGroupSpeed() { m_dirty = true; }
+
+	// AoC @hook 01/11/2026 The group's state as the save writes it and the load puts it back: the members in list order, the
+	// speed and dirty bit as they are (getSpeed would recompute), the id the CRC carries (D11 F14).
+	const ListObjectPtr &getAoCMemberList() const { return m_memberList; }
+	Real getAoCRawSpeed() const { return m_speed; }
+	Bool getAoCRawDirty() const { return m_dirty; }
+	void setAoCSavedState( UnsignedInt id, Real speed, Bool dirty ) { m_id = id; m_speed = speed; m_dirty = dirty; }
 
 	void setMineClearingDetail( Bool set );
 	Bool setWeaponLockForGroup( WeaponSlotType weaponSlot, WeaponLockType lockType ); ///< Set the groups' weapon choice.

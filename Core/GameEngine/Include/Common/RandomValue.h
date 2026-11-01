@@ -32,5 +32,8 @@ extern void InitRandom();
 extern void InitRandom( UnsignedInt seed );
 extern UnsignedInt GetGameLogicRandomSeed();   ///< Get the seed (used for replays)
 extern UnsignedInt GetGameLogicRandomSeedCRC();///< Get the seed (used for CRCs)
+// AoC @hook 01/11/2026 The logic generator's full state (six words and the base seed), for the save game (D11 F14).
+extern void AoCGetGameLogicRandomState( UnsignedInt seed[6], UnsignedInt *baseSeed );
+extern void AoCSetGameLogicRandomState( const UnsignedInt seed[6], UnsignedInt baseSeed );
 
 //--------------------------------------------------------------------------------------------------------------

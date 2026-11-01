@@ -2127,7 +2127,13 @@ void PartitionData::updateCellsTouched()
 		// To not expose PartitionCells, he will think in terms of points.  He will
 		// unlook at a point and look at the new point.  We do the rounding and the
 		// changing into PartitionCells
-		obj->onPartitionCellChange();
+		// AoC @fix 01/11/2026 Not the first update of an object loaded from a save: its look is already in the saved cells, and
+		// a relook adds it again at once while the unlook waits in the undo queue, so the loaded game had one looker too many
+		// per unit until the queue caught up (D11 F14).
+		if( m_lastCell == nullptr && TheGameState && TheGameState->isInLoadGame() )
+			obj->friend_aocOnPartitionCellAfterLoad();
+		else
+			obj->onPartitionCellChange();
 		m_lastCell = currentCell;
 	}
 
@@ -2813,7 +2819,11 @@ void PartitionManager::update()
 #endif
 		TheContactList = nullptr;
 
-		processPendingUndoShroudRevealQueue();
+		// AoC @fix 01/11/2026 Not during a save game load: the update at the end of gameStatePostProcessLoad runs with the
+		// next frame's number, so it took the unlooks due on that frame before the frame's CRC, which the saving game takes
+		// in that frame's own update (D11 F14).
+		if( !(TheGameState && TheGameState->isInLoadGame()) )
+			processPendingUndoShroudRevealQueue();
 	}
 
 #if defined(RTS_DEBUG)

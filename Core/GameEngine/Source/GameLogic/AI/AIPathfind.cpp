@@ -29,6 +29,7 @@
 
 #include "WWMath/wwmath.h"
 #include "GameLogic/AIPathfind.h"
+#include "AoC/AoCByteStream.h"	// AoC @hook 01/11/2026 Zones in the save (D11 F14).
 #include "GameLogic/Pathfinder/PathfindConstants.h"
 
 #include "Common/PerfTimer.h"
@@ -7504,4 +7505,97 @@ void Pathfinder::xfer( Xfer *xfer )
 void Pathfinder::loadPostProcess()
 {
 
+}
+
+//-----------------------------------------------------------------------------
+// AoC @hook 01/11/2026 The request queue, its head and tail and the cell count, for the save game: the CRC covers them
+// (Pathfinder::crc) and stock saved none, so a loaded game started from an empty queue at slot 0. Also the frame of the
+// pending zone recalculation: a load recalculates the zones at once (newMap), while the saving game waits for that frame,
+// whose queue update then recalculates instead of serving requests (D11 F14).
+void Pathfinder::getAoCQueueState( ObjectID *requests, Int count, Int *head, Int *tail, Int *cells, UnsignedInt *zoneFrame ) const
+{
+	for (Int i = 0; i < count && i < PATHFIND_QUEUE_LEN; ++i)
+		requests[i] = m_queuedPathfindRequests[i];
+	*head = m_queuePRHead;
+	*tail = m_queuePRTail;
+	*cells = m_cumulativeCellsAllocated;
+	*zoneFrame = m_zoneManager.getAoCNextZoneFrame();
+}
+
+// AoC @hook 01/11/2026 The zones for the save game. The saving game recalculates its zones up to ZONE_UPDATE_FREQUENCY
+// frames after the map changes, so between two recalculations they describe an older map; a load computes them fresh
+// from the current map (newMap), and a path search then examines other cells and can finish in another frame (D11 F14).
+void Pathfinder::getAoCZoneData( std::vector<unsigned char> &out ) const
+{
+	out.clear();
+	const Int version = 1;
+	AoCByteStream::put( out, version );
+	AoCByteStream::put( out, m_extent );
+	// Ground cells, column by column, as runs of (count, zone).
+	std::vector<zoneStorageType> zones;
+	zones.reserve((size_t)(m_extent.hi.x - m_extent.lo.x + 1) * (size_t)(m_extent.hi.y - m_extent.lo.y + 1));
+	for (Int x = m_extent.lo.x; x <= m_extent.hi.x; ++x)
+		for (Int y = m_extent.lo.y; y <= m_extent.hi.y; ++y)
+			zones.push_back(m_map ? m_map[x][y].getZone() : 0);
+	AoCByteStream::putRuns( out, zones );
+	const Int layers = LAYER_LAST + 1;
+	AoCByteStream::put( out, layers );
+	for (Int i = 0; i < layers; ++i)
+	{
+		const Int zone = const_cast<PathfindLayer &>(m_layers[i]).getZone();
+		AoCByteStream::put( out, zone );
+	}
+	m_zoneManager.appendAoCData( out );
+}
+
+Bool Pathfinder::setAoCZoneData( const std::vector<unsigned char> &in )
+{
+	if (in.empty() || m_map == nullptr)
+		return FALSE;
+	const unsigned char *p = &in[0];
+	const unsigned char *end = p + in.size();
+	Int version = 0;
+	IRegion2D extent;
+	if (!AoCByteStream::get( p, end, version ) || version != 1 || !AoCByteStream::get( p, end, extent ))
+		return FALSE;
+	if (extent.lo.x != m_extent.lo.x || extent.lo.y != m_extent.lo.y || extent.hi.x != m_extent.hi.x || extent.hi.y != m_extent.hi.y)
+		return FALSE;
+	// Read the runs first, so a short blob changes nothing (AoCByteStream::getRuns, unit tested).
+	const size_t expected = (size_t)(m_extent.hi.x - m_extent.lo.x + 1) * (size_t)(m_extent.hi.y - m_extent.lo.y + 1);
+	std::vector<zoneStorageType> zones;
+	if (!AoCByteStream::getRuns( p, end, expected, zones ))
+		return FALSE;
+	Int layers = 0;
+	if (!AoCByteStream::get( p, end, layers ) || layers != LAYER_LAST + 1)
+		return FALSE;
+	Int layerZones[LAYER_LAST + 1];
+	for (Int i = 0; i < layers; ++i)
+		if (!AoCByteStream::get( p, end, layerZones[i] ))
+			return FALSE;
+	size_t cell = 0;
+	for (Int x = m_extent.lo.x; x <= m_extent.hi.x; ++x)
+		for (Int y = m_extent.lo.y; y <= m_extent.hi.y; ++y)
+			m_map[x][y].setZone(zones[cell++]);
+	for (Int i = 0; i < layers; ++i)
+	{
+		m_layers[i].setZone(layerZones[i]);
+		if (!m_layers[i].isUnused())
+			m_layers[i].applyZone();
+	}
+	if (m_zoneManager.readAoCData( p, end ))
+		return TRUE;
+	m_zoneManager.calculateZones(m_map, m_layers, m_extent);	// a partial restore must not stand: compute them fresh
+	return FALSE;
+}
+
+void Pathfinder::setAoCQueueState( const ObjectID *requests, Int count, Int head, Int tail, Int cells, UnsignedInt zoneFrame )
+{
+	if (count != PATHFIND_QUEUE_LEN || head < 0 || head >= PATHFIND_QUEUE_LEN || tail < 0 || tail >= PATHFIND_QUEUE_LEN)
+		return;	// a save from a build with another queue length: keep the queue as the load left it
+	for (Int i = 0; i < PATHFIND_QUEUE_LEN; ++i)
+		m_queuedPathfindRequests[i] = requests[i];
+	m_queuePRHead = head;
+	m_queuePRTail = tail;
+	m_cumulativeCellsAllocated = cells;
+	m_zoneManager.setAoCNextZoneFrame( zoneFrame );
 }

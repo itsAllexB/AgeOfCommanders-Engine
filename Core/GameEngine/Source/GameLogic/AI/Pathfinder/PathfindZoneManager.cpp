@@ -20,6 +20,7 @@
 #include "GameLogic/Pathfinder/PathfindConstants.h"
 #include "GameLogic/Pathfinder/PathfindLayer.h"
 #include "GameLogic/Pathfinder/PathfindZoneManager.h"
+#include "AoC/AoCByteStream.h"	// AoC @hook 01/11/2026 Zone tables in the save (D11 F14).
 #include "GameLogic/Pathfinder/ZoneBlock.h"
 #include "GameLogic/TerrainLogic.h"
 
@@ -43,6 +44,61 @@ PathfindZoneManager::~PathfindZoneManager()
 {
 	freeZones();
 	freeBlocks();
+}
+
+// AoC @hook 01/11/2026 The zone tables and the blocks' for the save game (ZoneBlock::appendAoCData) (D11 F14).
+void PathfindZoneManager::appendAoCData( std::vector<unsigned char> &out ) const
+{
+	AoCByteStream::put( out, m_maxZone );
+	const UnsignedShort allocated = m_groundCliffZones != nullptr ? m_zonesAllocated : 0;
+	AoCByteStream::put( out, allocated );
+	AoCByteStream::putArray( out, m_groundCliffZones, allocated );
+	AoCByteStream::putArray( out, m_groundWaterZones, allocated );
+	AoCByteStream::putArray( out, m_groundRubbleZones, allocated );
+	AoCByteStream::putArray( out, m_terrainZones, allocated );
+	AoCByteStream::putArray( out, m_crusherZones, allocated );
+	AoCByteStream::putArray( out, m_hierarchicalZones, allocated );
+	const Int blocks = (m_zoneBlocks != nullptr) ? m_zoneBlockExtent.x * m_zoneBlockExtent.y : 0;
+	AoCByteStream::put( out, m_zoneBlockExtent.x );
+	AoCByteStream::put( out, m_zoneBlockExtent.y );
+	AoCByteStream::put( out, blocks );
+	for( Int i = 0; i < blocks; ++i )
+		m_blockOfZoneBlocks[i].appendAoCData( out );
+}
+
+Bool PathfindZoneManager::readAoCData( const unsigned char *&p, const unsigned char *end )
+{
+	UnsignedShort maxZone, allocated;
+	if( !AoCByteStream::get( p, end, maxZone ) || !AoCByteStream::get( p, end, allocated ) )
+		return FALSE;
+	freeZones();
+	m_maxZone = maxZone;
+	m_zonesAllocated = allocated;
+	if( allocated > 0 )
+	{
+		m_groundCliffZones = MSGNEW("PathfindZoneInfo") zoneStorageType[allocated];
+		m_groundWaterZones = MSGNEW("PathfindZoneInfo") zoneStorageType[allocated];
+		m_groundRubbleZones = MSGNEW("PathfindZoneInfo") zoneStorageType[allocated];
+		m_terrainZones = MSGNEW("PathfindZoneInfo") zoneStorageType[allocated];
+		m_crusherZones = MSGNEW("PathfindZoneInfo") zoneStorageType[allocated];
+		m_hierarchicalZones = MSGNEW("PathfindZoneInfo") zoneStorageType[allocated];
+		if( !AoCByteStream::getArray( p, end, m_groundCliffZones, allocated ) ||
+				!AoCByteStream::getArray( p, end, m_groundWaterZones, allocated ) ||
+				!AoCByteStream::getArray( p, end, m_groundRubbleZones, allocated ) ||
+				!AoCByteStream::getArray( p, end, m_terrainZones, allocated ) ||
+				!AoCByteStream::getArray( p, end, m_crusherZones, allocated ) ||
+				!AoCByteStream::getArray( p, end, m_hierarchicalZones, allocated ) )
+			return FALSE;
+	}
+	Int extentX, extentY, blocks;
+	if( !AoCByteStream::get( p, end, extentX ) || !AoCByteStream::get( p, end, extentY ) || !AoCByteStream::get( p, end, blocks ) )
+		return FALSE;
+	if( m_zoneBlocks == nullptr || extentX != m_zoneBlockExtent.x || extentY != m_zoneBlockExtent.y || blocks != extentX * extentY )
+		return FALSE;	// another map size: the caller recalculates
+	for( Int i = 0; i < blocks; ++i )
+		if( !m_blockOfZoneBlocks[i].readAoCData( p, end ) )
+			return FALSE;
+	return TRUE;
 }
 
 void PathfindZoneManager::freeZones()

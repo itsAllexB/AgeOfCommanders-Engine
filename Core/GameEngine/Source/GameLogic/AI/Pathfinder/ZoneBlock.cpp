@@ -19,6 +19,7 @@
 #include "GameLogic/Pathfinder/PathfindCell.h"
 #include "GameLogic/Pathfinder/PathfindZoneManager.h"
 #include "GameLogic/Pathfinder/ZoneBlock.h"
+#include "AoC/AoCByteStream.h"	// AoC @hook 01/11/2026 Zone tables in the save (D11 F14).
 
 ZoneBlock::ZoneBlock() : m_firstZone(0),
 m_numZones(0),
@@ -38,6 +39,58 @@ m_interactsWithBridge(FALSE)
 ZoneBlock::~ZoneBlock()
 {
 	freeZones();
+}
+
+// AoC @hook 01/11/2026 The block's zone tables for the save game: the saving game's zones lag the map by up to
+// ZONE_UPDATE_FREQUENCY frames, a load computes fresh ones, and path searches then examine other cells (D11 F14).
+void ZoneBlock::appendAoCData( std::vector<unsigned char> &out ) const
+{
+	AoCByteStream::put( out, m_cellOrigin.x );
+	AoCByteStream::put( out, m_cellOrigin.y );
+	AoCByteStream::put( out, m_firstZone );
+	AoCByteStream::put( out, m_numZones );
+	const unsigned char hasTables = m_groundCliffZones != nullptr ? 1 : 0;
+	const UnsignedShort allocated = hasTables ? m_zonesAllocated : 0;
+	AoCByteStream::put( out, allocated );
+	AoCByteStream::putArray( out, m_groundCliffZones, allocated );
+	AoCByteStream::putArray( out, m_groundWaterZones, allocated );
+	AoCByteStream::putArray( out, m_groundRubbleZones, allocated );
+	AoCByteStream::putArray( out, m_crusherZones, allocated );
+	const unsigned char flags = (m_interactsWithBridge ? 1 : 0) | (m_markedPassable ? 2 : 0);
+	AoCByteStream::put( out, flags );
+}
+
+Bool ZoneBlock::readAoCData( const unsigned char *&p, const unsigned char *end )
+{
+	ICoord2D origin;
+	UnsignedShort firstZone, numZones, allocated;
+	if( !AoCByteStream::get( p, end, origin.x ) || !AoCByteStream::get( p, end, origin.y ) ||
+			!AoCByteStream::get( p, end, firstZone ) || !AoCByteStream::get( p, end, numZones ) ||
+			!AoCByteStream::get( p, end, allocated ) )
+		return FALSE;
+	freeZones();
+	m_cellOrigin = origin;
+	m_firstZone = firstZone;
+	m_numZones = numZones;
+	m_zonesAllocated = allocated;
+	if( allocated > 0 )
+	{
+		m_groundCliffZones = MSGNEW("PathfindZoneInfo") zoneStorageType[allocated];
+		m_groundWaterZones = MSGNEW("PathfindZoneInfo") zoneStorageType[allocated];
+		m_groundRubbleZones = MSGNEW("PathfindZoneInfo") zoneStorageType[allocated];
+		m_crusherZones = MSGNEW("PathfindZoneInfo") zoneStorageType[allocated];
+		if( !AoCByteStream::getArray( p, end, m_groundCliffZones, allocated ) ||
+				!AoCByteStream::getArray( p, end, m_groundWaterZones, allocated ) ||
+				!AoCByteStream::getArray( p, end, m_groundRubbleZones, allocated ) ||
+				!AoCByteStream::getArray( p, end, m_crusherZones, allocated ) )
+			return FALSE;
+	}
+	unsigned char flags = 0;
+	if( !AoCByteStream::get( p, end, flags ) )
+		return FALSE;
+	m_interactsWithBridge = (flags & 1) != 0;
+	m_markedPassable = (flags & 2) != 0;
+	return TRUE;
 }
 
 void ZoneBlock::freeZones()

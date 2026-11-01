@@ -149,6 +149,14 @@ public:
 
 	Bool queueForPath(ObjectID id);	 ///< The object wants to request a pathfind, so put it on the list to process.
 	void processPathfindQueue(); ///< Process some or all of the queued pathfinds.
+	// AoC @hook 01/11/2026 The request queue and the cell count the CRC covers, and the frame of the pending zone recalculation,
+	// which the save never held (Pathfinder::xfer writes only a version): read for the save, restored by a load (D11 F14).
+	void getAoCQueueState( ObjectID *requests, Int count, Int *head, Int *tail, Int *cells, UnsignedInt *zoneFrame ) const;
+	void setAoCQueueState( const ObjectID *requests, Int count, Int head, Int tail, Int cells, UnsignedInt zoneFrame );
+	// AoC @hook 01/11/2026 The zones as the saving game computed them (every ground cell's zone, run-length packed, each
+	// layer's zone and the zone manager's tables), which a load would otherwise compute fresh (D11 F14).
+	void getAoCZoneData( std::vector<unsigned char> &out ) const;
+	Bool setAoCZoneData( const std::vector<unsigned char> &in );
 	void forceMapRecalculation();	///< Force pathfind map recomputation. If region is given, only that area is recomputed
 
 	/** Returns an aircraft path to the goal.  */

@@ -41,6 +41,7 @@
 #include "Common/BuildAssistant.h"
 #include "AoC/AoCHarness.h"
 #include "AoC/AoCLobbyRules.h"	// AoC @hook 01/11/2026 Lobby options (D11 F7).
+#include "AoC/AoCSaveFidelity.h"	// AoC @hook 01/11/2026 Generator and heap layout in the save (D11 F14).
 #include "AoC/AoCSimRate.h"
 #include "Common/CRCDebug.h"
 #include "Common/FramePacer.h"
@@ -5321,13 +5322,15 @@ void GameLogic::prepareLogicForObjectLoad()
 	*     cannot load, so every build also saves the objects in the version 11 order (newest first, no reversal on load)
 	* 13: AoC F4: m_aocPopulationCap, the lobby population cap (D11 F4).
 	* 14: AoC F7: m_aocAmbientCivilians, m_aocVictory and m_aocRichnessPerMille, the lobby fields the logic reads (D11 F7).
+	* 15: AoC F14a: the logic random generator, the sleepy-update heap layout, the AI groups, the pathfind queue and the
+	*     pathfinder zones (AoCSaveFidelity, D11 F14).
 	*/
 // ------------------------------------------------------------------------------------------------
 void GameLogic::xfer( Xfer *xfer )
 {
 
 	// version
-	const XferVersion currentVersion = 14;	// AoC @hook 01/11/2026 13 to 14, ambient civilians and victory (D11 F7).
+	const XferVersion currentVersion = 15;	// AoC @hook 01/11/2026 14 to 15, the save fidelity block (D11 F14).
 	XferVersion version = currentVersion;
 	xfer->xferVersion( &version, currentVersion );
 
@@ -5363,7 +5366,10 @@ void GameLogic::xfer( Xfer *xfer )
 
 	// when loading, we need to clean up bridges and get them ready for a load
 	if( xfer->getXferMode() == XFER_LOAD )
+	{
 		prepareLogicForObjectLoad();
+		AoCSaveFidelity::beginObjectLoad();	// AoC @hook 01/11/2026 Fresh list of deferred attack sets (D11 F14).
+	}
 
 	// object count
 	UnsignedInt objectCount = getObjectCount();
@@ -5708,6 +5714,12 @@ void GameLogic::xfer( Xfer *xfer )
 		m_aocVictory = AOC_VICTORY_CONQUEST;
 		m_aocRichnessPerMille = AOC_RICHNESS_DEFAULT_PER_MILLE;
 	}
+	// AoC @hook 01/11/2026 The logic random generator, the heap layout, the AI groups, the pathfind queue and the zones,
+	// restored by loadPostProcess and GameState::gameStatePostProcessLoad; an older save keeps the stock behaviour (D11 F14).
+	if( version >= AoCSaveFidelity::XFER_FIRST_VERSION )
+		AoCSaveFidelity::xfer( xfer, m_sleepyUpdates );
+	else if( xfer->getXferMode() == XFER_LOAD )
+		AoCSaveFidelity::clearPending();
 }
 
 // ------------------------------------------------------------------------------------------------
@@ -5786,7 +5798,12 @@ void GameLogic::loadPostProcess()
 	}
 
 	// re-sort the priority queue all at once now that all modules are on it
-	remakeSleepyUpdate();
+	// AoC @hook 01/11/2026 A version 15 save puts every module back in its saved heap slot, so modules due in the same frame
+	// run in the saving game's order; an older save, or a layout that does not match these modules, heapifies as stock (D11 F14).
+	if( AoCSaveFidelity::restoreSleepyLayout( m_sleepyUpdates ) )
+		validateSleepyUpdate();
+	else
+		remakeSleepyUpdate();
 
 }
 
