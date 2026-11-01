@@ -17,6 +17,7 @@
 */
 #include "PreRTS.h"
 
+#include "AoC/AoCHarness.h"	// AoC @hook 02/11/2026 unthrottled headless harness runs (D11 F12)
 #include "Common/FramePacer.h"
 
 #include "GameClient/View.h"
@@ -133,6 +134,7 @@ Bool FramePacer::isActualFramesPerSecondLimitEnabled() const
 
 	allowFpsLimit &= TheGlobalData->m_useFpsLimit;
 	allowFpsLimit &= isFramesPerSecondLimitEnabled();
+	allowFpsLimit &= !AoCHarness::isUnthrottled();	// AoC @hook 02/11/2026 a headless harness run never waits on the clock (D11 F12)
 
 	return allowFpsLimit;
 }
