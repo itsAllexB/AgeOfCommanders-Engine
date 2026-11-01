@@ -22,6 +22,7 @@
 #include "PreRTS.h"	// This must go first in EVERY cpp file in the GameEngine
 
 #include "AoC/AoCHarness.h"
+#include "AoC/AoCLobbyRules.h"
 #include "AoC/AoCPopulation.h"
 #include "AoC/AoCResourceBank.h"
 #include "AoC/AoCRules.h"
@@ -95,6 +96,7 @@ struct HarnessState
 	char skirmishMap[1024];
 	char skirmishSlots[1024];
 	Int skirmishSeed;
+	char aocOptions[512];		///< F7: options string keys -aocOptions appends to the -skirmish string, "" when unused
 
 	UnsignedInt quitAtFrame;
 	Bool quitRequested;		///< frame N was reached inside the logic update
@@ -520,7 +522,7 @@ void writeAiLog( UnsignedInt frame )
 			row.add("pop_cap", pop->getCap());
 			row.add("blocked_build", takeBlockedBuild((Int)p->getPlayerIndex()));
 			row.add("blocked_units", takeBlockedUnits((Int)p->getPlayerIndex()));
-			if (pop->getUsed() + pop->getReserved() > pop->getCap())
+			if (pop->getCap() >= 0 && pop->getUsed() + pop->getReserved() > pop->getCap())	// F7: -1 is the unlimited cap
 			{
 				std::vector< std::pair<std::string, Int> > parts;
 				p->iterateObjects(populationByTemplate, &parts);
@@ -563,6 +565,26 @@ void writeAiLog( UnsignedInt frame )
 		fprintf(f, "%s\n", row.values.c_str());
 		fclose(f);
 	}
+}
+
+// F7: "[AoC lobby] stock=.. richness=.. cap=.. ambient=.. victory=.." with the fields the game runs with: stock and
+// richness from the game's setup (TheGameInfo: the options string, or the save's SkirmishGameInfo), cap, ambient and
+// victory from GameLogic, where the logic reads them. Only with lobby lists or resource types defined.
+Bool lobbyLinesWanted()
+{
+	return state().anyFlag && (AoCLobbyRules::anyListDefined() || AoCRules::enabled());
+}
+
+void logLobby()
+{
+	if (!lobbyLinesWanted() || TheGameLogic == nullptr)
+		return;
+	const AoCLobbySettings lobby = TheGameInfo ? TheGameInfo->getAoCLobbySettings() : AoCLobbyRules::defaults();
+	fprintf(stderr, "[AoC lobby] stock=%s richness=%s cap=%d ambient=%c victory=%s\n",
+		AoCLobbyRules::startingStockName(lobby.startingStock).str(), AoCLobbyRules::richnessName(lobby.richness).str(),
+		(int)TheGameLogic->getAoCPopulationCap(), TheGameLogic->getAoCAmbientCivilians() ? 'Y' : 'N',
+		AoCLobbyRules::victoryName(TheGameLogic->getAoCVictory()));
+	fflush(stderr);
 }
 
 // F4: one stderr line per AI player that takes part in the population rules (save and load checks)
@@ -1029,6 +1051,24 @@ Int AoCHarness::parseSimRate( char *args[], int num )
 	return 1;
 }
 
+Int AoCHarness::parseAocOptions( char *args[], int num )
+{
+	if (num < 2)
+	{
+		logLine("usage: -aocOptions \"<key=value;...>\"; flag ignored");
+		return 1;
+	}
+	HarnessState &s = state();
+	if (strlen(args[1]) >= sizeof(s.aocOptions) - 1)
+	{
+		logLine("-aocOptions: longer than %d characters; flag ignored", (int)sizeof(s.aocOptions) - 2);
+		return 2;
+	}
+	copyArg(s.aocOptions, sizeof(s.aocOptions), args[1]);
+	s.anyFlag = TRUE;
+	return 2;
+}
+
 Int AoCHarness::parseAocUiScript( char *args[], int num )
 {
 	if (num < 2)
@@ -1151,13 +1191,21 @@ void AoCHarness::startSkirmishIfRequested()
 		failSkirmish("could not build the game options string");
 		return;
 	}
-	std::string options(header.str(), (size_t)(slotKey - header.str()) + 3);
+	// F7: -aocOptions keys go after the fixed keys and before the slot list, as the stock writer places its keys.
+	std::string options(header.str(), (size_t)(slotKey - header.str()) + 1);
+	if (s.aocOptions[0] != '\0')
+	{
+		options += s.aocOptions;
+		if (options[options.size() - 1] != ';')
+			options += ';';
+	}
+	options += "S=";
 	options += slotList;
 	options += ';';
 
 	if (!ParseAsciiStringToGameInfo(TheSkirmishGameInfo, AsciiString(options.c_str())))
 	{
-		failSkirmish(fmt("slot list rejected by ParseAsciiStringToGameInfo: '%s'", slotList.c_str()).c_str());
+		failSkirmish(fmt("options rejected by ParseAsciiStringToGameInfo (slot list '%s', -aocOptions '%s')", slotList.c_str(), s.aocOptions).c_str());
 		return;
 	}
 
@@ -1233,6 +1281,8 @@ void AoCHarness::onLogicFrame( UnsignedInt frame, Bool crcGenerated, UnsignedInt
 		s.sawFirstLogicFrame = TRUE;
 		if (frame > 1 && s.aiLogDir[0] != '\0')
 			logPopulation("after load", frame);
+		if (frame > 1)
+			logLobby();	// F7: the lobby fields a loaded game runs with
 	}
 
 	if (s.aiLogDir[0] != '\0' && (frame % aiLogIntervalFrames()) == 0)
@@ -1260,6 +1310,34 @@ void AoCHarness::onLogicFrame( UnsignedInt frame, Bool crcGenerated, UnsignedInt
 		}
 		// Windowed games finish in pollQuit(), from the engine loop.
 	}
+}
+
+void AoCHarness::onLobbyGameStart( Int richnessPerMille, Int warehousesScaled, Int firstBefore, Int firstAfter )
+{
+	if (!lobbyLinesWanted())
+		return;
+	logLobby();
+	if (warehousesScaled > 0)
+		fprintf(stderr, "[AoC lobby] richness scaled %d warehouses (%d to %d boxes in the first) at %d per mille\n",
+			(int)warehousesScaled, (int)firstBefore, (int)firstAfter, (int)richnessPerMille);
+	else
+		fprintf(stderr, "[AoC lobby] richness scaled 0 warehouses (none flagged AoCScalesWithRichness) at %d per mille\n",
+			(int)richnessPerMille);
+	// The starting bank of every player with a faction (the idle human's is the deposit itself; an AI may already have
+	// traded in startNewGame).
+	for (Int i = 0; ThePlayerList && i < ThePlayerList->getPlayerCount(); ++i)
+	{
+		Player *p = ThePlayerList->getNthPlayer(i);
+		const PlayerTemplate *pt = p ? p->getPlayerTemplate() : nullptr;
+		if (pt == nullptr || pt->getStartingBuilding().isEmpty())
+			continue;
+		std::string bank;
+		for (Int t = 0; t < AoCRules::typeCount(); ++t)
+			bank += fmt(" %s:%u", TheAoCRules ? TheAoCRules->getTypeName(t).str() : "Cash", (unsigned)p->getAoCBank()->count(t));
+		fprintf(stderr, "[AoC lobby] player %d (%s) bank at start:%s\n", (int)p->getPlayerIndex(),
+			p->getPlayerType() == PLAYER_COMPUTER ? "AI" : "human", bank.c_str());
+	}
+	fflush(stderr);
 }
 
 void AoCHarness::onCRCMismatch( UnsignedInt frame, UnsignedInt inGameCRC, UnsignedInt replayCRC )

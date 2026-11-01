@@ -30,6 +30,7 @@
 
 #include "Common/Snapshot.h"
 #include "Common/Money.h"
+#include "AoC/AoCLobbyRules.h"	// AoC @hook 01/11/2026 The lobby fields (D11 F7).
 #include "GameNetwork/NetworkDefs.h"
 #include "GameNetwork/FirewallHelper.h"
 
@@ -238,6 +239,20 @@ public:
 	Int getAoCSimRate() const { return m_aocSimRate; }
 	void setAoCSimRate( Int rate ) { m_aocSimRate = rate; }
 
+	// AoC @feature 01/11/2026 The lobby options of this game (D11 F7): starting stock, richness and population cap as indices
+	// into the INI choice lists, ambient civilians, victory mode. Travel in the options string as one key, AO=<s><r><p><a><v>,
+	// only when some field is not the default; saved by SkirmishGameInfo::xfer v5. The logic copies cap, ambient, victory
+	// and the richness factor into GameLogic at the start of a new game and never reads them here during play.
+	AoCLobbySettings getAoCLobbySettings() const;
+	/// Store the five fields, each brought into its list (AoCLobbyRules::sanitize). With a starting stock list defined the
+	/// chosen stock's cash also becomes the starting cash (SC=), so Starting Stock replaces Starting Cash (decision 4).
+	void setAoCLobbySettings( const AoCLobbySettings &settings );
+	Int getAoCStartingStock() const { return m_aocStartingStock; }
+	Int getAoCRichness() const { return m_aocRichness; }
+	Int getAoCPopulationCap() const { return m_aocPopulationCap; }
+	Bool getAoCAmbientCivilians() const { return m_aocAmbientCivilians; }
+	Int getAoCVictory() const { return m_aocVictory; }
+
 protected:
 	Int m_preorderMask;
 	Int m_crcInterval;
@@ -260,6 +275,11 @@ protected:
   UnsignedShort m_superweaponRestriction;
   Bool m_oldFactionsOnly; // Only USA, China, GLA -- not USA Air Force General, GLA Toxic General, et al
 	Int m_aocSimRate;	///< AoC F15: logic frames per second this game runs at
+	Int m_aocStartingStock;		///< AoC F7: index into the AoCStartingStockChoice list
+	Int m_aocRichness;				///< AoC F7: index into the AoCRichnessChoice list
+	Int m_aocPopulationCap;		///< AoC F7: index into the AoCPopulationCapChoice list
+	Bool m_aocAmbientCivilians;	///< AoC F7: ambient civilians on (default) or off
+	Int m_aocVictory;					///< AoC F7: AoCVictoryMode
 };
 
 extern GameInfo *TheGameInfo;

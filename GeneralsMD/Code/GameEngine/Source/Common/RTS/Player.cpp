@@ -445,10 +445,12 @@ void Player::init(const PlayerTemplate* pt)
 			{
 				m_money.deposit( TheGlobalData->m_defaultStartingCash.countMoney(), FALSE, FALSE );
 			}
-			// AoC @hook F1: GameData.ini AoCStartingStock, applied with the lobby starting cash (a zero vector in stock data).
-			// Inside the stock "no money yet" test, so a player template that carries cash gets no typed stock either;
-			// F7 (lobby starting stock) reworks this.
-			m_aocBank.deposit( TheGlobalData->m_aocStartingStock, FALSE, FALSE );
+			// AoC @hook 01/11/2026 The starting stock, with the starting cash (D11 F7, decision 4): with an AoCStartingStockChoice
+			// list the chosen vector less its cash, which arrived above as the game's starting cash (the choice sets SC=); without
+			// one, GameData.ini AoCStartingStock as F1 (a zero vector in stock data). Inside the stock "no money yet" test, as
+			// D11 says: a player template that carries cash gets neither. Read at game start, like the stock cash above.
+			m_aocBank.deposit( AoCLobbyRules::startingStockDepositFor( TheGameInfo ? TheGameInfo->getAoCLobbySettings() : AoCLobbyRules::defaults(),
+				TheGlobalData->m_aocStartingStock ), FALSE, FALSE );
 		}
 
 		m_playerDisplayName.clear();

@@ -50,6 +50,7 @@ public:
 	Bool m_deleteWhenEmpty;
 	Int m_aocResourceType;		///< AoC @feature F2: AoCResourceType, the node's type (default cash); template data, not saved
 	Bool m_aocKillWhenEmpty;	///< AoC @feature F2: AoCKillWhenEmpty, kill() at zero so Die modules run (default No)
+	Bool m_aocScalesWithRichness;	///< AoC @feature 01/11/2026 AoCScalesWithRichness: the lobby richness scales the starting boxes (D11 F7)
 };
 
 //-------------------------------------------------------------------------------------------------
@@ -71,6 +72,9 @@ public:
 	Int getBoxesStored() const { return m_boxesStored; }
 
 	void setCashValue( Int cashValue );
+	/// AoC @feature 01/11/2026 Richness (D11 F7): with AoCScalesWithRichness, the stored boxes become
+	/// AoCLobbyRules::scaleBoxes(boxes, perMille) and TRUE is returned; FALSE and no change otherwise.
+	Bool aocScaleForRichness( Int perMille );
 
 	virtual void onObjectCreated() override;
 

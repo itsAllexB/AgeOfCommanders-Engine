@@ -330,6 +330,7 @@ void GameInfo::reset()
   m_superweaponRestriction = 0;
   m_startingCash = TheGlobalData->m_defaultStartingCash;
 	m_aocSimRate = LOGICFRAMES_PER_SECOND;	// AoC @feature 30/10/2026 this machine's rate until an options string says otherwise (D11 F15)
+	setAoCLobbySettings( AoCLobbyRules::defaults() );	// AoC @hook 01/11/2026 Every lobby field at its default; with a starting stock list the default stock's cash is the starting cash (D11 F7).
 
 	for (Int i=0; i<MAX_SLOTS; ++i)
 	{
@@ -351,6 +352,35 @@ void GameInfo::markPlayerAsPreorder(Int index)
 {
 	if (index >= 0 && index < MAX_SLOTS)
 		m_preorderMask |= 1 << index;
+}
+
+// AoC @feature 01/11/2026 The lobby fields (D11 F7).
+AoCLobbySettings GameInfo::getAoCLobbySettings() const
+{
+	AoCLobbySettings s;
+	s.startingStock = m_aocStartingStock;
+	s.richness = m_aocRichness;
+	s.populationCap = m_aocPopulationCap;
+	s.ambientCivilians = m_aocAmbientCivilians;
+	s.victory = m_aocVictory;
+	return s;
+}
+
+void GameInfo::setAoCLobbySettings( const AoCLobbySettings &settings )
+{
+	const AoCLobbySettings s = AoCLobbyRules::sanitize(settings);
+	m_aocStartingStock = s.startingStock;
+	m_aocRichness = s.richness;
+	m_aocPopulationCap = s.populationCap;
+	m_aocAmbientCivilians = s.ambientCivilians;
+	m_aocVictory = s.victory;
+	// Decision 4: with a starting stock list the chosen stock's cash is the game's starting cash, so the stock SC= key and
+	// Player::init's stock cash deposit carry it; without a list the starting cash is left alone.
+	UnsignedInt cash = 0;
+	if (AoCLobbyRules::startingCashFor(s, cash))
+	{
+		m_startingCash.setStartingCash( cash );	// no deposit: a GameInfo can be built before ThePlayerList exists (NGMPGame at engine init)
+	}
 }
 
 
@@ -1016,6 +1046,9 @@ static AsciiString buildGameInfoAsciiString(const GameInfo& game, const AsciiStr
 		aocSimRate.format("AF=%d;", game.getAoCSimRate());
 		optionsString.concat(aocSimRate);
 	}
+	// AoC @hook 01/11/2026 The lobby fields, each only when not the default (decision 1): a default game writes no AoC key and
+	// keeps a string and replay header that stock builds read (D11 F7).
+	AoCLobbyRules::appendOptionsString(game.getAoCLobbySettings(), optionsString);
 
 	//add player info for each slot
 	optionsString.concat(slotListID);
@@ -1193,6 +1226,7 @@ Bool ParseAsciiStringToGameInfo(GameInfo *game, AsciiString options)
   Money startingCash = TheGlobalData->m_defaultStartingCash;
   UnsignedShort restriction = 0; // Always the default
 	Int simRate = BaseFps;	// AoC F15: a string without "AF=" is a stock 30 Hz game
+	AoCLobbySettings aocLobby = AoCLobbyRules::defaults();	// AoC @hook 01/11/2026 A missing lobby key means its default (D11 F7).
 
 	Bool sawMap = FALSE;
 	Bool sawMapCRC = FALSE;
@@ -1333,6 +1367,16 @@ Bool ParseAsciiStringToGameInfo(GameInfo *game, AsciiString options)
 			// AoC @feature 30/10/2026 simulation rate (D11 F15); only a rate other than 30 is written, but an explicit
 			// "AF=30" (strings from earlier F15 builds) is still accepted
 			simRate = atoi(val.str());
+		}
+		else if (AoCLobbyRules::parseOptionsKey(key, val, aocLobby, optionsOk))
+		{
+			// AoC @hook 01/11/2026 AO: the lobby fields in one key (D11 F7). A malformed value rejects the string like a stock
+			// empty value; an index outside its list becomes the default when the game stores it.
+			if (!optionsOk)
+			{
+				DEBUG_LOG(("ParseAsciiStringToGameInfo - bad value for %s, quitting", key.str()));
+				break;
+			}
 		}
 		else if (key.getLength() == 1 && *key.str() == slotListID)
 		{
@@ -1738,6 +1782,7 @@ Bool ParseAsciiStringToGameInfo(GameInfo *game, AsciiString options)
 		game->setStartingCash(startingCash);
 		game->setOldFactionsOnly(oldFactionsOnly);
 		game->setAoCSimRate(simRate);
+		game->setAoCLobbySettings(aocLobby);	// AoC @hook 01/11/2026 After the starting cash, which a stock choice sets (D11 F7).
 
 		return true;
 	}
@@ -1767,7 +1812,7 @@ void SkirmishGameInfo::xfer( Xfer *xfer )
 #if RTS_GENERALS
 	const XferVersion currentVersion = 2;
 #else
-	const XferVersion currentVersion = 4;
+	const XferVersion currentVersion = 5;	// AoC @hook 01/11/2026 4 to 5, the lobby fields (D11 F7).
 #endif
 	XferVersion version = currentVersion;
 	xfer->xferVersion( &version, currentVersion );
@@ -1865,6 +1910,26 @@ void SkirmishGameInfo::xfer( Xfer *xfer )
     m_superweaponRestriction = 0;
     m_startingCash = TheGlobalData->m_defaultStartingCash;
   }
+
+	// AoC @hook 01/11/2026 The lobby fields as indices, after the starting cash (D11 F7). Loaded as saved, never re-read from
+	// INI; a save from before version 5 had none and gets the defaults.
+	if ( version >= 5 )
+	{
+		xfer->xferInt( &m_aocStartingStock );
+		xfer->xferInt( &m_aocRichness );
+		xfer->xferInt( &m_aocPopulationCap );
+		xfer->xferBool( &m_aocAmbientCivilians );
+		xfer->xferInt( &m_aocVictory );
+	}
+	else if ( xfer->getXferMode() == XFER_LOAD )
+	{
+		const AoCLobbySettings d = AoCLobbyRules::defaults();
+		m_aocStartingStock = d.startingStock;
+		m_aocRichness = d.richness;
+		m_aocPopulationCap = d.populationCap;
+		m_aocAmbientCivilians = d.ambientCivilians;
+		m_aocVictory = d.victory;
+	}
 
 }
 

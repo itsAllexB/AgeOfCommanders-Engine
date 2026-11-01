@@ -3,6 +3,7 @@ set(COREI_GOOGLETEST_SRC
     GoogleTestMain.cpp
     GameEngine/AoC/AoCCostTest.cpp
     GameEngine/AoC/AoCGatherTest.cpp
+    GameEngine/AoC/AoCLobbyRulesTest.cpp
     GameEngine/AoC/AoCPopulationTest.cpp
     GameEngine/AoC/AoCResourceBankTest.cpp
     GameEngine/Common/AsciiStringTest.cpp

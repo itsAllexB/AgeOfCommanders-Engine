@@ -54,6 +54,16 @@
 //                                   TheGameState->saveGame) once logic frame N (1 or more) has run, from the
 //                                   engine loop. Load it with the stock -loadsave <name>.sav at the same
 //                                   -simrate (a save made at the other rate is refused, exit code 5).
+//   -aocOptions "<key=value;...>"   F7: options string keys appended to the string -skirmish builds, after its fixed keys
+//                                   and before the slot list, e.g. "AO=220N0" (the lobby fields in one key: starting
+//                                   stock, richness and population cap as one hex digit each, indices into the INI
+//                                   choice lists; ambient civilians Y or N; the victory digit). Parsed by the stock
+//                                   parser, so an unknown key or a malformed value stops -skirmish (exit code 4). Ignored without
+//                                   -skirmish. With any harness flag and lobby choice lists or resource types defined,
+//                                   stderr gets at the start of a game "[AoC lobby] stock=<name or index> richness=<name>
+//                                   cap=<n> ambient=<Y|N> victory=<name>" and "[AoC lobby] richness scaled <n>
+//                                   warehouses (<before> to <after> boxes in the first)", and the first line again at
+//                                   the first frame of a loaded game. Nothing is printed with stock data.
 //   -simrate <30|60>                Simulation rate for this process (D11 F15), overriding the
 //                                   Options.ini SimulationRate key. Any other value exits with code 3.
 //   -aocUiScript <file>             F5: client UI steps for unattended UI tests. Lines "<frame> <command> [arg]"
@@ -117,6 +127,7 @@ public:
 	static Int parseSimRate( char *args[], int num );
 	static Int parseSaveAtFrame( char *args[], int num );	// AoC F1
 	static Int parseAocUiScript( char *args[], int num );	// AoC F5
+	static Int parseAocOptions( char *args[], int num );	// AoC F7
 
 	/// TRUE when any harness flag was given on the command line.
 	static Bool isActive();
@@ -144,4 +155,8 @@ public:
 	/// ProductionUpdate::queueCreateUnit refused a unit (a CanMakeType other than CANMAKE_OK): counted per player for
 	/// the -aiLog blocked_build column (D11 F4). Harness state only; the logic never reads it.
 	static void onUnitQueueRefused( const Player *player, Int canMakeType, const ThingTemplate *unitType );
+
+	/// GameLogic::startNewGame, at the end of a new game's start (not a load, not the shell): the "[AoC lobby]" lines with the
+	/// lobby fields in effect and what richness did (D11 F7). Reads only; nothing without a harness flag or with stock data.
+	static void onLobbyGameStart( Int richnessPerMille, Int warehousesScaled, Int firstBefore, Int firstAfter );
 };

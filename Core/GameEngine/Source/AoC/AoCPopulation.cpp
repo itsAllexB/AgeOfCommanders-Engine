@@ -384,6 +384,8 @@ Bool AoCPopulation::canAfford( Int population ) const
 // ------------------------------------------------------------------------------------------------
 /*static*/ Int AoCPopulation::capFor( Int capacity, Int lobbyCap )
 {
+	if (isUnlimited(lobbyCap))
+		return AOC_POPULATION_CAP_UNLIMITED;	// AoC F7: no cap at all
 	if (lobbyCap > 0 && lobbyCap < capacity)
 		return lobbyCap;
 	return capacity;
@@ -392,6 +394,8 @@ Bool AoCPopulation::canAfford( Int population ) const
 // ------------------------------------------------------------------------------------------------
 /*static*/ Int AoCPopulation::headroomFor( Int used, Int capacity, Int reserved, Int lobbyCap )
 {
+	if (isUnlimited(lobbyCap))
+		return AOC_POPULATION_UNLIMITED_HEADROOM;	// AoC F7: the check is off; canAfford is TRUE and nobody is at cap
 	return capFor(capacity, lobbyCap) - used - reserved;
 }
 

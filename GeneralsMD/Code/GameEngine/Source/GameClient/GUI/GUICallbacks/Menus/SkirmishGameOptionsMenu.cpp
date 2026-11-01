@@ -65,6 +65,7 @@
 #include "GameClient/GameText.h"
 #include "GameClient/ExtendedMessageBox.h"
 #include "GameClient/MessageBox.h"
+#include "AoC/AoCLobbyUI.h"	// AoC @hook 01/11/2026 Lobby option gadgets (D11 F7).
 #include "GameNetwork/GameInfo.h"
 #include "GameNetwork/GUIUtil.h"
 #include "GameNetwork/IPEnumeration.h"
@@ -129,6 +130,7 @@ static GameWindow *windowMap = nullptr;
 static GameWindow *textEntryPlayerName = nullptr;
 static GameWindow *checkBoxLimitSuperweapons = nullptr;
 static GameWindow *comboBoxStartingCash = nullptr;
+static AoCLobbyGadgets s_aocLobby;	// AoC @hook 01/11/2026 Starting stock, richness, cap, victory, ambient civilians (D11 F7).
 static GameWindow *comboBoxPlayer[MAX_SLOTS] = {0};
 
 static GameWindow *comboBoxColor[MAX_SLOTS] = {0};
@@ -384,8 +386,14 @@ Bool SkirmishPreferences::write()
 
 	(*this)["UserName"] = UnicodeStringToQuotedPrintable(TheSkirmishGameInfo->getConstSlot(0)->getName());
 
-  setStartingCash( TheSkirmishGameInfo->getStartingCash() );
+  // AoC @hook 01/11/2026 With a starting stock list the cash is the stock choice's, remembered by name below; writing it as
+  // StartingCash would hand a stock-data session a cash amount its money list does not have (review of PR #6, finding 1).
+  if ( !AoCLobbyUI::replacesStartingCash() )
+  {
+    setStartingCash( TheSkirmishGameInfo->getStartingCash() );
+  }
   setSuperweaponRestricted( TheSkirmishGameInfo->getSuperweaponRestriction() != 0 );
+  AoCLobbyRules::writePreferences( *this, TheSkirmishGameInfo->getAoCLobbySettings() );	// AoC @hook 01/11/2026 Remembered lobby choices beside StartingCash (D11 F7).
 
 	setSlotList();
 
@@ -1035,6 +1043,13 @@ static void handleStartingCashSelection()
   }
 }
 
+// AoC @hook 01/11/2026 A lobby option gadget, or Starting Cash listing starting stocks: the game takes the value (D11 F7).
+static Bool handleAoCLobbyControl( Int controlID )
+{
+  Bool changed = FALSE;
+  return AoCLobbyUI::handleControl( s_aocLobby, controlID, TheSkirmishGameInfo, changed );
+}
+
 static void handleLimitSuperweaponsClick()
 {
   GameInfo *myGame = TheSkirmishGameInfo;
@@ -1091,7 +1106,14 @@ void InitSkirmishGameGadgets()
   DEBUG_ASSERTCRASH(checkBoxLimitSuperweapons, ("Could not find the checkBoxLimitSuperweapons"));
   comboBoxStartingCash = TheWindowManager->winGetWindowFromId( parentSkirmishGameOptions, comboBoxStartingCashID );
   DEBUG_ASSERTCRASH(comboBoxStartingCash, ("Could not find the comboBoxStartingCash"));
-  PopulateStartingCashComboBox(comboBoxStartingCash, TheSkirmishGameInfo );
+  // AoC @hook 01/11/2026 The lobby option gadgets; with a starting stock list the Starting Cash combo lists the stocks instead of
+  // the money choices (D11 F7).
+  AoCLobbyUI::findGadgets( parentSkirmishGameOptions, "SkirmishGameOptionsMenu", s_aocLobby );
+  if ( !AoCLobbyUI::replacesStartingCash() )
+  {
+    PopulateStartingCashComboBox(comboBoxStartingCash, TheSkirmishGameInfo );
+  }
+  AoCLobbyUI::populate( s_aocLobby, TheSkirmishGameInfo );
 
 	textEntryPlayerNameID = TheNameKeyGenerator->nameToKey( "SkirmishGameOptionsMenu.wnd:TextEntryPlayerName" );
   textEntryPlayerName = TheWindowManager->winGetWindowFromId( nullptr, textEntryPlayerNameID );
@@ -1272,6 +1294,10 @@ void updateSkirmishGameOptions()
 	}
 
   GadgetCheckBoxSetChecked( checkBoxLimitSuperweapons, TheSkirmishGameInfo->getSuperweaponRestriction() != 0 );
+  // AoC @hook 01/11/2026 The lobby fields; the Starting Cash combo lists starting stocks when a stock list is defined (D11 F7).
+  AoCLobbyUI::show( s_aocLobby, TheSkirmishGameInfo );
+  if ( AoCLobbyUI::replacesStartingCash() )
+    return;
   Int itemCount = GadgetComboBoxGetLength(comboBoxStartingCash);
   Int index = 0;
   for ( ; index < itemCount; index++ )
@@ -1357,6 +1383,12 @@ void SkirmishGameOptionsMenuInit( WindowLayout *layout, void *userData )
 
   TheSkirmishGameInfo->setStartingCash( prefs.getStartingCash() );
   TheSkirmishGameInfo->setSuperweaponRestriction( prefs.getSuperweaponRestricted() ? 1 : 0 );
+  {
+    // AoC @hook 01/11/2026 Remembered lobby choices; a starting stock also sets the starting cash (D11 F7).
+    AoCLobbySettings aocLobby = TheSkirmishGameInfo->getAoCLobbySettings();
+    AoCLobbyRules::readPreferences( prefs, aocLobby );
+    TheSkirmishGameInfo->setAoCLobbySettings( aocLobby );
+  }
 
   TheSkirmishGameInfo->setMap(prefs.getPreferredMap());
 	const MapMetaData *md = TheMapCache->findMap(TheSkirmishGameInfo->getMap());
@@ -1588,7 +1620,11 @@ WindowMsgHandledType SkirmishGameOptionsMenuSystem( GameWindow *window, Unsigned
 			{
 				GameWindow *control = (GameWindow *)mData1;
 				Int controlID = control->winGetWindowId();
-        if ( controlID == comboBoxStartingCashID )
+        if ( handleAoCLobbyControl( controlID ) )
+        {
+          // AoC @hook 01/11/2026 A lobby option combo, or Starting Cash listing starting stocks (D11 F7).
+        }
+        else if ( controlID == comboBoxStartingCashID )
         {
           handleStartingCashSelection();
         }
@@ -1688,6 +1724,10 @@ WindowMsgHandledType SkirmishGameOptionsMenuSystem( GameWindow *window, Unsigned
         else if ( controlID == checkBoxLimitSuperweaponsID )
         {
           handleLimitSuperweaponsClick();
+        }
+        else if ( handleAoCLobbyControl( controlID ) )
+        {
+          // AoC @hook 01/11/2026 The ambient civilians checkbox (D11 F7).
         }
 				else
 				{

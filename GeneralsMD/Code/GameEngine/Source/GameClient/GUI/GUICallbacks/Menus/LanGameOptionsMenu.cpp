@@ -58,6 +58,7 @@
 #include "GameNetwork/LANAPICallbacks.h"
 #include "Common/MultiplayerSettings.h"
 #include "GameClient/GameText.h"
+#include "AoC/AoCLobbyUI.h"	// AoC @hook 01/11/2026 Lobby option gadgets (D11 F7).
 #include "GameNetwork/GUIUtil.h"
 
 
@@ -125,6 +126,7 @@ static GameWindow *textEntryChat = nullptr;
 static GameWindow *textEntryMapDisplay = nullptr;
 static GameWindow *checkboxLimitSuperweapons = nullptr;
 static GameWindow *comboBoxStartingCash = nullptr;
+static AoCLobbyGadgets s_aocLobby;	// AoC @hook 01/11/2026 Starting stock, richness, cap, victory, ambient civilians (D11 F7).
 static GameWindow *windowMap = nullptr;
 
 static GameWindow *comboBoxPlayer[MAX_SLOTS] = {0};
@@ -629,6 +631,27 @@ static void handleStartingCashSelection()
   }
 }
 
+// AoC @hook 01/11/2026 A lobby option gadget, or Starting Cash listing starting stocks (D11 F7): the same path as the stock
+// options, every change goes to the clients through RequestGameOptions(GenerateGameOptionsString()).
+static Bool handleAoCLobbyControl( Int controlID )
+{
+  LANGameInfo *myGame = TheLAN->GetMyGame();
+  Bool changed = FALSE;
+  if ( !myGame || !AoCLobbyUI::handleControl( s_aocLobby, controlID, myGame, changed ) )
+    return FALSE;
+  if ( changed )
+  {
+    myGame->resetAccepted();
+    if (myGame->amIHost() && !s_isIniting)
+    {
+      // send around the new data
+      TheLAN->RequestGameOptions(GenerateGameOptionsString(), true);
+      lanUpdateSlotList(); // Update the accepted button UI
+    }
+  }
+  return TRUE;
+}
+
 static void handleLimitSuperweaponsClick()
 {
   LANGameInfo *myGame = TheLAN->GetMyGame();
@@ -708,7 +731,14 @@ void InitLanGameGadgets()
   DEBUG_ASSERTCRASH(checkboxLimitSuperweapons, ("Could not find the checkboxLimitSuperweapons"));
   comboBoxStartingCash = TheWindowManager->winGetWindowFromId( parentLanGameOptions, comboBoxStartingCashID );
   DEBUG_ASSERTCRASH(comboBoxStartingCash, ("Could not find the comboBoxStartingCash"));
-	PopulateStartingCashComboBox(comboBoxStartingCash, TheLAN->GetMyGame());
+  // AoC @hook 01/11/2026 The lobby option gadgets; with a starting stock list the Starting Cash combo lists the stocks instead of
+  // the money choices (D11 F7).
+  AoCLobbyUI::findGadgets( parentLanGameOptions, "LanGameOptionsMenu", s_aocLobby );
+  if ( !AoCLobbyUI::replacesStartingCash() )
+  {
+    PopulateStartingCashComboBox(comboBoxStartingCash, TheLAN->GetMyGame());
+  }
+  AoCLobbyUI::populate( s_aocLobby, TheLAN->GetMyGame() );
 
 	windowMap = TheWindowManager->winGetWindowFromId( parentLanGameOptions,windowMapID  );
 	DEBUG_ASSERTCRASH(windowMap, ("Could not find the LanGameOptionsMenu.wnd:MapWindow" ));
@@ -804,6 +834,7 @@ void DeinitLanGameGadgets()
 	textEntryMapDisplay = nullptr;
   checkboxLimitSuperweapons = nullptr;
   comboBoxStartingCash = nullptr;
+  s_aocLobby.clear();	// AoC @hook 01/11/2026 The layout is gone (D11 F7).
 	if (windowMap)
 	{
 		windowMap->winSetUserData(nullptr);
@@ -863,6 +894,12 @@ void LanGameOptionsMenuInit( WindowLayout *layout, void *userData )
 		game->setMap( pref.getPreferredMap() );
     game->setStartingCash( pref.getStartingCash() );
     game->setSuperweaponRestriction( pref.getSuperweaponRestricted() ? 1 : 0 );
+    {
+      // AoC @hook 01/11/2026 The host's remembered lobby choices; a starting stock also sets the starting cash (D11 F7).
+      AoCLobbySettings aocLobby = game->getAoCLobbySettings();
+      AoCLobbyRules::readPreferences( pref, aocLobby );
+      game->setAoCLobbySettings( aocLobby );
+    }
 		AsciiString lowerMap = pref.getPreferredMap();
 		lowerMap.toLower();
 		std::map<AsciiString, MapMetaData>::iterator it = TheMapCache->find(lowerMap);
@@ -891,6 +928,7 @@ void LanGameOptionsMenuInit( WindowLayout *layout, void *userData )
 		buttonSelectMap->winEnable( FALSE );
     checkboxLimitSuperweapons->winEnable( FALSE ); // Can look but only host can touch
     comboBoxStartingCash->winEnable( FALSE );      // Ditto
+    AoCLobbyUI::enable( s_aocLobby, FALSE );       // AoC @hook 01/11/2026 Host-only, like the stock options (D11 F7).
 		TheLAN->GetMyGame()->setMapCRC( TheLAN->GetMyGame()->getMapCRC() );		// force a recheck
 		TheLAN->GetMyGame()->setMapSize( TheLAN->GetMyGame()->getMapSize() ); // of if we have the map
 		TheLAN->RequestHasMap();
@@ -967,6 +1005,10 @@ void updateGameOptions()
 		GadgetStaticTextSetText(textEntryMapDisplay, mapDisplayName);
 
     GadgetCheckBoxSetChecked( checkboxLimitSuperweapons, theGame->getSuperweaponRestriction() != 0 );
+    // AoC @hook 01/11/2026 The lobby fields; the Starting Cash combo lists starting stocks when a stock list is defined (D11 F7).
+    AoCLobbyUI::show( s_aocLobby, theGame );
+    if ( AoCLobbyUI::replacesStartingCash() )
+      return;
 		Int itemCount = GadgetComboBoxGetLength(comboBoxStartingCash);
     Int index = 0;
     for ( ; index < itemCount; index++ )
@@ -1161,7 +1203,11 @@ WindowMsgHandledType LanGameOptionsMenuSystem( GameWindow *window, UnsignedInt m
 				Int controlID = control->winGetWindowId();
 				LANGameInfo *myGame = TheLAN->GetMyGame();
 
-        if ( controlID == comboBoxStartingCashID )
+        if ( handleAoCLobbyControl( controlID ) )
+        {
+          // AoC @hook 01/11/2026 A lobby option combo, or Starting Cash listing starting stocks (D11 F7).
+        }
+        else if ( controlID == comboBoxStartingCashID )
         {
           handleStartingCashSelection();
         }
@@ -1285,6 +1331,10 @@ WindowMsgHandledType LanGameOptionsMenuSystem( GameWindow *window, UnsignedInt m
         else if ( controlID == checkboxLimitSuperweaponsID )
         {
           handleLimitSuperweaponsClick();
+        }
+        else if ( handleAoCLobbyControl( controlID ) )
+        {
+          // AoC @hook 01/11/2026 The ambient civilians checkbox (D11 F7).
         }
 				else
 				{

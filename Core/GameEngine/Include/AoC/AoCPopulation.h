@@ -25,8 +25,10 @@
 //   capacity  the AoCPopulationCapacity of every owned object that is not under construction
 //   reserved  the population of units queued in the player's factories and not yet out of the door, each with the
 //             units it is created with (a transport's initial payload)
-//   cap       capacity, clamped to the lobby cap (GameLogic::getAoCPopulationCap; 0 means no lobby clamp)
-//   headroom  cap - used - reserved; negative when the player is over the cap (destroyed houses, captures)
+//   cap       capacity, clamped to the lobby cap (GameLogic::getAoCPopulationCap; 0 means no lobby clamp); with the
+//             unlimited lobby cap (AOC_POPULATION_CAP_UNLIMITED, F7) there is no cap: getCap() reports -1
+//   headroom  cap - used - reserved; negative when the player is over the cap (destroyed houses, captures);
+//             AOC_POPULATION_UNLIMITED_HEADROOM with the unlimited lobby cap, so the check is off entirely
 //
 // Production queues a unit only while the headroom covers its population (BuildAssistant::canMakeUnit,
 // CANMAKE_NO_HOUSING). Going over the cap is allowed and nothing dies; production waits.
@@ -38,6 +40,16 @@
 #pragma once
 
 #include "Common/Snapshot.h"
+
+enum
+{
+	/// AoC F7: the lobby cap of the "unlimited" mode (D1 section 6, D3 section 1): no cap at all, the housing check is off
+	/// (production is never refused for housing, nobody is ever at cap) while the counters still count for display.
+	/// Any negative lobby cap means the same. 0 stays "no lobby clamp" (housing still limits), as F4 built it.
+	AOC_POPULATION_CAP_UNLIMITED = -1,
+	/// The headroom reported under the unlimited cap: larger than any population, small enough to add to safely.
+	AOC_POPULATION_UNLIMITED_HEADROOM = 0x3FFFFFFF
+};
 
 class ModuleData;
 class Object;
@@ -103,7 +115,7 @@ public:
 	Int getUsed() const { return m_used; }
 	Int getCapacity() const { return m_capacity; }
 	Int getReserved() const { return m_reserved; }
-	/// What production is checked against: capacity clamped to the lobby cap.
+	/// What production is checked against: capacity clamped to the lobby cap; AOC_POPULATION_CAP_UNLIMITED (-1) when unlimited.
 	Int getCap() const { return capFor( m_capacity, lobbyCap() ); }
 	Int getHeadroom() const { return headroomFor( m_used, m_capacity, m_reserved, lobbyCap() ); }
 	/// TRUE when a unit of this population fits: always for 0, else headroom >= population.
@@ -116,7 +128,8 @@ public:
 	/// frame, so a unit trading its reservation for its place in the population never shows as a pair of false edges.
 	void reportBlockChange();
 
-	// The arithmetic, shared with the unit tests.
+	// The arithmetic, shared with the unit tests. A negative lobby cap is the unlimited mode (F7).
+	static Bool isUnlimited( Int lobbyCap ) { return lobbyCap < 0; }
 	static Int capFor( Int capacity, Int lobbyCap );
 	static Int headroomFor( Int used, Int capacity, Int reserved, Int lobbyCap );
 	/// The game's lobby cap (GameLogic), or the detached value when there is no GameLogic (unit tests).

@@ -45,6 +45,7 @@
 #include "PreRTS.h"	// This must go first in EVERY cpp file in the GameEngine
 
 #include "Common/Errors.h"
+#include "AoC/AoCLobbyRules.h"	// AoC @hook 01/11/2026 The lobby fields in the per-frame CRC (D11 F7).
 #include "AoC/AoCRules.h"	// AoC @hook F1
 #include "Common/DataChunk.h"
 #include "Common/GameState.h"
@@ -58,6 +59,7 @@
 #ifdef RTS_DEBUG
 #include "GameLogic/Object.h"
 #endif
+#include "GameLogic/GameLogic.h"	// AoC @hook 01/11/2026 The lobby fields in the per-frame CRC (D11 F7).
 #include "GameLogic/SidesList.h"
 #include "GameNetwork/GameInfo.h"
 #include "GameNetwork/NetworkDefs.h"
@@ -462,6 +464,26 @@ void PlayerList::crc( Xfer *xfer )
 
 	for( Int i = 0; i < m_playerCount; ++i )
 		xfer->xferSnapshot( m_players[ i ] );
+
+	// AoC @hook 01/11/2026 The lobby fields the logic reads during play, each only when not the default so a stock game's
+	// CRC is unchanged (D11 F7). GameLogic::crc is not part of the per-frame CRC (GameLogic::getCRC reaches GameLogic only
+	// in a save-mode CRC), and this snapshot is, so a peer with another cap, ambient switch, victory or richness shows a
+	// mismatch at the next CRC frame (review of PR #6, finding 3).
+	if( TheGameLogic )
+	{
+		Int cap = TheGameLogic->getAoCPopulationCap();
+		Bool ambient = TheGameLogic->getAoCAmbientCivilians();
+		Int victory = TheGameLogic->getAoCVictory();
+		Int richness = TheGameLogic->getAoCRichnessPerMille();
+		if( cap != 0 )
+			xfer->xferInt( &cap );
+		if( !ambient )
+			xfer->xferBool( &ambient );
+		if( victory != AOC_VICTORY_CONQUEST )
+			xfer->xferInt( &victory );
+		if( richness != AOC_RICHNESS_DEFAULT_PER_MILLE )
+			xfer->xferInt( &richness );
+	}
 }
 
 // ------------------------------------------------------------------------------------------------

@@ -34,6 +34,7 @@
 #include "WWMath/wwmath.h"
 #include "Common/INI.h"
 #include "Common/INIException.h"
+#include "AoC/AoCLobbyRules.h"	// AoC @hook 01/11/2026 The lobby choice list blocks (D11 F7).
 #include "AoC/AoCRules.h"	// AoC @hook F1: the AoCResourceType block
 
 #include "Common/DamageFX.h"
@@ -97,7 +98,10 @@ static const BlockParse theTypeTable[] =
 {
 	{ "AIData",                         INI::parseAIDataDefinition },
 	{ "Animation",                      INI::parseAnim2DDefinition },
+	{ "AoCPopulationCapChoice",         AoCLobbyRules::parsePopulationCapChoiceDefinition },	// AoC @hook 01/11/2026 Lobby population cap choices (D11 F7).
 	{ "AoCResourceType",                AoCRules::parseResourceTypeDefinition },	// AoC @feature F1
+	{ "AoCRichnessChoice",              AoCLobbyRules::parseRichnessChoiceDefinition },	// AoC @hook 01/11/2026 Lobby resource richness choices (D11 F7).
+	{ "AoCStartingStockChoice",         AoCLobbyRules::parseStartingStockChoiceDefinition },	// AoC @hook 01/11/2026 Lobby starting stock choices (D11 F7).
 	{ "Armor",                          INI::parseArmorDefinition },
 	{ "AudioEvent",                     INI::parseAudioEventDefinition },
 	{ "AudioSettings",                  INI::parseAudioSettingsDefinition },
