@@ -607,6 +607,9 @@ public:
 		MSG_LOGIC_CRC,															///< CRC from the logic passed around in a network game :)
 		MSG_SET_MINE_CLEARING_DETAIL,								///< CRC from the logic passed around in a network game :)
 		MSG_ENABLE_RETALIATION_MODE,								///< Turn retaliation mode on or off.
+		// AoC @hook 01/11/2026 Queue an import trade at the selected building: (trade id, production id). After every stock message,
+		// so their values (and every stock replay) stay as they are, and before the debug block, so release and debug agree (D11 F11).
+		MSG_AOC_QUEUE_TRADE,
 
 		MSG_BEGIN_DEBUG_NETWORK_MESSAGES = 1900,		///< network messages that exist only in debug/internal builds. all grouped separately.
 

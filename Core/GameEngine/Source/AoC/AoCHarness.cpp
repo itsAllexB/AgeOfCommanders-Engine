@@ -29,6 +29,8 @@
 #include "AoC/AoCResourceBank.h"
 #include "AoC/AoCRules.h"
 #include "AoC/AoCSimRate.h"
+#include "AoC/AoCTimedDropUpdate.h"
+#include "AoC/AoCTrade.h"
 #include "AoC/AoCUserData.h"
 #include "AoC/AoCWanderAIUpdate.h"
 
@@ -134,6 +136,8 @@ struct HarnessState
 	UnsignedInt queueRefusals[MAX_PLAYER_COUNT][AOC_HARNESS_CANMAKE_SLOTS];
 	const ThingTemplate *housingRefused[MAX_PLAYER_COUNT][AOC_HARNESS_BLOCKED_UNITS];
 	Bool sawFirstLogicFrame;
+	// F11: shipments delivered per player index in this process (a loaded game starts at 0), for -aiLog trades_delivered
+	UnsignedInt tradesDelivered[MAX_PLAYER_COUNT];
 
 	Bool sawCRCMismatch;
 	UnsignedInt mismatchFrame;
@@ -596,6 +600,11 @@ void writeAiLog( UnsignedInt frame )
 			Int buildersBusy = 0;	// AoC F8
 			p->iterateObjects(busyBuilderCensusCallback, &buildersBusy);
 			row.add("builders_busy", buildersBusy);
+			if (AoCTradeStore::count() > 0)	// AoC F11: only while AoCTrade blocks are defined, so earlier overlays keep their format
+			{
+				const Int index = (Int)p->getPlayerIndex();
+				row.add("trades_delivered", (index >= 0 && index < MAX_PLAYER_COUNT) ? (Int)s.tradesDelivered[index] : 0);
+			}
 		}
 
 		std::string path = dir + fmt("ai_%d.csv", (int)p->getPlayerIndex());
@@ -744,8 +753,17 @@ void uiLog( UnsignedInt frame )
 	}
 	const AsciiString &set = TheControlBar->aocShownCommandSet();
 	const ThingTemplate *placing = TheInGameUI->getPendingPlaceType();
-	fprintf(stderr, "[AoC ui] frame %u set=%s slots=%s%s%s\n", frame, set.isEmpty() ? "-" : set.str(), slots.c_str(),
-		placing ? " place=" : "", placing ? placing->getName().str() : "");
+	// F11: the airdrop chip's text while it is shown (only a layout with ControlBar.wnd:AoCTimerChip has one)
+	std::string chip;
+	const UnicodeString chipText = AoCTimedDropUpdate::shownChipText();
+	if (!chipText.isEmpty())
+	{
+		AsciiString narrow;
+		narrow.translate(chipText);
+		chip = fmt(" chip=\"%s\"", narrow.str());
+	}
+	fprintf(stderr, "[AoC ui] frame %u set=%s slots=%s%s%s%s\n", frame, set.isEmpty() ? "-" : set.str(), slots.c_str(),
+		placing ? " place=" : "", placing ? placing->getName().str() : "", chip.c_str());
 	fflush(stderr);
 }
 
@@ -951,6 +969,68 @@ void uiBank( UnsignedInt frame )
 	fflush(stderr);
 }
 
+// --- F11 additions: queue, cancel -----------------------------------------------------------------
+
+GameWindow *uiQueueWindow( Int slot )	// slot 1 to 9: the production queue buttons ControlBar::populateBuildQueue uses
+{
+	AsciiString name;
+	name.format("ControlBar.wnd:ButtonQueue%02d", slot);
+	return TheWindowManager->winGetWindowFromId(nullptr, TheNameKeyGenerator->nameToKey(name));
+}
+
+/// queue: one stderr line with the production queue of the first selected object (lowest id). Reads only.
+void uiQueue( UnsignedInt frame )
+{
+	HarnessState &s = state();
+	Object *obj = uiFirstSelected();
+	std::string text = fmt("[AoC queue] frame %u logic %u", frame, s.lastLogicFrame);
+	ProductionUpdateInterface *pu = obj ? obj->getProductionUpdateInterface() : nullptr;
+	if (obj == nullptr || pu == nullptr)
+	{
+		text += obj ? fmt(" %u %s no-queue", (UnsignedInt)obj->getID(), obj->getTemplate()->getName().str()) : std::string(" nothing-selected");
+		fprintf(stderr, "%s\n", text.c_str());
+		fflush(stderr);
+		return;
+	}
+	text += fmt(" %u %s entries=%u:", (UnsignedInt)obj->getID(), obj->getTemplate()->getName().str(), pu->getProductionCount());
+	Player *owner = obj->getControllingPlayer();	// calcTimeToBuild takes a non-const player
+	for (const ProductionEntry *e = pu->firstProduction(); e; e = pu->nextProduction(e))
+	{
+		const char *type = "upgrade";
+		std::string name;
+		Int total = 0;
+#if RTS_ZEROHOUR
+		if (e->getProductionType() == PRODUCTION_AOC_TRADE && e->getProductionAoCTrade())
+		{
+			type = "trade";
+			name = e->getProductionAoCTrade()->getName().str();
+			total = (Int)e->getProductionAoCTrade()->getDeliveryFrames();
+		}
+		else
+#endif
+		if (e->getProductionType() == PRODUCTION_UNIT && e->getProductionObject())
+		{
+			type = "unit";
+			name = e->getProductionObject()->getName().str();
+			total = e->getProductionObject()->calcTimeToBuild(owner);
+		}
+		else if (e->getProductionUpgrade())
+		{
+			name = e->getProductionUpgrade()->getUpgradeName().str();
+			total = e->getProductionUpgrade()->calcTimeToBuild(owner);
+		}
+		const Real percent = e->getPercentComplete();
+#if RTS_ZEROHOUR
+		const Int frames = e->getAoCFramesUnderConstruction();
+#else
+		const Int frames = (Int)(percent * (Real)total / 100.0f + 0.5f);	// base Generals: back from the percent, rounded
+#endif
+		text += fmt(" %s %s %.1f%% %d/%d id %d;", type, name.c_str(), percent, frames, total, (Int)e->getProductionID());
+	}
+	fprintf(stderr, "%s\n", text.c_str());
+	fflush(stderr);
+}
+
 /// Runs one line; returns the engine iterations to wait before the next.
 Int uiRunLine( const HarnessState::UiLine &l )
 {
@@ -964,6 +1044,23 @@ Int uiRunLine( const HarnessState::UiLine &l )
 	{
 		uiBank(l.frame);
 		return 0;
+	}
+	if (strcmp(l.cmd, "queue") == 0)
+	{
+		uiQueue(l.frame);
+		return 0;
+	}
+	if (strcmp(l.cmd, "cancel") == 0)
+	{
+		// F11: a click on production queue button n: the control bar cancels that entry (MSG_CANCEL_UNIT_CREATE or MSG_CANCEL_UPGRADE)
+		GameWindow *win = uiQueueWindow(atoi(l.arg));
+		if (!uiShown(win) || !BitIsSet(win->winGetStatus(), WIN_STATUS_ENABLED))
+		{
+			logLine("uiScript: cancel %s: no visible enabled queue button in that slot, nothing pressed", l.arg);
+			return 0;
+		}
+		TheWindowManager->winSendSystemMsg(win->winGetParent(), GBM_SELECTED, (WindowMsgData)win, win->winGetWindowId());
+		return AOC_UI_SETTLE_ITERATIONS;
 	}
 	if (strcmp(l.cmd, "count") == 0)
 	{
@@ -1063,7 +1160,7 @@ void runUiScript()
 		logLine("uiScript line %d at logic frame %u: %s %s", s.uiNext, s.lastLogicFrame, l.cmd, l.arg);
 		// select, selectall and dock (F2) and place (F8) send a logic message, so each must be the first line of its frame
 		const Bool sendsLogicMessage = strcmp(l.cmd, "select") == 0 || strcmp(l.cmd, "selectall") == 0 || strcmp(l.cmd, "dock") == 0 ||
-			strcmp(l.cmd, "place") == 0;
+			strcmp(l.cmd, "place") == 0 || strcmp(l.cmd, "cancel") == 0;	// F11: cancel sends the queue button's cancel message
 		if (sendsLogicMessage && s.lastLogicFrame > l.frame)
 			logLine("uiScript: warning: line %d (%s, frame %u) runs late, at logic frame %u: its message lands on a "
 				"frame that depends on the render rate, so the CRC log is not reproducible; make it the first line of its frame", s.uiNext, l.cmd, l.frame, s.lastLogicFrame);
@@ -1255,7 +1352,7 @@ Int AoCHarness::parseAocUiScript( char *args[], int num )
 		logLine("-aocUiScript: cannot open '%s'; flag ignored", args[1]);
 		return 2;
 	}
-	static const char *const known[] = { "select", "press", "back", "log", "screenshot", "dock", "selectall", "bank", "count", "place" };	// F2: dock, selectall, bank, count; F8: place
+	static const char *const known[] = { "select", "press", "back", "log", "screenshot", "dock", "selectall", "bank", "count", "place", "queue", "cancel" };	// F2: dock, selectall, bank, count; F8: place; F11: queue, cancel
 	char text[512];
 	Int lineNumber = 0;
 	Int dropped = 0;
@@ -1286,7 +1383,7 @@ Int AoCHarness::parseAocUiScript( char *args[], int num )
 		if (ok)
 			s.uiLineCount++;
 		else
-			logLine("-aocUiScript: unknown command '%s' skipped (select, selectall, press, back, dock, place, log, bank, count, screenshot)", l.cmd);
+			logLine("-aocUiScript: unknown command '%s' skipped (select, selectall, press, back, dock, place, log, bank, count, screenshot, queue, cancel)", l.cmd);
 	}
 	fclose(f);
 	if (dropped > 0)
@@ -1592,6 +1689,17 @@ void AoCHarness::logicUpdateEnd()
 	s.logicUpdates++;
 }
 
+void AoCHarness::onTradeDelivered( const Player *player )
+{
+	HarnessState &s = state();
+	if (!s.anyFlag || player == nullptr)
+		return;
+	const Int index = (Int)player->getPlayerIndex();
+	if (index >= 0 && index < MAX_PLAYER_COUNT)
+		++s.tradesDelivered[index];
+}
+
+// ------------------------------------------------------------------------------------------------
 void AoCHarness::onUnitQueueRefused( const Player *player, Int canMakeType, const ThingTemplate *unitType )
 {
 	HarnessState &s = state();

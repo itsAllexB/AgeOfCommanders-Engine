@@ -65,6 +65,9 @@
 #include "GameLogic/Module/AIUpdate.h"							// AoC @feature F2
 #include "GameLogic/Module/SupplyTruckAIUpdate.h"		// AoC @feature F2
 #include "GameLogic/Module/SupplyWarehouseDockUpdate.h"	// AoC @feature F2
+#include "AoC/AoCTrade.h"														// AoC @feature 01/11/2026 Import trades in the production queue (D11 F11).
+#include "GameClient/Color.h"												// AoC @feature 01/11/2026 The delivery floating text (D11 F11).
+#include "GameLogic/ObjectCreationList.h"						// AoC @feature 01/11/2026 A trade's DeliveryOCL (D11 F11).
 
 
 // AoC @feature F2: a rally point on a node sends a new gatherer to gather there (D11 2.2, D5, D6) ----------------
@@ -516,6 +519,67 @@ Bool ProductionUpdate::cancelUnitCreate( ProductionID productionID )
 }
 
 //-------------------------------------------------------------------------------------------------
+/** AoC @feature 01/11/2026 Whether a trade can be queued here now (D11 F11): the building offers it (an AOC_TRADE button in
+	* its command set or one folder of it) and stands complete and unsold, RequiresObject is met, the bank affords the Cost,
+	* the queue has room. An AoCTradeRefusal. */
+//-------------------------------------------------------------------------------------------------
+Int ProductionUpdate::canQueueAoCTrade( const AoCTradeTemplate *trade ) const
+{
+	if( trade == nullptr )
+		return AOC_TRADE_REFUSED_NOT_OFFERED;
+	const Object *us = getObject();
+	const Player *player = us->getControllingPlayer();
+	AoCTradeQueueFacts facts;
+	facts.offered = player != nullptr && !us->testStatus( OBJECT_STATUS_UNDER_CONSTRUCTION ) && !us->testStatus( OBJECT_STATUS_SOLD ) &&
+		AoCTrade::isOfferedBy( us, trade );
+	facts.requiresMet = AoCTrade::requiresMet( trade, player );
+	facts.canAfford = player != nullptr && player->getAoCBank()->canAfford( trade->getCost() );
+	facts.queueCount = m_productionCount;
+	facts.queueMax = (UnsignedInt)getProductionUpdateModuleData()->m_maxQueueEntries;
+	return AoCTrade::decide( facts );
+}
+
+//-------------------------------------------------------------------------------------------------
+/** AoC @feature 01/11/2026 Queue a trade (D11 F11): refused with nothing withdrawn unless canQueueAoCTrade allows it, else
+	* the whole Cost is withdrawn now (as a unit's cost is) and the shipment joins the end of the queue. The production id comes
+	* with the message, as for units, so the cancel message finds the entry on every machine. */
+//-------------------------------------------------------------------------------------------------
+Bool ProductionUpdate::queueAoCTrade( const AoCTradeTemplate *trade, ProductionID productionID )
+{
+	if( trade == nullptr )
+		return FALSE;
+	Player *player = getObject()->getControllingPlayer();
+	const Int refusal = canQueueAoCTrade( trade );
+	if( refusal != AOC_TRADE_OK )
+	{
+		AoCTrade::log( player, "refused %s %s", trade->getName().str(), AoCTrade::refusalName( refusal ) );
+		return FALSE;
+	}
+
+	player->getAoCBank()->withdraw( trade->getCost() );
+
+	ProductionEntry *production = newInstance(ProductionEntry);
+	production->m_type = PRODUCTION_AOC_TRADE;
+	production->m_aocTrade = trade;
+	production->m_productionID = productionID;
+	production->m_productionQuantityTotal = 1;
+	production->m_productionQuantityProduced = 0;
+	production->m_exitDoor = DOOR_NONE_AVAILABLE;	// a shipment leaves by no door
+	addToProductionQueue( production );
+
+	if( AoCTrade::logEnabled() )
+	{
+		char cost[256];
+		char bank[256];
+		AoCTrade::vectorText( trade->getCost(), cost, sizeof(cost) );
+		AoCTrade::bankText( player, bank, sizeof(bank) );
+		AoCTrade::log( player, "queued %s cost %s id %d object %u bank %s", trade->getName().str(), cost, (Int)productionID,
+			(UnsignedInt)getObject()->getID(), bank );
+	}
+	return TRUE;
+}
+
+//-------------------------------------------------------------------------------------------------
 /** Cancel all production of type unitType */
 //-------------------------------------------------------------------------------------------------
 void ProductionUpdate::cancelAllUnitsOfType( const ThingTemplate *unitType)
@@ -732,6 +796,8 @@ UpdateSleepTime ProductionUpdate::update()
 	Int totalProductionFrames;
 	if( production->m_type == PRODUCTION_UNIT )
 		totalProductionFrames = production->m_objectToProduce->calcTimeToBuild( player );
+	else if( production->m_type == PRODUCTION_AOC_TRADE )	// AoC @hook 01/11/2026 A shipment takes its DeliveryTime, frames at the live rate (D11 F11).
+		totalProductionFrames = (Int)production->m_aocTrade->getDeliveryFrames();
 	else
 		totalProductionFrames = production->m_upgradeToResearch->calcTimeToBuild( player );
 
@@ -739,6 +805,15 @@ UpdateSleepTime ProductionUpdate::update()
 	production->m_percentComplete = INT_TO_REAL( production->m_framesUnderConstruction ) /
 																	INT_TO_REAL( totalProductionFrames ) *
 																	100.0f;
+
+	// AoC @hook 01/11/2026 A shipment is delivered when its frame count reaches its delivery frames: an integer test (D11 1.2);
+	// the percent above only drives the queue clock (D11 F11).
+	if( production->m_type == PRODUCTION_AOC_TRADE )
+	{
+		if( production->m_framesUnderConstruction >= totalProductionFrames )
+			aocDeliverTrade( production );
+		return UPDATE_SLEEP_NONE;
+	}
 
 	// if we've reached 100% or more we're done, tada!
 	if( production->m_percentComplete >= 100.0f )
@@ -1166,6 +1241,11 @@ Bool ProductionUpdate::cancelUpgrade( ProductionEntry *production )
 //-------------------------------------------------------------------------------------------------
 Bool ProductionUpdate::cancelUnitCreate( ProductionEntry *production )
 {
+	// AoC @hook 01/11/2026 A shipment is cancelled through its production id like a unit (the queue button sends
+	// MSG_CANCEL_UNIT_CREATE): its Cost is refunded (D11 F11).
+	if( production->getProductionType() == PRODUCTION_AOC_TRADE )
+		return aocCancelTrade( production );
+
 	DEBUG_ASSERTCRASH(production->getProductionType() == PRODUCTION_UNIT,
 		("ProductionUpdate::cancelUnitCreate - called with wrong production type"));
 
@@ -1189,6 +1269,83 @@ Bool ProductionUpdate::cancelUnitCreate( ProductionEntry *production )
 	deleteInstance(production);
 
 	return TRUE;
+}
+
+//-------------------------------------------------------------------------------------------------
+/** AoC @feature 01/11/2026 Cancel a shipment: the whole Cost goes back to the bank (as a unit's refund: with the sound, not as
+	* income), and the entry leaves the queue (D11 F11). */
+//-------------------------------------------------------------------------------------------------
+Bool ProductionUpdate::aocCancelTrade( ProductionEntry *production )
+{
+	Player *player = getObject()->getControllingPlayer();
+	const AoCTradeTemplate *trade = production->m_aocTrade;
+	if( player && trade )
+	{
+		player->getAoCBank()->deposit( trade->getCost(), TRUE, FALSE );
+		if( AoCTrade::logEnabled() )
+		{
+			char refund[256];
+			char bank[256];
+			AoCTrade::vectorText( trade->getCost(), refund, sizeof(refund) );
+			AoCTrade::bankText( player, bank, sizeof(bank) );
+			AoCTrade::log( player, "cancelled %s refund %s id %d object %u bank %s", trade->getName().str(), refund,
+				(Int)production->m_productionID, (UnsignedInt)getObject()->getID(), bank );
+		}
+	}
+
+	removeFromProductionQueue( production );
+	deleteInstance( production );
+	return TRUE;
+}
+
+//-------------------------------------------------------------------------------------------------
+/** AoC @feature 01/11/2026 Deliver the shipment at the head of the queue (D11 F11): the Payout is deposited, the Cost's cash
+	* equivalent goes to the score keeper (as a finished upgrade's does), the DeliveryOCL is created at the building, and the
+	* local viewer gets the floating text and the DeliverySound; then the next entry in the queue starts. */
+//-------------------------------------------------------------------------------------------------
+void ProductionUpdate::aocDeliverTrade( ProductionEntry *production )
+{
+	Object *us = getObject();
+	Player *player = us->getControllingPlayer();
+	const AoCTradeTemplate *trade = production->m_aocTrade;
+
+	player->getAoCBank()->deposit( trade->getPayout(), TRUE, TRUE );
+	player->getScoreKeeper()->addMoneySpent( trade->getCost().cashEquivalent() );
+
+	const ObjectCreationList *ocl = trade->getDeliveryOCL();
+	if( ocl )
+		ObjectCreationList::create( ocl, us, us->getPosition(), us->getPosition(), us->getOrientation() );
+
+	if( us->isLocallyViewed() )
+	{
+		// OY LOOK!  I AM USING LOCAL PLAYER.  Do not put anything other than TheInGameUI->addFloatingText and audio in the block this controls!!!
+		Coord3D pos;
+		pos.set( *us->getPosition() );
+		pos.z += 10.0f;	// a little z to show it above the building, as AutoDepositUpdate does
+		const Color color = player->getPlayerColor() | GameMakeColor( 0, 0, 0, 230 );
+		TheInGameUI->addFloatingText( AoCTrade::deliveryText( trade->getPayout() ), &pos, color );
+
+		if( trade->getDeliverySound().isNotEmpty() )
+		{
+			AudioEventRTS sound( trade->getDeliverySound() );
+			sound.setObjectID( us->getID() );
+			TheAudio->addAudioEvent( &sound );
+		}
+	}
+
+	if( AoCTrade::logEnabled() )
+	{
+		char payout[256];
+		char bank[256];
+		AoCTrade::vectorText( trade->getPayout(), payout, sizeof(payout) );
+		AoCTrade::bankText( player, bank, sizeof(bank) );
+		AoCTrade::log( player, "delivered %s payout %s id %d object %u bank %s", trade->getName().str(), payout,
+			(Int)production->m_productionID, (UnsignedInt)us->getID(), bank );
+	}
+	AoCHarness::onTradeDelivered( player );
+
+	removeFromProductionQueue( production );
+	deleteInstance( production );
 }
 
 //-------------------------------------------------------------------------------------------------
@@ -1288,6 +1445,10 @@ void ProductionUpdate::cancelAndRefundAllProduction()
 #endif
 			}
 		}
+		else if( production->getProductionType() == PRODUCTION_AOC_TRADE )	// AoC @hook 01/11/2026 A shipment is refunded like the rest of the queue (D11 F11).
+		{
+			aocCancelTrade( production );
+		}
 		else
 		{
 			// unknown production type
@@ -1350,18 +1511,30 @@ void ProductionUpdate::crc( Xfer *xfer )
 	// extend base class
 	UpdateModule::crc( xfer );
 
+	// AoC @hook 01/11/2026 The shipments in the queue, each by trade id and frames under way. The stock entries are not in this
+	// CRC, and a stock queue holds no shipment, so the stock bytes are unchanged (D11 F11).
+	for( ProductionEntry *production = m_productionQueue; production; production = production->m_next )
+	{
+		if( production->m_type != PRODUCTION_AOC_TRADE || production->m_aocTrade == nullptr )
+			continue;
+		Int tradeID = production->m_aocTrade->getID();
+		xfer->xferInt( &tradeID );
+		xfer->xferInt( &production->m_framesUnderConstruction );
+	}
+
 }
 
 // ------------------------------------------------------------------------------------------------
 /** Xfer method
 	* Version Info:
-	* 1: Initial version */
+	* 1: Initial version
+	* 2: AoC F11: an entry of type PRODUCTION_AOC_TRADE, saved by its trade name (D11 F11) */
 // ------------------------------------------------------------------------------------------------
 void ProductionUpdate::xfer( Xfer *xfer )
 {
 
 	// version
-	XferVersion currentVersion = 1;
+	XferVersion currentVersion = 2;	// AoC @hook 01/11/2026 1 to 2, trade entries (D11 F11, 1.3).
 	XferVersion version = currentVersion;
 	xfer->xferVersion( &version, currentVersion );
 
@@ -1390,6 +1563,8 @@ void ProductionUpdate::xfer( Xfer *xfer )
 			// thing/upgrade template name
 			if( production->m_type == PRODUCTION_UNIT )
 				name = production->m_objectToProduce->getName();
+			else if( production->m_type == PRODUCTION_AOC_TRADE )	// AoC @hook 01/11/2026 A shipment saves its trade name (D11 F11).
+				name = production->m_aocTrade->getName();
 			else
 				name = production->m_upgradeToResearch->getUpgradeName();
 			xfer->xferAsciiString( &name );
@@ -1464,6 +1639,19 @@ void ProductionUpdate::xfer( Xfer *xfer )
 				{
 
 					DEBUG_CRASH(( "ProductionUpdate::xfer - Cannot find template '%s'", name.str() ));
+					throw SC_INVALID_DATA;
+
+				}
+
+			}
+			else if( production->m_type == PRODUCTION_AOC_TRADE )	// AoC @hook 01/11/2026 A shipment, version 2 on: its trade by name (D11 F11).
+			{
+
+				production->m_aocTrade = version >= 2 ? AoCTradeStore::find( name.str() ) : nullptr;
+				if( production->m_aocTrade == nullptr )
+				{
+
+					DEBUG_CRASH(( "ProductionUpdate::xfer - Cannot find trade '%s'", name.str() ));
 					throw SC_INVALID_DATA;
 
 				}

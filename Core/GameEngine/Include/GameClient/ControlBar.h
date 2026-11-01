@@ -58,6 +58,7 @@ class UpgradeTemplate;
 class ControlBarResizer;
 class GameWindowTransitionsHandler;
 class DisplayString;
+class AoCTradeTemplate;	// AoC @hook 01/11/2026 import trades (D11 F11).
 
 enum ProductionID CPP_11(: Int);
 
@@ -219,6 +220,9 @@ enum GUICommandType CPP_11(: Int)
 	GUI_COMMAND_AOC_FOLDER,
 	GUI_COMMAND_AOC_FOLDER_BACK,
 
+	// AoC @hook 01/11/2026 import trades: queue the button's AoCTrade at the selected building (D11 F11).
+	GUI_COMMAND_AOC_TRADE,
+
 	// add more commands here, don't forget to update the string command list below too ...
 
 	GUI_COMMAND_NUM_COMMANDS
@@ -275,6 +279,8 @@ static const char *const TheGuiCommandNames[] =
 	// AoC @hook 31/10/2026 command bar folders: the INI names of the two command types above (D11 F5).
 	"AOC_FOLDER",
 	"AOC_FOLDER_BACK",
+	// AoC @hook 01/11/2026 import trades: the INI name of the command type above (D11 F11).
+	"AOC_TRADE",
 
 	nullptr
 };
@@ -354,6 +360,7 @@ public:
 	const ScienceVec& getScienceVec() const { return m_science; }
 	CommandButtonMappedBorderType getCommandButtonMappedBorderType() const { return m_commandButtonBorder; }
 	const AsciiString& getAoCFolderSet() const { return m_aocFolderSet; }	// AoC @hook 31/10/2026 AoCFolderCommandSet of an AOC_FOLDER button (D11 F5).
+	const AoCTradeTemplate* getAoCTrade() const { return m_aocTrade; }	// AoC @hook 01/11/2026 AoCTrade of an AOC_TRADE button (D11 F11).
 	const Image* getButtonImage() const { return m_buttonImage;	}
 	void cacheButtonImage();
 
@@ -405,6 +412,7 @@ private:
 	GameWindow*										m_window;											///< used during the run-time assignment of a button to a gadget button window
 	AudioEventRTS									m_unitSpecificSound;					///< Unit sound played whenever button is clicked.
 	AsciiString										m_aocFolderSet;								// AoC @hook 31/10/2026 the command set an AOC_FOLDER button shows (D11 F5).
+	const AoCTradeTemplate*				m_aocTrade;										// AoC @hook 01/11/2026 the trade an AOC_TRADE button queues (D11 F11).
 
 	// bleah. shouldn't be mutable, but is. sue me. (srj)
 	mutable const Image*					m_buttonImage;								///< button image

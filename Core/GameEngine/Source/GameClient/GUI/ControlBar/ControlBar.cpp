@@ -86,6 +86,9 @@
 
 #include "GameNetwork/GameInfo.h"
 
+#include "AoC/AoCTimedDropUpdate.h"	// AoC @feature 01/11/2026 The airdrop timer chip (D11 F11).
+#include "AoC/AoCTrade.h"							// AoC @feature 01/11/2026 The CommandButton key AoCTrade (D11 F11).
+
 
 // PUBLIC /////////////////////////////////////////////////////////////////////////////////////////
 ControlBar *TheControlBar = nullptr;
@@ -125,6 +128,7 @@ const FieldParse CommandButton::s_commandButtonFieldParseTable[] =
 	{ "RadiusCursorType",			INI::parseIndexList,				 TheRadiusCursorNames, offsetof( CommandButton, m_radiusCursor ) },
 	{ "UnitSpecificSound",		INI::parseAudioEventRTS,		 nullptr, offsetof( CommandButton, m_unitSpecificSound ) },
 	{ "AoCFolderCommandSet",	INI::parseAsciiString,			 nullptr, offsetof( CommandButton, m_aocFolderSet ) },	// AoC @hook 31/10/2026 command bar folders: the set a folder shows (D11 F5).
+	{ "AoCTrade",							AoCTradeStore::parseTradeReference, nullptr, offsetof( CommandButton, m_aocTrade ) },	// AoC @hook 01/11/2026 import trades: the trade an AOC_TRADE button queues (D11 F11).
 
 	{ nullptr,						nullptr,												 nullptr, 0 }
 
@@ -596,6 +600,7 @@ CommandButton::CommandButton()
 	//m_prev = nullptr;
 	m_next = nullptr;
 	m_radiusCursor = RADIUSCURSOR_NONE;
+	m_aocTrade = nullptr;	// AoC @hook 01/11/2026 no trade unless the button names one (D11 F11).
 
 }
 
@@ -2181,6 +2186,9 @@ void ControlBar::switchToContext( ControlBarContext context, Drawable *draw )
 
 	// ... and also remove any radius cursor that is active.
 	TheInGameUI->setRadiusCursorNone();
+
+	// AoC @hook 01/11/2026 the airdrop chip belongs to one selection in the command context; the command update shows it again (D11 F11).
+	AoCTimedDropUpdate::hideTimerChip();
 
 	// save a pointer for the currently selected drawable
 	m_currentSelectedDrawable = draw;

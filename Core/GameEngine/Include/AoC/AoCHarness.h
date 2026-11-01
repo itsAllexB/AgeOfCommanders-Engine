@@ -132,7 +132,21 @@
 //                                                        point on the ground and the placement angle; a refused spot is
 //                                                        reported and keeps placement mode; line builds are refused; it
 //                                                        skips the click's special-power branch (GLA sneak attack)
-//                                   After select, selectall, press, back, dock and place the next line waits 3 engine
+//                                     queue              F11: stderr "[AoC queue] frame <frame> logic <frame run> <objectId>
+//                                                        <template> entries=<n>: <type> <name> <percent>% <frames>/<total>
+//                                                        id <productionId>; ..." with the production queue of the first
+//                                                        selected object (lowest id); type unit, upgrade or trade
+//                                     cancel <n>         F11: GBM_SELECTED to the visible, enabled production queue button n
+//                                                        (1 to 9, ControlBar.wnd:ButtonQueue0n), as a click: cancels that
+//                                                        entry (a unit or a shipment through MSG_CANCEL_UNIT_CREATE)
+//                                   F11: the log line ends " chip=\"<text>\"" while the airdrop chip (ControlBar.wnd:AoCTimerChip)
+//                                   is shown. With any harness flag and AoCTrade blocks defined, the logic prints "[AoC trade] frame
+//                                   F player N queued|delivered|cancelled <name> cost|payout|refund <vector> id <productionId>
+//                                   object <id> bank <Type>=<n>...", "... refused <name> <reason>" (not-offered, requires, funds,
+//                                   queue-full; " (click, nothing sent)" when the client refused it) and the timed drop module
+//                                   "[AoC drop] frame F player N armed <upgrade> object <id>" and "... drop <ocl> object <id> next
+//                                   <frame> bank <Type>=<n>...". -aiLog adds trades_delivered while AoCTrade blocks are defined.
+//                                   After select, selectall, press, back, dock, place and cancel the next line waits 3 engine
 //                                   iterations so the control bar re-evaluates. Use absolute paths. select, selectall,
 //                                   dock and place send the stock message a click sends, so they move the CRC and the
 //                                   replay records them; press, back, log, bank, count and screenshot send nothing. Each of
@@ -239,4 +253,8 @@ public:
 	/// GameLogic::startNewGame, at the end of a new game's start (not a load, not the shell): the "[AoC lobby]" lines with the
 	/// lobby fields in effect and what richness did (D11 F7). Reads only; nothing without a harness flag or with stock data.
 	static void onLobbyGameStart( Int richnessPerMille, Int warehousesScaled, Int firstBefore, Int firstAfter );
+
+	/// ProductionUpdate delivered a shipment (D11 F11): counted per player for the -aiLog trades_delivered column (written while
+	/// AoCTrade blocks are defined). Harness state only, never saved: after a load the count starts again at 0.
+	static void onTradeDelivered( const Player *player );
 };

@@ -133,6 +133,7 @@
 #include "GameLogic/Module/RadiusDecalUpdate.h"
 #include "GameLogic/Module/AutoDepositUpdate.h"
 #include "AoC/AoCConverterUpdate.h"	// AoC @feature F3
+#include "AoC/AoCTimedDropUpdate.h"	// AoC @hook 01/11/2026 The timed drop of the Airlift Contract (D11 F11).
 #include "GameLogic/Module/MissileAIUpdate.h"
 #include "GameLogic/Module/NeutronMissileUpdate.h"
 #include "GameLogic/Module/OCLUpdate.h"
@@ -366,6 +367,7 @@ void ModuleFactory::init()
 	addModule( EMPUpdate );
 	addModule( AutoDepositUpdate );
 	addModule( AoCConverterUpdate );	// AoC @hook 01/11/2026 The converter module, Behavior = AoCConverterUpdate (D11 F3).
+	addModule( AoCTimedDropUpdate );	// AoC @hook 01/11/2026 The timed drop module, Behavior = AoCTimedDropUpdate; no stock template carries it (D11 F11).
 	addModule( MissileAIUpdate );
 	addModule( NeutronMissileUpdate );
 	addModule( FireSpreadUpdate );

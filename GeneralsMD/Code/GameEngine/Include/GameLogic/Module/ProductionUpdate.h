@@ -38,6 +38,7 @@
 class ProductionEntry;
 class ThingTemplate;
 class UpgradeTemplate;
+class AoCTradeTemplate;	// AoC @feature 01/11/2026 Import trades (D11 F11).
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////
 enum ProductionID CPP_11(: Int)
@@ -49,7 +50,8 @@ enum ProductionType CPP_11(: Int)
 {
 	PRODUCTION_INVALID = 0,
 	PRODUCTION_UNIT,
-	PRODUCTION_UPGRADE
+	PRODUCTION_UPGRADE,
+	PRODUCTION_AOC_TRADE	// AoC @hook 01/11/2026 A queued shipment, appended so saved values stay valid (D11 F11).
 };
 
 //-------------------------------------------------------------------------------------------------
@@ -73,6 +75,11 @@ public:
 
 	/// query what kind of upgrade is being produced by this entry
 	const UpgradeTemplate *getProductionUpgrade() const { return m_upgradeToResearch; }
+
+	/// AoC @hook 01/11/2026 The trade of a PRODUCTION_AOC_TRADE entry, nullptr for any other type (D11 F11).
+	const AoCTradeTemplate *getProductionAoCTrade() const { return m_type == PRODUCTION_AOC_TRADE ? m_aocTrade : nullptr; }
+	/// AoC @hook 01/11/2026 Frames this entry has been under way (the harness queue line) (D11 F11).
+	Int getAoCFramesUnderConstruction() const { return m_framesUnderConstruction; }
 
 	/// query the production type
 	ProductionType getProductionType() const { return m_type; }
@@ -98,6 +105,7 @@ protected:
 	{
 		const ThingTemplate *m_objectToProduce;					///< what we're going to produce
 		const UpgradeTemplate *m_upgradeToResearch;			///< what upgrade we're researching
+		const AoCTradeTemplate *m_aocTrade;							///< AoC @hook 01/11/2026 the shipment of a PRODUCTION_AOC_TRADE entry (D11 F11).
 	};
 	ProductionID m_productionID;											///< our very own production ID!
 	Real m_percentComplete;														///< percent our construction is complete
@@ -178,6 +186,12 @@ public:
 	/// AoC @feature 31/10/2026 Units one queue entry of this type makes here (QuantityModifier), for the population check (D11 F4).
 	virtual Int getAoCProductionQuantity( const ThingTemplate * /*unitType*/ ) const { return 1; }
 
+	/// AoC @feature 01/11/2026 Whether a trade can be queued here now: an AoCTradeRefusal, AOC_TRADE_OK (0) when it can (D11 F11).
+	virtual Int canQueueAoCTrade( const AoCTradeTemplate * /*trade*/ ) const { return 1; }	// AOC_TRADE_REFUSED_NOT_OFFERED
+	/// AoC @feature 01/11/2026 Queue a trade: refused (FALSE, nothing withdrawn) unless canQueueAoCTrade says so, else the Cost is
+	/// withdrawn and the entry appended. The id travels in the queue message, as for units; the AI passes requestUniqueUnitID() (D11 F11).
+	virtual Bool queueAoCTrade( const AoCTradeTemplate * /*trade*/, ProductionID /*productionID*/ ) { return FALSE; }
+
 };
 
 //-------------------------------------------------------------------------------------------------
@@ -239,6 +253,9 @@ public:
 
 	virtual Int getAoCProductionQuantity( const ThingTemplate *unitType ) const override;	///< AoC @feature 31/10/2026 The QuantityModifier batch size, as queueCreateUnit counts it (D11 F4).
 
+	virtual Int canQueueAoCTrade( const AoCTradeTemplate *trade ) const override;							///< AoC @feature 01/11/2026 Offered here, RequiresObject, funds, queue room (D11 F11).
+	virtual Bool queueAoCTrade( const AoCTradeTemplate *trade, ProductionID productionID ) override;	///< AoC @feature 01/11/2026 Withdraw the Cost and queue the shipment (D11 F11).
+
 	// DieModuleInterface
 	virtual void onDie( const DamageInfo *damageInfo ) override;
 
@@ -249,6 +266,8 @@ protected:
 
 	Bool cancelUpgrade( ProductionEntry *production );
 	Bool cancelUnitCreate( ProductionEntry *production );
+	Bool aocCancelTrade( ProductionEntry *production );		///< AoC @feature 01/11/2026 Refund the Cost, remove the entry (D11 F11).
+	void aocDeliverTrade( ProductionEntry *production );	///< AoC @feature 01/11/2026 Deposit the Payout, feedback, remove the entry (D11 F11).
 
 	void updateDoors();														///< update the door behavior
 
