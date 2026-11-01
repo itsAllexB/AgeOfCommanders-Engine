@@ -10,6 +10,8 @@ set(GAMEENGINE_SRC
     Include/AoC/AoCResourceBank.h
     Include/AoC/AoCRules.h
     Include/AoC/AoCSimRate.h
+    Include/AoC/AoCWander.h
+    Include/AoC/AoCWanderAIUpdate.h
     Include/Common/AcademyStats.h
 #    Include/Common/ActionManager.h
     Include/Common/AddonCompat.h
@@ -593,6 +595,8 @@ set(GAMEENGINE_SRC
     Source/AoC/AoCResourceBank.cpp
     Source/AoC/AoCRules.cpp
     Source/AoC/AoCSimRate.cpp
+    Source/AoC/AoCWander.cpp
+    Source/AoC/AoCWanderAIUpdate.cpp
     Source/Common/AddonCompat.cpp
     Source/Common/Audio/AudioEventRTS.cpp
     Source/Common/Audio/AudioRequest.cpp

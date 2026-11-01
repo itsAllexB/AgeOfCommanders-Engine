@@ -173,6 +173,7 @@
 #include "GameLogic/Module/ToppleUpdate.h"
 #include "GameLogic/Module/TransportAIUpdate.h"
 #include "GameLogic/Module/WanderAIUpdate.h"
+#include "AoC/AoCWanderAIUpdate.h"	// AoC @hook 01/11/2026 Bounded wander module for ambient civilians and oxen (D11 F9).
 #include "GameLogic/Module/WaveGuideUpdate.h"
 #include "GameLogic/Module/WorkerAIUpdate.h"
 #include "GameLogic/Module/PowerPlantUpdate.h"
@@ -424,6 +425,7 @@ void ModuleFactory::init()
 	addModule( RadarUpdate );
 	addModule( TransportAIUpdate );
 	addModule( WanderAIUpdate );
+	addModule( AoCWanderAIUpdate );	// AoC @hook 01/11/2026 Registers the name only; no stock template carries it (D11 F9).
 	addModule( WaveGuideUpdate );
 	addModule( WorkerAIUpdate );
 	addModule( PowerPlantUpdate );

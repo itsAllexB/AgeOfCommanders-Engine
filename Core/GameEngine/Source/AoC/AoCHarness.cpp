@@ -28,6 +28,7 @@
 #include "AoC/AoCResourceBank.h"
 #include "AoC/AoCRules.h"
 #include "AoC/AoCSimRate.h"
+#include "AoC/AoCWanderAIUpdate.h"
 
 #include "Common/ActionManager.h"
 #include "Common/BuildAssistant.h"
@@ -316,6 +317,13 @@ void gathererCensusCallback( Object *obj, void *userData )
 }
 #endif
 
+// F9: objects with the bounded wander module (ambient civilians, oxen), the -aiLog wanderers column
+void wandererCensusCallback( Object *obj, void *userData )
+{
+	if (obj != nullptr && !obj->isEffectivelyDead() && AoCWanderAIUpdate::isWanderer(obj))
+		++*(Int *)userData;
+}
+
 bool newerObjectFirst( const std::pair<UnsignedInt, std::string> &a, const std::pair<UnsignedInt, std::string> &b )
 {
 	return a.first > b.first;
@@ -552,6 +560,9 @@ void writeAiLog( UnsignedInt frame )
 			AoCConverterUpdate::countForPlayer(p, convertersRunning, convertersIdle);
 			row.add("converters_running", convertersRunning);
 			row.add("converters_idle", convertersIdle);
+			Int wanderers = 0;	// AoC F9
+			p->iterateObjects(wandererCensusCallback, &wanderers);
+			row.add("wanderers", wanderers);
 		}
 
 		std::string path = dir + fmt("ai_%d.csv", (int)p->getPlayerIndex());
