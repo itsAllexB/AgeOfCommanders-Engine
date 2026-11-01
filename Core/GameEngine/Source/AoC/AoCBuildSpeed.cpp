@@ -54,6 +54,39 @@ void AoCBuildSpeed::parsePerMille( INI * /*ini*/, void * /*instance*/, void *sto
 }
 
 // ------------------------------------------------------------------------------------------------
+void AoCBuildSpeed::parseRange( INI * /*ini*/, void * /*instance*/, void *store, const void * /*userData*/ )
+{
+	const char *token = INI::getNextToken();
+	const Int value = INI::scanInt(token);
+	if (value < 0)
+	{
+		DEBUG_CRASH(("AoCBackToWorkRange: '%s' must be a whole number of at least 0", token));
+		throw INI_INVALID_DATA;
+	}
+	*(Int *)store = value;
+}
+
+// ------------------------------------------------------------------------------------------------
+AoCBackToWork AoCBuildSpeed::backToWork( Int assignedType, Bool otherTaskPending, Bool nodeOfTypeInRange )
+{
+	if (assignedType < 0)
+		return AOC_BACK_TO_WORK_UNASSIGNED;
+	if (otherTaskPending)
+		return AOC_BACK_TO_WORK_TASK_PENDING;
+	if (!nodeOfTypeInRange)
+		return AOC_BACK_TO_WORK_NONE_IN_RANGE;
+	return AOC_BACK_TO_WORK_GO;
+}
+
+// ------------------------------------------------------------------------------------------------
+Bool AoCBuildSpeed::withinRange( const Coord3D &a, const Coord3D &b, Real range )
+{
+	const Real dx = b.x - a.x;
+	const Real dy = b.y - a.y;
+	return dx * dx + dy * dy <= range * range;
+}
+
+// ------------------------------------------------------------------------------------------------
 // The build log's bookkeeping
 // ------------------------------------------------------------------------------------------------
 AoCBuildLog::AoCBuildLog()
@@ -200,5 +233,12 @@ void AoCBuildSpeed::logComplete( UnsignedInt objectId, const char *templateName,
 void AoCBuildSpeed::logBackToWork( UnsignedInt builderId, const char *typeName )
 {
 	fprintf(stderr, "[AoC build] frame %u %u back-to-work %s\n", logFrame(), builderId, typeName);
+	fflush(stderr);
+}
+
+// ------------------------------------------------------------------------------------------------
+void AoCBuildSpeed::logBackToWorkNoneInRange( UnsignedInt builderId, const char *typeName, Int range )
+{
+	fprintf(stderr, "[AoC build] frame %u %u back-to-work none in range %s range=%d\n", logFrame(), builderId, typeName, range);
 	fflush(stderr);
 }

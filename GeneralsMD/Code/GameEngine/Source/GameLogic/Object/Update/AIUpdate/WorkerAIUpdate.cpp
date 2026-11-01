@@ -839,6 +839,9 @@ void WorkerAIUpdate::internalTaskComplete( DozerTask task )
 	// sanity
 	DEBUG_ASSERTCRASH( task >= 0 && task < DOZER_NUM_TASKS, ("Illegal dozer task '%d'", task) );
 
+	// AoC @hook 02/11/2026 The build site, for back to work's range test below, before the task is cleared (D11 F8).
+	const ObjectID aocBuildSite = m_task[ task ].m_targetObjectID;
+
 	// call the single method that gets called for completing and canceling tasks
 	internalTaskCompleteOrCancelled( task );
 
@@ -854,25 +857,62 @@ void WorkerAIUpdate::internalTaskComplete( DozerTask task )
 
 	// AoC @hook 02/11/2026 Back to work: after a build, a worker with an assigned resource type resumes gathering it (D11 F8).
 	if( task == DOZER_TASK_BUILD )
-		aocBackToWork();
+		aocBackToWork( aocBuildSite );
 
 }
 
 //-------------------------------------------------------------------------------------------------
-// AoC @feature F8: back to work (D5 section 5). A worker whose build task has ended goes back to its F2 assigned
-// resource type: its supply brain is forced into wanting, as SupplyCenterProductionExitUpdate does for a new truck, and
-// docks at the nearest node of that type within its scan distance (the preferred dock was cleared when the build task
-// was given, and the node search keeps to the assigned type). Only without another dozer task pending, so a queued
-// repair still runs; a worker without an assigned type (every AI worker in B1, and every worker with stock data) idles
-// as in stock.
+// AoC @feature F8 (review finding 2): any live node of the type, with units left, within range of the point. The
+// object list runs in id order on every machine; squared 2D distances (AoCBuildSpeed::withinRange).
 //-------------------------------------------------------------------------------------------------
-void WorkerAIUpdate::aocBackToWork()
+static Bool aocNodeOfTypeWithin( Int type, const Coord3D &at, Real range )
 {
-	if( m_aocCargo.assignedType < 0 || isAnyTaskPending() )
-		return;
-	setForceWantingState( TRUE );
-	if( AoCBuildSpeed::logEnabled() )
-		AoCBuildSpeed::logBackToWork( getObject()->getID(), AoCGather::typeName( m_aocCargo.assignedType ) );
+	static const NameKeyType key_warehouseUpdate = NAMEKEY( "SupplyWarehouseDockUpdate" );
+	for( Object *obj = TheGameLogic->getFirstObject(); obj; obj = obj->getNextObject() )
+	{
+		if( obj->isEffectivelyDead() || SupplyWarehouseDockUpdate::getAoCNodeTypeOf( obj ) != type )
+			continue;
+		const SupplyWarehouseDockUpdate *node = (const SupplyWarehouseDockUpdate *)obj->findUpdateModule( key_warehouseUpdate );
+		if( node && node->getBoxesStored() > 0 && AoCBuildSpeed::withinRange( at, *obj->getPosition(), range ) )
+			return TRUE;
+	}
+	return FALSE;
+}
+
+//-------------------------------------------------------------------------------------------------
+// AoC @feature F8: back to work (D5 section 5). A worker whose build task has ended goes back to its F2 assigned
+// resource type when a node of that type stands within GameData.ini AoCBackToWorkRange of the build site (the
+// structure, else the worker if it is gone): its supply brain is forced into wanting, as SupplyCenterProductionExitUpdate
+// does for a new truck, and docks at the nearest node of that type (the preferred dock was cleared when the build task
+// was given, and the node search keeps to the assigned type). Only without another dozer task pending, so a queued
+// repair still runs. Out of range, or without an assigned type (every AI worker in B1, every worker with stock data),
+// the worker idles as in stock. The decision is AoCBuildSpeed::backToWork.
+//-------------------------------------------------------------------------------------------------
+void WorkerAIUpdate::aocBackToWork( ObjectID buildSite )
+{
+	const Int type = m_aocCargo.assignedType;
+	const Bool pending = isAnyTaskPending();
+	const Int range = TheGlobalData->m_aocBackToWorkRange;
+	Bool inRange = FALSE;
+	if( type >= 0 && !pending )
+	{
+		const Object *site = TheGameLogic->findObjectByID( buildSite );
+		inRange = aocNodeOfTypeWithin( type, site ? *site->getPosition() : *getObject()->getPosition(), (Real)range );
+	}
+	switch( AoCBuildSpeed::backToWork( type, pending, inRange ) )
+	{
+		case AOC_BACK_TO_WORK_GO:
+			setForceWantingState( TRUE );
+			if( AoCBuildSpeed::logEnabled() )
+				AoCBuildSpeed::logBackToWork( getObject()->getID(), AoCGather::typeName( type ) );
+			break;
+		case AOC_BACK_TO_WORK_NONE_IN_RANGE:
+			if( AoCBuildSpeed::logEnabled() )
+				AoCBuildSpeed::logBackToWorkNoneInRange( getObject()->getID(), AoCGather::typeName( type ), range );
+			break;
+		default:
+			break;
+	}
 }
 
 //-------------------------------------------------------------------------------------------------

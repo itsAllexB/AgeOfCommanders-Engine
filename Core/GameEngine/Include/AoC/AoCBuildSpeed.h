@@ -35,9 +35,12 @@
 // only when its builder stops (dies, is ordered away).
 //
 // Back to work: WorkerAIUpdate::internalTaskComplete(DOZER_TASK_BUILD) forces the worker's supply brain into wanting
-// (setForceWantingState, as a new truck from a supply centre gets) when the worker has an F2 assigned resource type
-// and no other dozer task is pending; the supply brain then docks at the nearest node of that type within its scan
-// distance. A worker without an assigned type, and the dozer, which has no supply brain, idle as in stock.
+// (setForceWantingState, as a new truck from a supply centre gets) when the worker has an F2 assigned resource type,
+// no other dozer task is pending and a node of that type stands within GameData.ini AoCBackToWorkRange (Int, world
+// units, default 150, D5 section 5) of the build site (backToWork below); the supply brain then docks at the nearest
+// node of that type. Otherwise the worker idles as in stock, and so does the dozer, which has no supply brain. Under
+// the AoC rules a later order wins over the latch: WorkerAIUpdate::newTask and every player command but a dock clear it
+// (review F8, finding 1).
 //
 // No new saved or CRC state: the speed is template data. With no template carrying the key every builder reports 1000,
 // scale() returns the stock increment untouched and the stock game is bit-identical.
@@ -51,8 +54,18 @@ class INI;
 enum
 {
 	AOC_BUILD_SPEED_DEFAULT_PER_MILLE = 1000,	///< the stock construction rate
+	AOC_BACK_TO_WORK_DEFAULT_RANGE = 150,			///< GameData.ini AoCBackToWorkRange default, world units (D5 section 5)
 	AOC_BUILD_LOG_OBJECTS = 128,							///< structures the harness build log follows at once
 	AOC_BUILD_LOG_BUILDERS = 8,								///< builders remembered per structure for the log
+};
+
+/// What a worker does when its build task ends (AoCBuildSpeed::backToWork).
+enum AoCBackToWork
+{
+	AOC_BACK_TO_WORK_GO,							///< force the supply brain into wanting: it docks at the nearest node of the type
+	AOC_BACK_TO_WORK_UNASSIGNED,			///< no assigned type (every AI worker in B1, every worker with stock data): idle
+	AOC_BACK_TO_WORK_TASK_PENDING,		///< another dozer task (a queued repair) runs first
+	AOC_BACK_TO_WORK_NONE_IN_RANGE,		///< no node of the type within AoCBackToWorkRange of the build site: idle
 };
 
 namespace AoCBuildSpeed
@@ -66,6 +79,19 @@ namespace AoCBuildSpeed
 	/// names the file and line).
 	void parsePerMille( INI *ini, void *instance, void *store, const void *userData );
 
+	/// FieldParse procedure of GameData.ini AoCBackToWorkRange: a whole number of at least 0, else INI_INVALID_DATA.
+	void parseRange( INI *ini, void *instance, void *store, const void *userData );
+
+	/// Back to work (D5 section 5), decided when a worker's build task ends through internalTaskComplete: the
+	/// structure is complete, or the worker found another builder at work on it (the stock "can't double up" end). A
+	/// cancelled task (the scaffold sold or destroyed, the worker ordered away) ends through internalCancelTask, which
+	/// never asks. assignedType is the F2 assigned type (-1 none); otherTaskPending: a dozer task is still queued (a
+	/// repair); nodeOfTypeInRange: a node of the assigned type within AoCBackToWorkRange of the build site.
+	AoCBackToWork backToWork( Int assignedType, Bool otherTaskPending, Bool nodeOfTypeInRange );
+
+	/// TRUE when b is within range of a in 2D, squares compared (no square root in logic, D11 1.2).
+	Bool withinRange( const Coord3D &a, const Coord3D &b, Real range );
+
 	// --- harness evidence (any harness flag given and resource types defined); nothing with stock data; logic never reads it ---
 	//   "[AoC build] frame N <builderId> start <template> <objectId> speed=<perMille>"
 	//        a builder starts constructing: its first construction frame on that structure, or its first after a gap
@@ -77,10 +103,13 @@ namespace AoCBuildSpeed
 	//        base is calcTimeToBuild on the last frame, the frames one builder at 1000 needs.
 	//   "[AoC build] frame N <builderId> back-to-work <type>"
 	//        a worker's build task ended and its supply brain was sent back to its assigned type.
+	//   "[AoC build] frame N <builderId> back-to-work none in range <type> range=<AoCBackToWorkRange>"
+	//        a worker with an assigned type ended a build with no node of that type within the range: it idles.
 	Bool logEnabled();
 	void logBuildFrame( UnsignedInt builderId, UnsignedInt objectId, const char *templateName, Int perMille, Real percentBefore );
 	void logComplete( UnsignedInt objectId, const char *templateName, Int framesToBuild );
 	void logBackToWork( UnsignedInt builderId, const char *typeName );
+	void logBackToWorkNoneInRange( UnsignedInt builderId, const char *typeName, Int range );
 }
 
 /// The build log's bookkeeping, apart from printing so the unit tests can drive it: which structures are under
