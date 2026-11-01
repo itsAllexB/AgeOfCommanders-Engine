@@ -132,11 +132,24 @@
 //                                                        point on the ground and the placement angle; a refused spot is
 //                                                        reported and keeps placement mode; line builds are refused; it
 //                                                        skips the click's special-power branch (GLA sneak attack)
-//                                   After select, selectall, press, back, dock and place the next line waits 3 engine
-//                                   iterations so the control bar re-evaluates. Use absolute paths. select, selectall,
-//                                   dock and place send the stock message a click sends, so they move the CRC and the
-//                                   replay records them; press, back, log, bank, count and screenshot send nothing. Each of
-//                                   select, selectall, dock and place must be the first line of its frame and come after the
+//                                     click <x> <y> [left|right]
+//                                                        F2b: a physical click on world point x, y: its screen pixel
+//                                                        at the current camera (worldToScreen), then the raw messages
+//                                                        a Win32 click posts (MSG_RAW_MOUSE_POSITION, _BUTTON_DOWN and
+//                                                        _UP with that pixel), so the whole translator chain runs (the
+//                                                        pick, the context command); left by default, right is the
+//                                                        alternate mouse's command button; refused off screen
+//                                     cursor <x> <y>     F2b: stderr "[AoC ui] cursor <name> at <x>,<y> over <template
+//                                                        or terrain>": the engine's mouse position (not the system
+//                                                        cursor) set to the point's pixel, the cursor the stock
+//                                                        mouse-over sets there read two iterations later (MouseCursor.ini
+//                                                        names: Dock, Move, Select...), the position put back
+//                                   After select, selectall, press, back, dock, place, click and cursor the next line waits
+//                                   3 engine iterations so the control bar re-evaluates. Use absolute paths. select,
+//                                   selectall, dock, place and click send the stock message a click sends, so they move the
+//                                   CRC and the replay records them; press, back, log, bank, count, cursor and screenshot
+//                                   send nothing. Each of select, selectall, dock, place and click must be the first line of
+//                                   its frame and come after the
 //                                   lines before it have settled: a late one (warned on stderr) lands on a frame
 //                                   that depends on the render rate, and the CRC log is no longer reproducible.
 //                                   Refused under -headless (no windows). Over 64 lines or a line over 511

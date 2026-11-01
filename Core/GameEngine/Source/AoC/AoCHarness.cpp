@@ -25,6 +25,7 @@
 #include "AoC/AoCCrcDump.h"
 #include "AoC/AoCHarness.h"
 #include "AoC/AoCLobbyRules.h"
+#include "AoC/AoCNodePick.h"
 #include "AoC/AoCPopulation.h"
 #include "AoC/AoCResourceBank.h"
 #include "AoC/AoCRules.h"
@@ -50,16 +51,22 @@
 #include "Common/Recorder.h"
 #include "Common/ScoreKeeper.h"
 #include "Common/ThingTemplate.h"
+#include "GameClient/CommandXlat.h"
 #include "GameClient/ControlBar.h"
 #include "GameClient/Display.h"
 #include "GameClient/Drawable.h"
 #include "GameClient/Gadget.h"
 #include "GameClient/GadgetPushButton.h"
+#include "GameClient/GameClient.h"
 #include "GameClient/GameWindow.h"
 #include "GameClient/GameWindowManager.h"
 #include "GameClient/InGameUI.h"
 #include "GameClient/KeyDefs.h"
+#include "GameClient/Keyboard.h"
 #include "GameClient/MapUtil.h"
+#include "GameClient/Mouse.h"
+#include "GameClient/SelectionInfo.h"
+#include "GameClient/View.h"
 #include "GameLogic/GameLogic.h"
 #include "GameLogic/Object.h"
 #include "GameLogic/TerrainLogic.h"
@@ -162,6 +169,13 @@ struct HarnessState
 	char uiShotTarget[1024];		///< pending screenshot: where the engine's PNG goes
 	char uiShotBefore[64];			///< the newest engine screenshot name before the request
 	Int uiShotWait;							///< iterations left to find it, 0 when none is pending
+	// F2b cursor: the engine's mouse stands on a world point's pixel until the cursor the UI set there is read
+	Int uiCursorWait;						///< iterations left before the read, 0 when none is pending
+	Int uiCursorRetries;				///< reads put off because a real mouse event moved the engine mouse
+	float uiCursorX;						///< the world point, for the line
+	float uiCursorY;
+	ICoord2D uiCursorPixel;			///< its pixel
+	ICoord2D uiCursorRestore;		///< the engine's mouse position before, put back after the read
 };
 
 long long nowNs()
@@ -900,6 +914,205 @@ Int uiPlace( const HarnessState::UiLine &l )
 	return AOC_UI_SETTLE_ITERATIONS;
 }
 
+// --- F2b additions: click, cursor ---------------------------------------------------------------
+
+/// The world point "x y" of a line on the ground (z from the terrain) and its screen pixel at the current camera
+/// (TheTacticalView->worldToScreen). FALSE when the point is off screen.
+Bool uiWorldToPixel( float x, float y, Coord3D &world, ICoord2D &pixel )
+{
+	world.x = x;
+	world.y = y;
+	world.z = TheTerrainLogic ? TheTerrainLogic->getGroundHeight(x, y) : 0.0f;
+	return TheTacticalView != nullptr && TheTacticalView->worldToScreen(&world, &pixel);
+}
+
+/// The drawable a pick at the pixel finds, as the stock code picks: the mouse-over's types (SelectionTranslator,
+/// getPickTypesForContext(true)) or a click's (CommandTranslator, the live force-attack mode), then the F2b node pick,
+/// then the stock filter of dead objects. nullptr for the ground. Reads only.
+Drawable *uiPickAt( const ICoord2D &pixel, Bool mouseOver )
+{
+	const Bool forceAttack = TheInGameUI->isInForceAttackMode();
+	const UnsignedInt types = getPickTypesForContext(mouseOver ? TRUE : forceAttack);
+	Drawable *draw = TheTacticalView->pickDrawable(&pixel, forceAttack, (PickType)types);
+	draw = AoCNodePick::nodeOrStockPick(&pixel, forceAttack, types, draw);
+	const Object *obj = draw ? draw->getObject() : nullptr;
+	if (obj == nullptr || (obj->isEffectivelyDead() && !obj->isKindOf(KINDOF_ALWAYS_SELECTABLE)))
+		return nullptr;
+	return draw;
+}
+
+/// The cursor's name as MouseCursor.ini names it (Mouse::getCursorIndex's table), "?" for one this build lacks.
+const char *uiCursorName( Mouse::MouseCursor c )
+{
+	switch (c)
+	{
+		case Mouse::NONE: return "None";
+		case Mouse::NORMAL: return "Normal";
+		case Mouse::ARROW: return "Arrow";
+		case Mouse::SCROLL: return "Scroll";
+		case Mouse::CROSS: return "Target";
+		case Mouse::MOVETO: return "Move";
+		case Mouse::ATTACKMOVETO: return "AttackMove";
+		case Mouse::ATTACK_OBJECT: return "AttackObj";
+		case Mouse::FORCE_ATTACK_OBJECT: return "ForceAttackObj";
+		case Mouse::FORCE_ATTACK_GROUND: return "ForceAttackGround";
+		case Mouse::BUILD_PLACEMENT: return "Build";
+		case Mouse::INVALID_BUILD_PLACEMENT: return "InvalidBuild";
+		case Mouse::GENERIC_INVALID: return "GenericInvalid";
+		case Mouse::SELECTING: return "Select";
+		case Mouse::ENTER_FRIENDLY: return "EnterFriendly";
+		case Mouse::ENTER_AGGRESSIVELY: return "EnterAggressive";
+		case Mouse::SET_RALLY_POINT: return "SetRallyPoint";
+		case Mouse::GET_REPAIRED: return "GetRepaired";
+		case Mouse::GET_HEALED: return "GetHealed";
+		case Mouse::DO_REPAIR: return "DoRepair";
+		case Mouse::RESUME_CONSTRUCTION: return "ResumeConstruction";
+		case Mouse::CAPTUREBUILDING: return "CaptureBuilding";
+		case Mouse::SNIPE_VEHICLE: return "SnipeVehicle";
+		case Mouse::LASER_GUIDED_MISSILES: return "LaserGuidedMissiles";
+		case Mouse::TANKHUNTER_TNT_ATTACK: return "TankHunterTNTAttack";
+		case Mouse::STAB_ATTACK: return "StabAttack";
+		case Mouse::PLACE_REMOTE_CHARGE: return "PlaceRemoteCharge";
+		case Mouse::PLACE_TIMED_CHARGE: return "PlaceTimedCharge";
+		case Mouse::DEFECTOR: return "Defector";
+		case Mouse::DOCK: return "Dock";
+		case Mouse::FIRE_FLAME: return "FireFlame";
+		case Mouse::FIRE_BOMB: return "FireBomb";
+		case Mouse::PLACE_BEACON: return "PlaceBeacon";
+		case Mouse::DISGUISE_AS_VEHICLE: return "DisguiseAsVehicle";
+		case Mouse::WAYPOINT: return "Waypoint";
+		case Mouse::OUTRANGE: return "OutRange";
+		case Mouse::STAB_ATTACK_INVALID: return "StabAttackInvalid";
+		case Mouse::PLACE_CHARGE_INVALID: return "PlaceChargeInvalid";
+		case Mouse::HACK: return "Hack";
+		case Mouse::PARTICLE_UPLINK_CANNON: return "ParticleUplinkCannon";
+		default: return "?";
+	}
+}
+
+/// click <x> <y> [left|right] (F2b): a physical click on world point (x, y). The point's screen pixel at the current
+/// camera, then the raw messages a Win32 click puts on the stream (Mouse::createStreamMessages): MSG_RAW_MOUSE_POSITION,
+/// then MSG_RAW_MOUSE_LEFT_BUTTON_DOWN and _UP (or RIGHT) with the pixel, the keyboard's modifier flags and the time, so
+/// the whole translator chain runs: the window manager, the meta translator's click, the selection translator, the
+/// command translator's pick (with the F2b node pick) and context command. The orders it produces (MSG_DOCK,
+/// MSG_DO_MOVETO, a selection) are logic messages the replay records like a click's. Left is the stock command button,
+/// right the alternate mouse's (a right click in the stock mode deselects). The engine's mouse position is not moved.
+/// The trace names the pixel, what the command translator's pick finds there and the context command that evaluates
+/// to (EVALUATE_ONLY, before the click runs; a click on a selectable unit selects it instead, as in stock).
+Int uiClick( const HarnessState::UiLine &l )
+{
+	float x = 0.0f;
+	float y = 0.0f;
+	char button[16] = "left";
+	const int fields = sscanf(l.arg, "%f %f %15s", &x, &y, button);
+	const Bool right = strcmp(button, "right") == 0;
+	if (fields < 2 || (!right && strcmp(button, "left") != 0))
+	{
+		logLine("uiScript: click '%s': expected x y [left|right]", l.arg);
+		return 0;
+	}
+	Coord3D world;
+	ICoord2D pixel;
+	if (!uiWorldToPixel(x, y, world, pixel))
+	{
+		logLine("uiScript: click %s: the point is off screen, nothing clicked", l.arg);
+		return 0;
+	}
+	Drawable *draw = uiPickAt(pixel, FALSE);
+	Coord3D ground;
+	GameMessage::Type evaluated = GameMessage::MSG_INVALID;
+	if (!TheInGameUI->isInForceAttackMode() && TheTacticalView->screenToTerrain(&pixel, &ground))
+		evaluated = TheGameClient->evaluateContextCommand(draw, &ground, CommandTranslator::EVALUATE_ONLY);
+	const Int modifiers = TheKeyboard ? TheKeyboard->getModifierFlags() : 0;
+	const Int now = (Int)timeGetTime();
+	GameMessage *msg = TheMessageStream->appendMessage(GameMessage::MSG_RAW_MOUSE_POSITION);
+	msg->appendPixelArgument(pixel);
+	msg->appendIntegerArgument(modifiers);
+	msg = TheMessageStream->appendMessage(right ? GameMessage::MSG_RAW_MOUSE_RIGHT_BUTTON_DOWN : GameMessage::MSG_RAW_MOUSE_LEFT_BUTTON_DOWN);
+	msg->appendPixelArgument(pixel);
+	msg->appendIntegerArgument(modifiers);
+	msg->appendIntegerArgument(now);
+	msg = TheMessageStream->appendMessage(right ? GameMessage::MSG_RAW_MOUSE_RIGHT_BUTTON_UP : GameMessage::MSG_RAW_MOUSE_LEFT_BUTTON_UP);
+	msg->appendPixelArgument(pixel);
+	msg->appendIntegerArgument(modifiers);
+	msg->appendIntegerArgument(now);
+	const Object *obj = draw ? draw->getObject() : nullptr;
+	logLine("uiScript: click %s: %s at screen (%d, %d) over %s %u, evaluates to %s", l.arg, right ? "right" : "left", pixel.x, pixel.y,
+		obj ? obj->getTemplate()->getName().str() : "terrain", obj ? (UnsignedInt)obj->getID() : 0u,
+		GameMessage::getCommandTypeAsString(evaluated));
+	return AOC_UI_SETTLE_ITERATIONS;
+}
+
+/// cursor <x> <y> (F2b): the cursor the UI shows over world point (x, y) for the current selection, through the stock
+/// mouse-over. The engine's mouse position (not the system cursor) is set to the point's pixel (Mouse::setPosition),
+/// so the next frames' mouse position messages run the pick (with the F2b node pick), the mouse-over hint, the context
+/// evaluation (DO_HINT) and InGameUI::createCommandHint there; two engine iterations later runUiScript logs the cursor
+/// the UI set (uiCursorStep) and puts the engine's mouse position back. Sends nothing to the logic. A real mouse event
+/// over the window in between would move it. The point must be on screen.
+Int uiCursor( const HarnessState::UiLine &l )
+{
+	HarnessState &s = state();
+	float x = 0.0f;
+	float y = 0.0f;
+	if (sscanf(l.arg, "%f %f", &x, &y) != 2)
+	{
+		logLine("uiScript: cursor '%s': expected two world coordinates, x y", l.arg);
+		return 0;
+	}
+	Coord3D world;
+	ICoord2D pixel;
+	if (TheMouse == nullptr || !uiWorldToPixel(x, y, world, pixel))
+	{
+		logLine("uiScript: cursor %s: the point is off screen, no cursor read", l.arg);
+		return 0;
+	}
+	s.uiCursorRestore = TheMouse->getMouseStatus()->pos;
+	s.uiCursorPixel = pixel;
+	s.uiCursorX = x;
+	s.uiCursorY = y;
+	s.uiCursorWait = 2;
+	s.uiCursorRetries = 0;
+	TheMouse->setPosition(pixel.x, pixel.y);
+	logLine("uiScript: cursor %s: screen (%d, %d), engine mouse moved there from (%d, %d)", l.arg, pixel.x, pixel.y, s.uiCursorRestore.x,
+		s.uiCursorRestore.y);
+	return AOC_UI_SETTLE_ITERATIONS;
+}
+
+/// The pending cursor read, called by runUiScript once per engine iteration while a cursor line waits. Until the read,
+/// the engine's mouse is put back on the point's pixel every iteration (a real mouse event over the window between two
+/// iterations would otherwise carry the next mouse-over elsewhere). At the read, the mouse must still stand there: a
+/// real event during the last iteration moved it, so the read waits two more iterations (at most AOC_UI_CURSOR_RETRIES
+/// times, then the line says the read is void). The line: "[AoC ui] cursor <name> at <x>,<y> over <template or
+/// terrain>", the cursor the UI set while the engine's mouse stood on the point and what the mouse-over pick finds
+/// there; then the mouse position goes back.
+const Int AOC_UI_CURSOR_RETRIES = 5;
+void uiCursorStep()
+{
+	HarnessState &s = state();
+	const ICoord2D pos = TheMouse->getMouseStatus()->pos;
+	const Bool stillThere = pos.x == s.uiCursorPixel.x && pos.y == s.uiCursorPixel.y;
+	if (--s.uiCursorWait > 0)
+	{
+		TheMouse->setPosition(s.uiCursorPixel.x, s.uiCursorPixel.y);
+		return;
+	}
+	if (!stillThere && s.uiCursorRetries < AOC_UI_CURSOR_RETRIES)
+	{
+		++s.uiCursorRetries;
+		s.uiCursorWait = 2;
+		TheMouse->setPosition(s.uiCursorPixel.x, s.uiCursorPixel.y);
+		logLine("uiScript: cursor: a real mouse event moved the engine mouse to (%d, %d); read again (%d of %d)", pos.x, pos.y,
+			s.uiCursorRetries, AOC_UI_CURSOR_RETRIES);
+		return;
+	}
+	const Drawable *draw = uiPickAt(s.uiCursorPixel, TRUE);
+	const Object *obj = draw ? draw->getObject() : nullptr;
+	fprintf(stderr, "[AoC ui] cursor %s at %.0f,%.0f over %s%s\n", uiCursorName(TheMouse->getMouseCursor()), s.uiCursorX, s.uiCursorY,
+		obj ? obj->getTemplate()->getName().str() : "terrain", stillThere ? "" : " (void: real mouse events kept moving the engine mouse)");
+	fflush(stderr);
+	TheMouse->setPosition(s.uiCursorRestore.x, s.uiCursorRestore.y);
+}
+
 /// bank: one stderr line with the local player's bank and the first selected object's cargo. Reads only.
 void uiBank( UnsignedInt frame )
 {
@@ -980,6 +1193,10 @@ Int uiRunLine( const HarnessState::UiLine &l )
 		return uiSelectAll(l);
 	if (strcmp(l.cmd, "dock") == 0)
 		return uiDock(l);
+	if (strcmp(l.cmd, "click") == 0)
+		return uiClick(l);
+	if (strcmp(l.cmd, "cursor") == 0)
+		return uiCursor(l);
 	if (strcmp(l.cmd, "place") == 0)
 		return uiPlace(l);
 	if (strcmp(l.cmd, "select") == 0)
@@ -1052,6 +1269,9 @@ void runUiScript()
 		else if (--s.uiShotWait == 0)
 			logLine("uiScript: no new engine screenshot in %s for '%s'", uiScreenshotDir().string().c_str(), s.uiShotTarget);
 	}
+	// F2b: the cursor read, once the stock mouse-over has run on the point's pixel
+	if (s.uiCursorWait > 0)
+		uiCursorStep();
 	if (s.uiWait > 0)
 	{
 		--s.uiWait;
@@ -1061,9 +1281,10 @@ void runUiScript()
 	{
 		const HarnessState::UiLine &l = s.uiLines[s.uiNext++];
 		logLine("uiScript line %d at logic frame %u: %s %s", s.uiNext, s.lastLogicFrame, l.cmd, l.arg);
-		// select, selectall and dock (F2) and place (F8) send a logic message, so each must be the first line of its frame
+		// select, selectall and dock (F2), place (F8) and click (F2b) send a logic message, so each must be the first line of
+		// its frame
 		const Bool sendsLogicMessage = strcmp(l.cmd, "select") == 0 || strcmp(l.cmd, "selectall") == 0 || strcmp(l.cmd, "dock") == 0 ||
-			strcmp(l.cmd, "place") == 0;
+			strcmp(l.cmd, "place") == 0 || strcmp(l.cmd, "click") == 0;
 		if (sendsLogicMessage && s.lastLogicFrame > l.frame)
 			logLine("uiScript: warning: line %d (%s, frame %u) runs late, at logic frame %u: its message lands on a "
 				"frame that depends on the render rate, so the CRC log is not reproducible; make it the first line of its frame", s.uiNext, l.cmd, l.frame, s.lastLogicFrame);
@@ -1255,7 +1476,8 @@ Int AoCHarness::parseAocUiScript( char *args[], int num )
 		logLine("-aocUiScript: cannot open '%s'; flag ignored", args[1]);
 		return 2;
 	}
-	static const char *const known[] = { "select", "press", "back", "log", "screenshot", "dock", "selectall", "bank", "count", "place" };	// F2: dock, selectall, bank, count; F8: place
+	static const char *const known[] = { "select", "press", "back", "log", "screenshot", "dock", "selectall", "bank", "count", "place",
+		"click", "cursor" };	// F2: dock, selectall, bank, count; F8: place; F2b: click, cursor
 	char text[512];
 	Int lineNumber = 0;
 	Int dropped = 0;
@@ -1286,7 +1508,7 @@ Int AoCHarness::parseAocUiScript( char *args[], int num )
 		if (ok)
 			s.uiLineCount++;
 		else
-			logLine("-aocUiScript: unknown command '%s' skipped (select, selectall, press, back, dock, place, log, bank, count, screenshot)", l.cmd);
+			logLine("-aocUiScript: unknown command '%s' skipped (select, selectall, press, back, dock, place, click, cursor, log, bank, count, screenshot)", l.cmd);
 	}
 	fclose(f);
 	if (dropped > 0)
