@@ -735,7 +735,9 @@ void InitLanGameGadgets()
   // the money choices (D11 F7).
   AoCLobbyUI::findGadgets( parentLanGameOptions, "LanGameOptionsMenu", s_aocLobby );
   if ( !AoCLobbyUI::replacesStartingCash() )
-	PopulateStartingCashComboBox(comboBoxStartingCash, TheLAN->GetMyGame());
+  {
+    PopulateStartingCashComboBox(comboBoxStartingCash, TheLAN->GetMyGame());
+  }
   AoCLobbyUI::populate( s_aocLobby, TheLAN->GetMyGame() );
 
 	windowMap = TheWindowManager->winGetWindowFromId( parentLanGameOptions,windowMapID  );

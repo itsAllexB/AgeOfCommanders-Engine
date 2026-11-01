@@ -215,7 +215,11 @@ void LANAPI::OnGameStart()
     {
     	pref["Map"] = AsciiStringToQuotedPrintable(m_currentGame->getMap());
       pref.setSuperweaponRestricted( m_currentGame->getSuperweaponRestriction() > 0 );
-      pref.setStartingCash( m_currentGame->getStartingCash() );
+      // AoC @hook 01/11/2026 Not with a starting stock list: the cash is the stock choice's, remembered by name (review of PR #6, finding 1).
+      if ( !AoCLobbyRules::hasStartingStockList() )
+      {
+        pref.setStartingCash( m_currentGame->getStartingCash() );
+      }
       AoCLobbyRules::writePreferences( pref, m_currentGame->getAoCLobbySettings() );	// AoC @hook 01/11/2026 The host remembers the lobby choices (D11 F7).
     }
 		pref.write();

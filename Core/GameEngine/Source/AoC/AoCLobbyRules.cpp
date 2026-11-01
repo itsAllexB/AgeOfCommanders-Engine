@@ -41,17 +41,27 @@ const char AOC_PREF_VICTORY[] = "AoCVictory";
 const char *const s_victoryNames[AOC_VICTORY_COUNT] = { "Conquest", "Wonder", "Score" };
 const char *const s_victoryLabels[AOC_VICTORY_COUNT] = { "GUI:AoCVictoryConquest", "GUI:AoCVictoryWonder", "GUI:AoCVictoryScore" };
 
-// A whole decimal integer, optionally signed; FALSE for anything else (empty, trailing characters, overflow).
-Bool parseIndex( const char *text, Int &out )
+const char AOC_OPTIONS_KEY[] = "AO";
+const Int AOC_OPTIONS_VALUE_LENGTH = 5;	// <stock><richness><cap><ambient><victory>
+
+// One hex digit (either case) to 0..15, or -1.
+Int hexDigit( char c )
 {
-	if (text == nullptr || *text == '\0')
-		return FALSE;
-	char *end = nullptr;
-	const long v = strtol(text, &end, 10);
-	if (end == text || *end != '\0' || v < -1000000L || v > 1000000L)
-		return FALSE;
-	out = (Int)v;
-	return TRUE;
+	if (c >= '0' && c <= '9')
+		return c - '0';
+	if (c >= 'A' && c <= 'F')
+		return c - 'A' + 10;
+	if (c >= 'a' && c <= 'f')
+		return c - 'a' + 10;
+	return -1;
+}
+
+// 0..15 as one upper-case hex digit; an index outside that range cannot come from a list (AOC_LOBBY_MAX_CHOICES) and
+// is written as its default's digit by the caller, so it never reaches here.
+char hexChar( Int value )
+{
+	static const char digits[] = "0123456789ABCDEF";
+	return digits[value & 0xF];
 }
 
 Int clampIndex( Int index, Int count, Int defaultIndex )
@@ -61,13 +71,6 @@ Int clampIndex( Int index, Int count, Int defaultIndex )
 	if (index < 0 || index >= count)
 		return defaultIndex;
 	return index;
-}
-
-void appendInt( AsciiString &out, const char *key, Int value )
-{
-	AsciiString part;
-	part.format("%s=%d;", key, value);
-	out.concat(part);
 }
 
 // The block's fields, read into scratch storage so the whole block is consumed even without a singleton.
@@ -320,55 +323,65 @@ Int AoCLobbyRules::addPopulationCapChoice( const AsciiString &name, Int cap, Boo
 	if (s.victory < 0 || s.victory >= AOC_VICTORY_COUNT)
 		s.victory = d.victory;
 	s.ambientCivilians = s.ambientCivilians ? TRUE : FALSE;
+	if (!anyListDefined())
+	{
+		// Review of PR #6, finding 1: with no list at all the game is a stock game, so ambient civilians and victory
+		// keep their defaults too, whatever a hand-made string or a preference file says.
+		s.ambientCivilians = d.ambientCivilians;
+		s.victory = d.victory;
+	}
 	return s;
 }
 
 // ------------------------------------------------------------------------------------------------
+/** The combined key (review of PR #6, finding 2): "AO=" and five characters, the three list indices as one hex digit
+	* each, Y or N, the victory digit; written only when some field differs from its default. */
+// ------------------------------------------------------------------------------------------------
 /*static*/ void AoCLobbyRules::appendOptionsString( const AoCLobbySettings &s, AsciiString &out )
 {
 	const AoCLobbySettings d = defaults();
-	if (s.startingStock != d.startingStock)
-		appendInt(out, "AS", s.startingStock);
-	if (s.richness != d.richness)
-		appendInt(out, "AR", s.richness);
-	if (s.populationCap != d.populationCap)
-		appendInt(out, "AP", s.populationCap);
-	if (s.ambientCivilians != d.ambientCivilians)
-		out.concat(s.ambientCivilians ? "AA=Y;" : "AA=N;");
-	if (s.victory != d.victory)
-		appendInt(out, "AV", s.victory);
+	if (s == d)
+		return;
+	const Int indices[3] = { s.startingStock, s.richness, s.populationCap };
+	const Int fallback[3] = { d.startingStock, d.richness, d.populationCap };
+	char value[AOC_OPTIONS_VALUE_LENGTH + 1];
+	for (Int i = 0; i < 3; ++i)
+		value[i] = hexChar((indices[i] >= 0 && indices[i] < AOC_LOBBY_MAX_CHOICES) ? indices[i] : fallback[i]);
+	value[3] = s.ambientCivilians ? 'Y' : 'N';
+	value[4] = hexChar((s.victory >= 0 && s.victory < AOC_VICTORY_COUNT) ? s.victory : d.victory);
+	value[5] = '\0';
+	AsciiString part;
+	part.format("%s=%s;", AOC_OPTIONS_KEY, value);
+	out.concat(part);
 }
 
 // ------------------------------------------------------------------------------------------------
 /*static*/ Bool AoCLobbyRules::parseOptionsKey( const AsciiString &key, const AsciiString &val, AoCLobbySettings &s, Bool &valueOk )
 {
-	Int *target = nullptr;
-	if (key.compare("AS") == 0)
-		target = &s.startingStock;
-	else if (key.compare("AR") == 0)
-		target = &s.richness;
-	else if (key.compare("AP") == 0)
-		target = &s.populationCap;
-	else if (key.compare("AV") == 0)
-		target = &s.victory;
-	else if (key.compare("AA") == 0)
-	{
-		if (val.compareNoCase("Y") == 0)
-			s.ambientCivilians = TRUE;
-		else if (val.compareNoCase("N") == 0)
-			s.ambientCivilians = FALSE;
-		else
-			valueOk = FALSE;
-		return TRUE;
-	}
-	else
+	if (key.compare(AOC_OPTIONS_KEY) != 0)
 		return FALSE;
 
-	Int value = 0;
-	if (parseIndex(val.str(), value))
-		*target = value;
-	else
+	const char *v = val.str();
+	if (val.getLength() != AOC_OPTIONS_VALUE_LENGTH)
+	{
 		valueOk = FALSE;
+		return TRUE;
+	}
+	const Int stock = hexDigit(v[0]);
+	const Int richness = hexDigit(v[1]);
+	const Int cap = hexDigit(v[2]);
+	const Int victory = hexDigit(v[4]);
+	const char ambient = v[3];
+	if (stock < 0 || richness < 0 || cap < 0 || victory < 0 || (ambient != 'Y' && ambient != 'N' && ambient != 'y' && ambient != 'n'))
+	{
+		valueOk = FALSE;
+		return TRUE;
+	}
+	s.startingStock = stock;
+	s.richness = richness;
+	s.populationCap = cap;
+	s.ambientCivilians = (ambient == 'Y' || ambient == 'y') ? TRUE : FALSE;
+	s.victory = victory;
 	return TRUE;
 }
 
@@ -498,14 +511,24 @@ Int AoCLobbyRules::addPopulationCapChoice( const AsciiString &name, Int cap, Boo
 				if (TheAoCLobbyRules->getPopulationCap(i)->name.compareNoCase(it->second) == 0)
 					s.populationCap = i;
 	}
+	// Review of PR #6, finding 1: the preference files are shared between mod and stock sessions, so ambient civilians
+	// and victory are read only while some list is defined, as writePreferences writes them.
+	if (!anyListDefined())
+		return;
 	UserPreferences::const_iterator it = prefs.find(AOC_PREF_AMBIENT);
 	if (it != prefs.end())
+	{
 		s.ambientCivilians = (it->second.compareNoCase("no") != 0);
+	}
 	it = prefs.find(AOC_PREF_VICTORY);
 	if (it != prefs.end())
+	{
 		for (Int v = 0; v < AOC_VICTORY_COUNT; ++v)
+		{
 			if (it->second.compareNoCase(s_victoryNames[v]) == 0)
 				s.victory = v;
+		}
+	}
 }
 
 // ------------------------------------------------------------------------------------------------

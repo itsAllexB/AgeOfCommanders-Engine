@@ -386,7 +386,12 @@ Bool SkirmishPreferences::write()
 
 	(*this)["UserName"] = UnicodeStringToQuotedPrintable(TheSkirmishGameInfo->getConstSlot(0)->getName());
 
-  setStartingCash( TheSkirmishGameInfo->getStartingCash() );
+  // AoC @hook 01/11/2026 With a starting stock list the cash is the stock choice's, remembered by name below; writing it as
+  // StartingCash would hand a stock-data session a cash amount its money list does not have (review of PR #6, finding 1).
+  if ( !AoCLobbyUI::replacesStartingCash() )
+  {
+    setStartingCash( TheSkirmishGameInfo->getStartingCash() );
+  }
   setSuperweaponRestricted( TheSkirmishGameInfo->getSuperweaponRestriction() != 0 );
   AoCLobbyRules::writePreferences( *this, TheSkirmishGameInfo->getAoCLobbySettings() );	// AoC @hook 01/11/2026 Remembered lobby choices beside StartingCash (D11 F7).
 
@@ -1105,7 +1110,9 @@ void InitSkirmishGameGadgets()
   // the money choices (D11 F7).
   AoCLobbyUI::findGadgets( parentSkirmishGameOptions, "SkirmishGameOptionsMenu", s_aocLobby );
   if ( !AoCLobbyUI::replacesStartingCash() )
-  PopulateStartingCashComboBox(comboBoxStartingCash, TheSkirmishGameInfo );
+  {
+    PopulateStartingCashComboBox(comboBoxStartingCash, TheSkirmishGameInfo );
+  }
   AoCLobbyUI::populate( s_aocLobby, TheSkirmishGameInfo );
 
 	textEntryPlayerNameID = TheNameKeyGenerator->nameToKey( "SkirmishGameOptionsMenu.wnd:TextEntryPlayerName" );

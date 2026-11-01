@@ -1370,7 +1370,7 @@ Bool ParseAsciiStringToGameInfo(GameInfo *game, AsciiString options)
 		}
 		else if (AoCLobbyRules::parseOptionsKey(key, val, aocLobby, optionsOk))
 		{
-			// AoC @hook 01/11/2026 AS, AR, AP, AA, AV: the lobby fields (D11 F7). A malformed value rejects the string like a stock
+			// AoC @hook 01/11/2026 AO: the lobby fields in one key (D11 F7). A malformed value rejects the string like a stock
 			// empty value; an index outside its list becomes the default when the game stores it.
 			if (!optionsOk)
 			{

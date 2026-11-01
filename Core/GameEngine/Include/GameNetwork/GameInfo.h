@@ -240,9 +240,9 @@ public:
 	void setAoCSimRate( Int rate ) { m_aocSimRate = rate; }
 
 	// AoC @feature 01/11/2026 The lobby options of this game (D11 F7): starting stock, richness and population cap as indices
-	// into the INI choice lists, ambient civilians, victory mode. Travel in the options string as AS, AR, AP, AA, AV, each
-	// only when not the default; saved by SkirmishGameInfo::xfer v5. The logic copies cap, ambient and victory into
-	// GameLogic at the start of a new game and never reads them here during play.
+	// into the INI choice lists, ambient civilians, victory mode. Travel in the options string as one key, AO=<s><r><p><a><v>,
+	// only when some field is not the default; saved by SkirmishGameInfo::xfer v5. The logic copies cap, ambient, victory
+	// and the richness factor into GameLogic at the start of a new game and never reads them here during play.
 	AoCLobbySettings getAoCLobbySettings() const;
 	/// Store the five fields, each brought into its list (AoCLobbyRules::sanitize). With a starting stock list defined the
 	/// chosen stock's cash also becomes the starting cash (SC=), so Starting Stock replaces Starting Cash (decision 4).

@@ -35,17 +35,23 @@
 // resource types, so a Value can name them; a block in any other global INI file (Multiplayer.ini) works too.
 // The INI CRC covers them, so every peer has the same lists and the options string carries plain indices.
 //
-// The data is the flag (D11 1.6): with no list defined every field is at its default, the options string carries
-// no AoC key, starting stock and population cap keep their GameData.ini sources (F1 AoCStartingStock, F4
+// The data is the flag (D11 1.6): with no list defined every field is at its default (sanitize forces ambient on and
+// conquest too, so a hand-made string or a remembered preference cannot change a stock game), the options string
+// carries no AoC key, starting stock and population cap keep their GameData.ini sources (F1 AoCStartingStock, F4
 // AoCDefaultPopulationCap) and richness is 1000 per mille, so the stock game is unchanged.
 //
-// Options string (decision 1): AS=<stock>;AR=<richness>;AP=<cap>;AA=<Y|N>;AV=<victory>; each written only when it
-// differs from the default, after the stock header keys and before the slot list; a missing key means the default.
-// A stock parser rejects unknown keys, so a default game keeps a stock-readable string and replay header.
+// Options string (decision 1, one combined key since the review of PR #6, finding 2): AO=<s><r><p><a><v>; with one
+// hex digit each for the starting stock, richness and population cap indices (0 to F: a list holds at most 16
+// choices), Y or N for ambient civilians and one digit for the victory mode, e.g. "AO=220N0;". Written only when at
+// least one field differs from its default, after the stock header keys and before the slot list; a missing key means
+// every default. A value that is not exactly five characters of that shape rejects the string (malformed); an index
+// outside its list becomes the list's default when the game stores it. A stock parser rejects unknown keys, so a
+// default game keeps a stock-readable string and replay header. Nine characters at most of the LAN options budget.
 //
-// During play the logic reads the population cap, ambient civilians and victory from GameLogic (copied in
-// startNewGame, saved by GameLogic::xfer), never from TheGameInfo. Starting stock is applied in Player::init and
-// richness at the end of GameLogic::startNewGame, both at the start of a new game only.
+// During play the logic reads the population cap, ambient civilians, victory and the richness factor from GameLogic
+// (copied in startNewGame, saved by GameLogic::xfer, in the per-frame CRC through PlayerList::crc when not the
+// default), never from TheGameInfo. Starting stock is applied in Player::init and richness at the end of
+// GameLogic::startNewGame, both at the start of a new game only.
 
 #pragma once
 
@@ -165,14 +171,15 @@ public:
 	/// Default of every field: each list's default index, ambient civilians on, conquest.
 	static AoCLobbySettings defaults();
 	/// Every index brought into its list (an index outside a defined list becomes that list's default; with no list the
-	/// index is the default), victory into AoCVictoryMode.
+	/// index is the default), victory into AoCVictoryMode. With no list at all, ambient civilians on and conquest too
+	/// (review of PR #6, finding 1): a stock game always runs at the defaults.
 	static AoCLobbySettings sanitize( const AoCLobbySettings &s );
 
-	// Options string (decision 1).
-	/// Append "AS=..;AR=..;AP=..;AA=..;AV=..;", each key only when its value is not the default.
+	// Options string (decision 1; the combined key of the review of PR #6, finding 2).
+	/// Append "AO=<s><r><p><a><v>;" when any field differs from its default; nothing otherwise.
 	static void appendOptionsString( const AoCLobbySettings &s, AsciiString &out );
-	/// One key of ParseAsciiStringToGameInfo: TRUE when 'key' is AS, AR, AP, AA or AV (the value then lands in 's';
-	/// a value that is not a number, or AA that is not Y or N, sets 'valueOk' FALSE).
+	/// One key of ParseAsciiStringToGameInfo: TRUE when 'key' is AO (the five fields then land in 's'); a value that is
+	/// not exactly three hex digits, Y or N, and a hex digit sets 'valueOk' FALSE and leaves 's' alone.
 	static Bool parseOptionsKey( const AsciiString &key, const AsciiString &val, AoCLobbySettings &s, Bool &valueOk );
 
 	// Index to value.
@@ -199,7 +206,9 @@ public:
 	static const char *victoryLabel( Int victory );		///< "GUI:AoCVictoryConquest" and so on
 
 	// Remembered choices (preference keys beside StartingCash), stored by name so a reordered list keeps them.
-	/// Fields with a remembered, still defined choice are set in 's'; the others are left as they are.
+	/// Fields with a remembered, still defined choice are set in 's'; the others are left as they are. Ambient civilians
+	/// and victory are read only while some list is defined, as writePreferences writes them (review of PR #6, finding 1:
+	/// the preference files are shared between mod and stock sessions).
 	static void readPreferences( const UserPreferences &prefs, AoCLobbySettings &s );
 	static void writePreferences( UserPreferences &prefs, const AoCLobbySettings &s );
 

@@ -55,10 +55,10 @@
 //                                   engine loop. Load it with the stock -loadsave <name>.sav at the same
 //                                   -simrate (a save made at the other rate is refused, exit code 5).
 //   -aocOptions "<key=value;...>"   F7: options string keys appended to the string -skirmish builds, after its fixed keys
-//                                   and before the slot list, e.g. "AS=2;AR=2;AP=0;AA=N" (the lobby fields: AS starting
-//                                   stock, AR richness, AP population cap as indices into the INI choice lists, AA
-//                                   ambient civilians Y or N, AV victory index). Parsed by the stock parser, so an
-//                                   unknown key or a malformed value stops -skirmish (exit code 4). Ignored without
+//                                   and before the slot list, e.g. "AO=220N0" (the lobby fields in one key: starting
+//                                   stock, richness and population cap as one hex digit each, indices into the INI
+//                                   choice lists; ambient civilians Y or N; the victory digit). Parsed by the stock
+//                                   parser, so an unknown key or a malformed value stops -skirmish (exit code 4). Ignored without
 //                                   -skirmish. With any harness flag and lobby choice lists or resource types defined,
 //                                   stderr gets at the start of a game "[AoC lobby] stock=<name or index> richness=<name>
 //                                   cap=<n> ambient=<Y|N> victory=<name>" and "[AoC lobby] richness scaled <n>
