@@ -116,6 +116,8 @@ public:
 	virtual Real getRepairHealthPerSecond() const = 0;	///< get health to repair per second
 	virtual Real getBoredTime() const = 0;							///< how long till we're bored
 	virtual Real getBoredRange() const = 0;							///< when we're bored, we look this far away to do things
+	// AoC @hook 02/11/2026 This builder's construction speed, per mille of the stock rate (AoCBuildSpeedPerMille, default 1000) (D11 F8).
+	virtual Int getAoCBuildSpeedPerMille() const = 0;
 
 	// methods to override for the dozer behaviors
 	virtual Object *construct( const ThingTemplate *what,
@@ -181,6 +183,7 @@ public:
 	Real m_repairHealthPercentPerSecond;	///< how many health points per second the dozer repairs at
 	Real m_boredTime;											///< after this many frames, a dozer will try to find something to do on its own
 	Real m_boredRange;										///< range the dozers try to auto repair when they're bored
+	Int m_aocBuildSpeedPerMille;					///< AoC @feature F8: AoCBuildSpeedPerMille, construction speed per mille (default 1000)
 
 	static void buildFieldParse( MultiIniFieldParse &p );
 
@@ -220,6 +223,7 @@ public:
 	virtual Real getRepairHealthPerSecond() const override;	///< get health to repair per second
 	virtual Real getBoredTime() const override;							///< how long till we're bored
 	virtual Real getBoredRange() const override;							///< when we're bored, we look this far away to do things
+	virtual Int getAoCBuildSpeedPerMille() const override;		///< AoC @feature F8: AoCBuildSpeedPerMille
 
 	// methods to override for the dozer behaviors
 	virtual Object* construct( const ThingTemplate *what,

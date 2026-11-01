@@ -30,6 +30,7 @@
 #pragma once
 
 // USER INCLUDES //////////////////////////////////////////////////////////////////////////////////
+#include "AoC/AoCBuildSpeed.h"	// AoC @feature F8
 #include "Common/StateMachine.h"
 #include "GameLogic/Module/AIUpdate.h"
 #include "GameLogic/Module/DozerAIUpdate.h"
@@ -76,6 +77,7 @@ public:
  	AudioEventRTS m_suppliesDepletedVoice;						///< Sound played when I take the last box.
 	Int m_upgradedSupplyBoost;
 	AoCCargoData m_aocCargo;													///< AoC @feature F2: AoCCargoTypes, AoCMaxUnits, AoCGatherDelay
+	Int m_aocBuildSpeedPerMille;											///< AoC @feature F8: AoCBuildSpeedPerMille, construction speed per mille (default 1000)
 
 	WorkerAIUpdateModuleData()
 	{
@@ -87,6 +89,7 @@ public:
 		m_warehouseDelay = 0;
 		m_warehouseScanDistance = 100;
 		m_upgradedSupplyBoost = 0;
+		m_aocBuildSpeedPerMille = AOC_BUILD_SPEED_DEFAULT_PER_MILLE;	// AoC @hook 02/11/2026 The stock construction rate (D11 F8).
 	}
 
 	static void buildFieldParse(MultiIniFieldParse& p)
@@ -108,6 +111,8 @@ public:
 			{ "AoCCargoTypes", AoCCargoData::parseCargoTypes, nullptr, offsetof( WorkerAIUpdateModuleData, m_aocCargo ) },
 			{ "AoCMaxUnits", AoCCargoData::parseMaxUnits, nullptr, offsetof( WorkerAIUpdateModuleData, m_aocCargo ) },
 			{ "AoCGatherDelay", AoCCargoData::parseGatherDelay, nullptr, offsetof( WorkerAIUpdateModuleData, m_aocCargo ) },
+			// AoC @hook 02/11/2026 Construction speed per mille, a whole number of at least 1 (D11 F8).
+			{ "AoCBuildSpeedPerMille", AoCBuildSpeed::parsePerMille, nullptr, offsetof( WorkerAIUpdateModuleData, m_aocBuildSpeedPerMille ) },
 			{ nullptr, nullptr, nullptr, 0 }
 		};
     p.add(dataFieldParse);
@@ -145,6 +150,7 @@ public:
 	virtual Real getRepairHealthPerSecond() const override;	///< get health to repair per second
 	virtual Real getBoredTime() const override;							///< how long till we're bored
 	virtual Real getBoredRange() const override;							///< when we're bored, we look this far away to do things
+	virtual Int getAoCBuildSpeedPerMille() const override { return getWorkerAIUpdateModuleData()->m_aocBuildSpeedPerMille; }	///< AoC @feature F8
 
 	virtual Object *construct( const ThingTemplate *what,
 														 const Coord3D *pos, Real angle,
@@ -230,6 +236,8 @@ public:
 	virtual Int getUpgradedSupplyBoost() const override;
 
 protected:
+
+	void aocBackToWork( ObjectID buildSite );	///< AoC @feature F8: after a build, back to the assigned resource type (D11 F8)
 
 // Dozer data
 	struct DozerTaskInfo

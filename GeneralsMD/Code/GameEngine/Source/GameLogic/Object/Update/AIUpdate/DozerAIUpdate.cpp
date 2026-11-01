@@ -30,6 +30,7 @@
 // USER INCLUDES //////////////////////////////////////////////////////////////////////////////////
 #include "PreRTS.h"	// This must go first in EVERY cpp file in the GameEngine
 
+#include "AoC/AoCBuildSpeed.h"	// AoC @feature F8
 #include "Common/ActionManager.h"
 #include "Common/Team.h"
 #include "Common/StateMachine.h"
@@ -527,10 +528,16 @@ StateReturnType DozerActionDoActionState::update()
 				// the builder is now actively constructing something
 				dozer->setModelConditionState( MODELCONDITION_ACTIVELY_CONSTRUCTING );
 
+				// AoC @hook 02/11/2026 This builder's construction speed scales both increments below; 1000 leaves them bit-identical (D11 F8).
+				const Int aocBuildSpeedPerMille = dozerAI->getAoCBuildSpeedPerMille();
+				if( AoCBuildSpeed::logEnabled() )
+					AoCBuildSpeed::logBuildFrame( dozer->getID(), goalObject->getID(), goalObject->getTemplate()->getName().str(),
+						aocBuildSpeedPerMille, goalObject->getConstructionPercent() );
 
 				// increase the construction percent of the goal object
 				Int framesToBuild = goalObject->getTemplate()->calcTimeToBuild( dozer->getControllingPlayer() );
-				Real percentProgressThisFrame = WWMath::Div_FixNaN(100.0f, (Real)framesToBuild, 100.0f);
+				// AoC @hook 02/11/2026 The construction increment times the builder's speed per mille (D11 F8).
+				Real percentProgressThisFrame = AoCBuildSpeed::scale( WWMath::Div_FixNaN(100.0f, (Real)framesToBuild, 100.0f), aocBuildSpeedPerMille );
 				goalObject->setConstructionPercent( goalObject->getConstructionPercent() +
 																						percentProgressThisFrame );
 
@@ -540,7 +547,8 @@ StateReturnType DozerActionDoActionState::update()
 				// here and going straight for the change of the health
 				//
 				BodyModuleInterface *body = goalObject->getBodyModule();
-				body->internalChangeHealth( body->getMaxHealth() / INT_TO_REAL( framesToBuild ) );
+				// AoC @hook 02/11/2026 The health increment by the same speed, so health keeps pace with construction (D11 F8).
+				body->internalChangeHealth( AoCBuildSpeed::scale( body->getMaxHealth() / INT_TO_REAL( framesToBuild ), aocBuildSpeedPerMille ) );
 
 				//
 				// since we've just actually contributed a "piece" to this building, we'll say that
@@ -552,6 +560,10 @@ StateReturnType DozerActionDoActionState::update()
 				// check for construction complete
 				if( goalObject->getConstructionPercent() >= 100.0f )
 				{
+
+					// AoC @hook 02/11/2026 Harness build log: the structure is complete (D11 F8).
+					if( AoCBuildSpeed::logEnabled() )
+						AoCBuildSpeed::logComplete( goalObject->getID(), goalObject->getTemplate()->getName().str(), framesToBuild );
 
 					// clear the under construction status
 					goalObject->clearStatus( MAKE_OBJECT_STATUS_MASK( OBJECT_STATUS_UNDER_CONSTRUCTION ) );
@@ -1428,6 +1440,7 @@ DozerAIUpdateModuleData::DozerAIUpdateModuleData()
 	m_repairHealthPercentPerSecond = 0.0f;
 	m_boredTime = 0.0f;
 	m_boredRange = 0.0f;
+	m_aocBuildSpeedPerMille = AOC_BUILD_SPEED_DEFAULT_PER_MILLE;	// AoC @hook 02/11/2026 The stock construction rate (D11 F8).
 
 }
 
@@ -1441,6 +1454,8 @@ void DozerAIUpdateModuleData::buildFieldParse( MultiIniFieldParse& p)
 		{ "RepairHealthPercentPerSecond",	INI::parsePercentToReal,	nullptr, offsetof( DozerAIUpdateModuleData, m_repairHealthPercentPerSecond ) },
 		{ "BoredTime",										INI::parseDurationReal,		nullptr, offsetof( DozerAIUpdateModuleData, m_boredTime ) },
 		{ "BoredRange",										INI::parseReal,						nullptr, offsetof( DozerAIUpdateModuleData, m_boredRange ) },
+		// AoC @hook 02/11/2026 Construction speed per mille, a whole number of at least 1 (D11 F8).
+		{ "AoCBuildSpeedPerMille",				AoCBuildSpeed::parsePerMille,	nullptr, offsetof( DozerAIUpdateModuleData, m_aocBuildSpeedPerMille ) },
 		{ nullptr, nullptr, nullptr, 0 }
 	};
 
@@ -2431,6 +2446,12 @@ const Coord3D* DozerAIUpdate::getDockPoint( DozerTask task, DozerDockPoint point
 Real DozerAIUpdate::getRepairHealthPerSecond() const
 {
 	return getDozerAIUpdateModuleData()->m_repairHealthPercentPerSecond;
+}
+// ------------------------------------------------------------------------------------------------
+// AoC @feature F8: this builder's construction speed, per mille of the stock rate (D11 F8).
+Int DozerAIUpdate::getAoCBuildSpeedPerMille() const
+{
+	return getDozerAIUpdateModuleData()->m_aocBuildSpeedPerMille;
 }
 // ------------------------------------------------------------------------------------------------
 Real DozerAIUpdate::getBoredTime() const
