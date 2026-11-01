@@ -172,6 +172,10 @@ namespace AoCSaveFidelity
 	/// GameLogic::xfer loading a save older than version 15: nothing to restore (drops anything held from an earlier load).
 	void clearPending();
 
+	/// GameState::loadGame, first: drops everything held, the deferred attack sets included, so nothing a failed earlier
+	/// load left behind reaches this load's post-process.
+	void beginLoad();
+
 	/// GameLogic::xfer, at the start of a load's object data: drops the deferred attack sets of an earlier load.
 	void beginObjectLoad();
 

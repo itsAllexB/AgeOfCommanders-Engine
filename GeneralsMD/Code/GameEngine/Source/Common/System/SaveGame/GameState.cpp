@@ -664,6 +664,9 @@ SaveResult GameState::missionSave()
 // ------------------------------------------------------------------------------------------------
 SaveCode GameState::loadGame( AvailableGameInfo gameInfo )
 {
+	// AoC @hook 01/11/2026 Nothing held from an earlier load that failed before its post-process reaches this one (D11 F14).
+	AoCSaveFidelity::beginLoad();
+
 	// sanity check for file
 	if( doesSaveGameExist( gameInfo.filename ) == FALSE )
 		return SC_FILE_NOT_FOUND;

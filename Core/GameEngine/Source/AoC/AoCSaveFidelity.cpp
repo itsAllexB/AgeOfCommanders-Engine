@@ -425,6 +425,14 @@ void AoCSaveFidelity::clearPending()
 	p.hasQueue = FALSE;
 }
 
+void AoCSaveFidelity::beginLoad()
+{
+	clearPending();
+	Pending &p = pending();
+	p.queue = AoCPathfindQueue();
+	p.attackInfos.clear();
+}
+
 Bool AoCSaveFidelity::restoreSleepyLayout( std::vector<UpdateModule *> &heap )
 {
 	Pending &p = pending();
