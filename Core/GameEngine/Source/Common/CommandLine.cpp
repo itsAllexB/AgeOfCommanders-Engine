@@ -1257,6 +1257,10 @@ static CommandLineParam paramsForEngineInit[] =
 	{ "-aocUiScript", AoCHarness::parseAocUiScript },	// AoC @feature F5
 	{ "-aocOptions", AoCHarness::parseAocOptions },	// AoC @hook 01/11/2026 Lobby fields for -skirmish (D11 F7).
 	{ "-crcDump", AoCHarness::parseCrcDump },	// AoC @hook 01/11/2026 Per-object CRC dump for desync hunts (D11 F14).
+	// AoC @hook 01/11/2026 Per-frame determinism evidence: CRC every n frames, a per-frame window, the logic random trace (D11 F12).
+	{ "-crcEvery", AoCHarness::parseCrcEvery },
+	{ "-crcWindow", AoCHarness::parseCrcWindow },
+	{ "-aocRandomTrace", AoCHarness::parseAocRandomTrace },
 
 #if defined(RTS_DEBUG)
 	{ "-noaudio", parseNoAudio },

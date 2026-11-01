@@ -2128,8 +2128,12 @@ Bool ParticleSystem::update( Int localPlayerIndex  )
 								if (tmp)
 								{
 									ParticleSystem *sys = TheParticleSystemManager->createParticleSystem( tmp, TRUE );
-									sys->setControlParticle( p );
-									p->controlParticleSystem( sys );
+									// AoC @hook 01/11/2026 A system may come back null (the headless dummy); this runs only inside a live system (D11 F12).
+									if (sys)
+									{
+										sys->setControlParticle( p );
+										p->controlParticleSystem( sys );
+									}
 								}
 							}
 

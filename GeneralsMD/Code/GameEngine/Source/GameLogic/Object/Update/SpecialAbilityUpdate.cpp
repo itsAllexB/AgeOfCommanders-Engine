@@ -1402,11 +1402,12 @@ void SpecialAbilityUpdate::triggerAbilityEffect()
         if (tmp)
         {
           ParticleSystem *sys = TheParticleSystemManager->createParticleSystem(tmp);
+          // AoC @hook 01/11/2026 The offset is a logic random draw: taken whether or not the client created the
+          // system (none in a headless game), so both modes draw alike (D11 F12).
+          Coord3D offs = {0,0,0};
+          target->getGeometryInfo().makeRandomOffsetWithinFootprint( offs );
           if (sys)
           {
-            Coord3D offs = {0,0,0};
-            target->getGeometryInfo().makeRandomOffsetWithinFootprint( offs );
-
             sys->attachToObject(target);
             sys->setPosition( &offs );
             sys->setSystemLifetime( data->m_effectDuration * durationInterleaveFactor ); //lifetime of the system, not the particles

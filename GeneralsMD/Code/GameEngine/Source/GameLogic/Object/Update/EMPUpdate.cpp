@@ -308,29 +308,32 @@ void EMPUpdate::doDisableAttack()
 
 						ParticleSystem *sys = TheParticleSystemManager->createParticleSystem(tmp);
 
+						// AoC @hook 01/11/2026 The offset and the delay are logic random draws: taken for every emitter,
+						// whether or not the client created its system (none in a headless game), so both modes draw alike (D11 F12).
+						Coord3D offs = {0,0,0};
+						curVictim->getGeometryInfo().makeRandomOffsetWithinFootprint( offs );
+						offs.z = GameLogicRandomValue(3, victimHeight);
+
+						//This puts all the sparks within a quadrahemicycloid (rectangular dome) volume
+						//The same shape as a four cornered camping dome tent, for those with less Greek
+						if (offs.length() > victimHeight)
+						{
+							Real resoreX = offs.x;
+							Real resoreY = offs.y;
+							offs.normalize();
+							offs.z *= victimHeight;
+							offs.x = resoreX;
+							offs.y = resoreY;
+						}
+						const UnsignedInt initialDelay = GameLogicRandomValue(1,100);
+
 						if (sys)
 						{
-							Coord3D offs = {0,0,0};
-							curVictim->getGeometryInfo().makeRandomOffsetWithinFootprint( offs );
-							offs.z = GameLogicRandomValue(3, victimHeight);
-
-							//This puts all the sparks within a quadrahemicycloid (rectangular dome) volume
-							//The same shape as a four cornered camping dome tent, for those with less Greek
-							if (offs.length() > victimHeight)
-							{
-								Real resoreX = offs.x;
-								Real resoreY = offs.y;
-								offs.normalize();
-								offs.z *= victimHeight;
-								offs.x = resoreX;
-								offs.y = resoreY;
-							}
-
 							sys->attachToObject(curVictim);
 							sys->setPosition( &offs );
 							// AoC @tweak 30/10/2026 Particle lifetimes count retail frames (D11 F15).
 							sys->setSystemLifetime(MAX(0, (data->m_disabledDuration / (UnsignedInt)AoCSimRate::frameMultiplier()) - 30));
-							sys->setInitialDelay(GameLogicRandomValue(1,100));
+							sys->setInitialDelay(initialDelay);
 						}
 					}
 				}
