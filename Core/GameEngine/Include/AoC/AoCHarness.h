@@ -73,7 +73,9 @@
 //                                   <objectId> complete <template> builders=<n> frames=<k> base=<framesToBuild>" (n distinct
 //                                   builders since the first start line, k frames from that line to this one, both
 //                                   counted; base: calcTimeToBuild on the last frame), "[AoC build] frame N <builderId>
-//                                   back-to-work <type>" when a worker's build ends and it returns to its assigned type.
+//                                   back-to-work <type>" when a worker's build ends and it returns to its assigned type,
+//                                   "... back-to-work none in range <type> range=<r>" when no node of that type stands
+//                                   within GameData.ini AoCBackToWorkRange of the build site and it idles.
 //   -saveAtFrame <N> <name>         F1: write the stock save game <name>.sav (the save menu's path,
 //                                   TheGameState->saveGame) once logic frame N (1 or more) has run, from the
 //                                   engine loop. Load it with the stock -loadsave <name>.sav at the same
@@ -113,14 +115,16 @@
 //                                                        at <x>,<y> ai <state type> goal <id> to <x>,<y>;" (asg: the
 //                                                        assigned type, - when none) with the local
 //                                                        player's bank and one cargo segment per selected object,
-//                                                        the first selected (lowest id) first
+//                                                        the first selected (lowest id) first; F8: a segment ends
+//                                                        " forced-wanting" while the supply brain's latch is set
 //                                     count <Template>   F2: stderr "[AoC count] frame <frame> logic <frame run>
 //                                                        <Template> <n>", the live objects of that template
 //                                     place <x> <y>      F8: while a building placement is pending (press on a build
 //                                                        button), what a left click on world point x, y sends: the
 //                                                        click's checks, then MSG_DOZER_CONSTRUCT with the template, the
 //                                                        point on the ground and the placement angle; a refused spot is
-//                                                        reported and keeps placement mode; line builds are refused
+//                                                        reported and keeps placement mode; line builds are refused; it
+//                                                        skips the click's special-power branch (GLA sneak attack)
 //                                   After select, selectall, press, back, dock and place the next line waits 3 engine
 //                                   iterations so the control bar re-evaluates. Use absolute paths. select, selectall,
 //                                   dock and place send the stock message a click sends, so they move the CRC and the

@@ -828,7 +828,9 @@ Int uiDock( const HarnessState::UiLine &l )
 /// world point (x, y) sends (PlaceEventTranslator, MSG_MOUSE_LEFT_CLICK with the placement anchored): the same
 /// affordability and location checks, then MSG_DOZER_CONSTRUCT with the template, the point on the ground and the
 /// placement angle (the template's PlacementViewAngle while the mouse has not turned it), and placement mode ends.
-/// A refused spot keeps placement mode, as a refused click does. Line builds (walls) are refused.
+/// A refused spot keeps placement mode, as a refused click does. Line builds (walls) are refused. The click's special-power
+/// branch (a builder with getSpecialPowerConstructionCommandButton, the GLA sneak attack, sends
+/// MSG_DO_SPECIAL_POWER_AT_LOCATION) is not reproduced: place always sends the plain placement message.
 Int uiPlace( const HarnessState::UiLine &l )
 {
 	const ThingTemplate *build = TheInGameUI->getPendingPlaceType();
@@ -922,9 +924,11 @@ void uiBank( UnsignedInt frame )
 			text += fmt(" cargo %u -", (UnsignedInt)obj->getID());
 		const Object *goal = ai ? ai->getGoalObject() : nullptr;
 		const Coord3D *goalPos = ai ? ai->getGoalPosition() : nullptr;
-		text += fmt(" at %.0f,%.0f ai %d goal %u to %.0f,%.0f%s;", obj->getPosition()->x, obj->getPosition()->y, ai ? (int)ai->getAIStateType() : -1,
+		// F8: " forced-wanting" while the supply brain's latch is set (back to work, a new truck), the review-fix gate's evidence
+		text += fmt(" at %.0f,%.0f ai %d goal %u to %.0f,%.0f%s%s;", obj->getPosition()->x, obj->getPosition()->y, ai ? (int)ai->getAIStateType() : -1,
 			goal ? (UnsignedInt)goal->getID() : 0u, goalPos ? goalPos->x : 0.0f, goalPos ? goalPos->y : 0.0f,
-			(ai && ai->getCurLocomotor() == nullptr) ? " no-locomotor" : "");
+			(ai && ai->getCurLocomotor() == nullptr) ? " no-locomotor" : "",
+			(gatherer && gatherer->isForcedIntoWantingState()) ? " forced-wanting" : "");
 	}
 	fprintf(stderr, "%s\n", text.c_str());
 	fflush(stderr);
