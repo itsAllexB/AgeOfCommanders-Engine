@@ -233,6 +233,9 @@ public:
 		if( m_landing )
 		{
 			// A chinook given transport duty loses his supplies.
+			// AoC @hook 31/10/2026 Gather log line for the dropped load (D11 F2).
+			if( ai->getNumberBoxes() > 0 )
+				AoCGather::log( obj->getID(), "dropped %s %d reason landing", AoCGather::typeName( ai->getCargoType() ), ai->getNumberBoxes() );
 			while( ai->loseOneBox() );
 		}
 
@@ -496,6 +499,9 @@ public:
 		ai->friend_setFlightStatus(CHINOOK_DOING_COMBAT_DROP);
 
 		// A chinook given combat drop duty also loses his supplies.
+		// AoC @hook 31/10/2026 Gather log line for the dropped load (D11 F2).
+		if( ai->getNumberBoxes() > 0 )
+			AoCGather::log( obj->getID(), "dropped %s %d reason combat-drop", AoCGather::typeName( ai->getCargoType() ), ai->getNumberBoxes() );
 		while( ai->loseOneBox() );
 
 		UnsignedInt now = TheGameLogic->getFrame();

@@ -75,6 +75,7 @@ public:
 	Real m_warehouseScanDistance;
  	AudioEventRTS m_suppliesDepletedVoice;						///< Sound played when I take the last box.
 	Int m_upgradedSupplyBoost;
+	AoCCargoData m_aocCargo;													///< AoC @feature F2: AoCCargoTypes, AoCMaxUnits, AoCGatherDelay
 
 	WorkerAIUpdateModuleData()
 	{
@@ -103,6 +104,10 @@ public:
 			{ "SupplyWarehouseScanDistance", INI::parseReal, nullptr, offsetof( WorkerAIUpdateModuleData, m_warehouseScanDistance ) },
  			{ "SuppliesDepletedVoice", INI::parseAudioEventRTS, nullptr, offsetof( WorkerAIUpdateModuleData, m_suppliesDepletedVoice) },
  			{ "UpgradedSupplyBoost", INI::parseInt, nullptr, offsetof( WorkerAIUpdateModuleData, m_upgradedSupplyBoost) },
+			// AoC @hook 31/10/2026 Typed cargo: what the worker may carry, units per type, delay per unit (D11 F2).
+			{ "AoCCargoTypes", AoCCargoData::parseCargoTypes, nullptr, offsetof( WorkerAIUpdateModuleData, m_aocCargo ) },
+			{ "AoCMaxUnits", AoCCargoData::parseMaxUnits, nullptr, offsetof( WorkerAIUpdateModuleData, m_aocCargo ) },
+			{ "AoCGatherDelay", AoCCargoData::parseGatherDelay, nullptr, offsetof( WorkerAIUpdateModuleData, m_aocCargo ) },
 			{ nullptr, nullptr, nullptr, 0 }
 		};
     p.add(dataFieldParse);
@@ -196,6 +201,15 @@ public:
 	virtual ObjectID getPreferredDockID() const override { return m_preferredDock; }
 	virtual UnsignedInt getActionDelayForDock( Object *dock ) override;
 
+	// AoC @hook 31/10/2026 Typed gathering (D11 F2).
+	virtual Int getCargoType() const override { return m_aocCargo.cargoType; }
+	virtual void setCargoType( Int type ) override { m_aocCargo.cargoType = type; }
+	virtual Int getAssignedResourceType() const override { return m_aocCargo.assignedType; }
+	virtual Bool isIdleGatherer() const override;
+	virtual Int getMaxUnitsFor( Int type ) const override { return getWorkerAIUpdateModuleData()->m_aocCargo.maxUnitsFor( type, getWorkerAIUpdateModuleData()->m_maxBoxesData ); }
+	virtual Bool canCarryResourceType( Int type ) const override { return getWorkerAIUpdateModuleData()->m_aocCargo.canCarry( type ); }
+	virtual void aocRememberNode( Object *node ) override;
+
 // worker specific
 	Bool isSupplyTruckBrainActiveAndBusy();
 	void resetSupplyTruckBrain();
@@ -254,6 +268,7 @@ protected:
 	Bool m_isRebuild;	// is our current construction task a rebuild?
 	Bool m_forcedBusyPending;	// A supply truck can't tell the difference between Idle since
 														// I'm between docking states, or a Stop command without help.
+	AoCCargoState m_aocCargo;	///< AoC @feature F2: m_aocCargoType and m_aocAssignedType (xfer v3, crc)
 
 
 	WorkerStateMachine *m_workerMachine;

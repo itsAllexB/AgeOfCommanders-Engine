@@ -28,6 +28,7 @@
 
 #pragma once
 
+#include "AoC/AoCGather.h"	// AoC @feature F2
 #include "Common/StateMachine.h"
 #include "GameLogic/Module/AIUpdate.h"
 
@@ -126,6 +127,7 @@ public:
 	UnsignedInt m_warehouseDelay;
 	Real m_warehouseScanDistance;
  	AudioEventRTS m_suppliesDepletedVoice;						///< Sound played when I take the last box.
+	AoCCargoData m_aocCargo;													///< AoC @feature F2: AoCCargoTypes, AoCMaxUnits, AoCGatherDelay (the Chinook's too)
 
 	SupplyTruckAIUpdateModuleData()
 	{
@@ -146,6 +148,10 @@ public:
 			{ "SupplyWarehouseActionDelay", INI::parseDurationUnsignedInt, nullptr, offsetof( SupplyTruckAIUpdateModuleData, m_warehouseDelay ) },
 			{ "SupplyWarehouseScanDistance", INI::parseReal, nullptr, offsetof( SupplyTruckAIUpdateModuleData, m_warehouseScanDistance ) },
  			{ "SuppliesDepletedVoice", INI::parseAudioEventRTS, nullptr, offsetof( SupplyTruckAIUpdateModuleData, m_suppliesDepletedVoice) },
+			// AoC @hook 31/10/2026 Typed cargo: what the hauler may carry, units per type, delay per unit (D11 F2).
+			{ "AoCCargoTypes", AoCCargoData::parseCargoTypes, nullptr, offsetof( SupplyTruckAIUpdateModuleData, m_aocCargo ) },
+			{ "AoCMaxUnits", AoCCargoData::parseMaxUnits, nullptr, offsetof( SupplyTruckAIUpdateModuleData, m_aocCargo ) },
+			{ "AoCGatherDelay", AoCCargoData::parseGatherDelay, nullptr, offsetof( SupplyTruckAIUpdateModuleData, m_aocCargo ) },
 			{ nullptr, nullptr, nullptr, 0 }
 		};
     p.add(dataFieldParse);
@@ -178,6 +184,15 @@ public:
 	virtual ObjectID getPreferredDockID() const = 0;
 	virtual UnsignedInt getActionDelayForDock( Object *dock ) = 0;
 	virtual Int getUpgradedSupplyBoost() const = 0;
+
+	// AoC @hook 31/10/2026 Typed gathering: one resource type carried at a time, the player's assignment, the census (D11 F2).
+	virtual Int getCargoType() const = 0;									///< type of the units carried (cash until the first typed pick-up)
+	virtual void setCargoType( Int type ) = 0;
+	virtual Int getAssignedResourceType() const = 0;			///< type of the last node the player sent it to, -1 none (D9 census)
+	virtual Bool isIdleGatherer() const = 0;							///< neither ferrying nor doing anything else (D9 census)
+	virtual Int getMaxUnitsFor( Int type ) const = 0;			///< AoCMaxUnits for the type, else MaxBoxes
+	virtual Bool canCarryResourceType( Int type ) const = 0;	///< the type is in AoCCargoTypes
+	virtual void aocRememberNode( Object *node ) = 0;				///< a player's dock order on a node: preferred dock and assigned type (and the rally)
 };
 
 //-------------------------------------------------------------------------------------------------
@@ -218,6 +233,15 @@ public:
 	virtual UnsignedInt getActionDelayForDock( Object *dock ) override;
 	virtual Int getUpgradedSupplyBoost() const override { return 0; }
 
+	// AoC @hook 31/10/2026 Typed gathering (D11 F2).
+	virtual Int getCargoType() const override { return m_aocCargo.cargoType; }
+	virtual void setCargoType( Int type ) override { m_aocCargo.cargoType = type; }
+	virtual Int getAssignedResourceType() const override { return m_aocCargo.assignedType; }
+	virtual Bool isIdleGatherer() const override;
+	virtual Int getMaxUnitsFor( Int type ) const override { return getSupplyTruckAIUpdateModuleData()->m_aocCargo.maxUnitsFor( type, getSupplyTruckAIUpdateModuleData()->m_maxBoxesData ); }
+	virtual Bool canCarryResourceType( Int type ) const override { return getSupplyTruckAIUpdateModuleData()->m_aocCargo.canCarry( type ); }
+	virtual void aocRememberNode( Object *node ) override;
+
 	virtual UpdateSleepTime update() override;
 
 protected:
@@ -235,5 +259,6 @@ private:
 	Bool											m_forcedBusyPending;	// A supply truck can't tell the difference between Idle since
 																									// I'm between docking states, or a Stop command without help.
  	AudioEventRTS m_suppliesDepletedVoice;						///< Sound played when I take the last box.
+	AoCCargoState							m_aocCargo;						///< AoC @feature F2: m_aocCargoType and m_aocAssignedType (xfer v2, crc)
 
 };

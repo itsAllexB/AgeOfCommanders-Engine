@@ -27,6 +27,7 @@
 #include "AoC/AoCRules.h"
 #include "AoC/AoCSimRate.h"
 
+#include "Common/ActionManager.h"
 #include "Common/BuildAssistant.h"
 #include "Common/Energy.h"
 #include "Common/FileSystem.h"
@@ -55,7 +56,9 @@
 #include "GameClient/MapUtil.h"
 #include "GameLogic/GameLogic.h"
 #include "GameLogic/Object.h"
+#include "GameLogic/Module/AIUpdate.h"
 #include "GameLogic/Module/ProductionUpdate.h"
+#include "GameLogic/Module/SupplyTruckAIUpdate.h"
 #include "GameNetwork/GameInfo.h"
 
 #include <algorithm>
@@ -286,6 +289,30 @@ void censusCallback( Object *obj, void *userData )
 	}
 }
 
+#if RTS_ZEROHOUR
+// AoC F2: D9's gatherer census, through the typed gathering interface (Zero Hour only; base Generals has no typed cargo).
+struct GathererCensus
+{
+	Int byAssignedType[AOC_MAX_RESOURCES];	///< gatherers whose assigned type is that type
+	Int idle;																///< gatherers neither ferrying nor doing anything else
+};
+
+void gathererCensusCallback( Object *obj, void *userData )
+{
+	GathererCensus *c = (GathererCensus *)userData;
+	if (obj == nullptr || obj->isEffectivelyDead() || obj->getAI() == nullptr)
+		return;
+	const SupplyTruckAIInterface *gatherer = obj->getAI()->getSupplyTruckAIInterface();
+	if (gatherer == nullptr)
+		return;
+	const Int assigned = gatherer->getAssignedResourceType();
+	if (assigned >= 0 && assigned < AOC_MAX_RESOURCES)
+		c->byAssignedType[assigned]++;
+	if (gatherer->isIdleGatherer())
+		c->idle++;
+}
+#endif
+
 bool newerObjectFirst( const std::pair<UnsignedInt, std::string> &a, const std::pair<UnsignedInt, std::string> &b )
 {
 	return a.first > b.first;
@@ -504,6 +531,18 @@ void writeAiLog( UnsignedInt frame )
 				logLine("population over the cap, frame %u, player %d: used %d reserved %d cap %d; by template%s", frame,
 					(int)p->getPlayerIndex(), pop->getUsed(), pop->getReserved(), pop->getCap(), what.c_str());
 			}
+#if RTS_ZEROHOUR
+			// AoC F2: the gatherer census (D9), by assigned type plus the idle count
+			GathererCensus gatherers;
+			memset(&gatherers, 0, sizeof(gatherers));
+			p->iterateObjects(gathererCensusCallback, &gatherers);
+			for (Int t = 0; t < TheAoCRules->getTypeCount() && t < AOC_MAX_RESOURCES; ++t)
+			{
+				std::string column = "workers_" + std::string(TheAoCRules->getTypeName(t).str());
+				row.add(column.c_str(), gatherers.byAssignedType[t]);
+			}
+			row.add("workers_idle", gatherers.idle);
+#endif
 		}
 
 		std::string path = dir + fmt("ai_%d.csv", (int)p->getPlayerIndex());
@@ -637,6 +676,147 @@ void uiLog( UnsignedInt frame )
 	fflush(stderr);
 }
 
+// --- F2 additions: dock, selectall, bank -----------------------------------------------------------
+
+Bool uiIsLocalCandidate( Object *obj, const char *templateName )
+{
+	return obj->getControllingPlayer() == ThePlayerList->getLocalPlayer() && obj->getDrawable() && !obj->getContainedBy() &&
+		!obj->isEffectivelyDead() && obj->getTemplate()->getName().compareNoCase(templateName) == 0;
+}
+
+/// The selected object of the local player with the lowest id (the client's selection list), or nullptr.
+Object *uiFirstSelected()
+{
+	Object *first = nullptr;
+	const DrawableList *selected = TheInGameUI->getAllSelectedDrawables();
+	if (selected == nullptr)
+		return nullptr;
+	for (DrawableListCIt it = selected->begin(); it != selected->end(); ++it)
+	{
+		Object *obj = (*it) ? (*it)->getObject() : nullptr;
+		if (obj && obj->getControllingPlayer() == ThePlayerList->getLocalPlayer() && (!first || obj->getID() < first->getID()))
+			first = obj;
+	}
+	return first;
+}
+
+/// selectall <Template>: every object of the local player with that template, selected in one message as a drag box
+/// selects them (deselect all, the stock MSG_CREATE_SELECTED_GROUP with every id in id order, select the drawables).
+Int uiSelectAll( const HarnessState::UiLine &l )
+{
+	std::vector<Object *> picks;
+	for (Object *obj = TheGameLogic->getFirstObject(); obj; obj = obj->getNextObject())
+		if (uiIsLocalCandidate(obj, l.arg))
+			picks.push_back(obj);
+	if (picks.empty())
+	{
+		logLine("uiScript: selectall %s: the local player has no such object", l.arg);
+		return 0;
+	}
+	std::sort(picks.begin(), picks.end(), [](const Object *a, const Object *b) { return a->getID() < b->getID(); });
+	TheInGameUI->deselectAllDrawables();
+	GameMessage *msg = TheMessageStream->appendMessage(GameMessage::MSG_CREATE_SELECTED_GROUP);
+	msg->appendBooleanArgument(TRUE);
+	std::string ids;
+	for (size_t i = 0; i < picks.size(); ++i)
+	{
+		msg->appendObjectIDArgument(picks[i]->getID());
+		TheInGameUI->selectDrawable(picks[i]->getDrawable());
+		ids += fmt("%s%u", i ? "," : "", (UnsignedInt)picks[i]->getID());
+	}
+	logLine("uiScript: selectall %s: %d objects (%s)", l.arg, (int)picks.size(), ids.c_str());
+	return AOC_UI_SETTLE_ITERATIONS;
+}
+
+/// dock <Template>: the stock dock order of the current selection (MSG_DOCK, what a right-click on a dock sends,
+/// CommandTranslator::handleDockAtCommand) on the object of that template nearest the first selected object
+/// (2D distance, the lower id on a tie). Through the message stream, so the replay records it.
+Int uiDock( const HarnessState::UiLine &l )
+{
+	Object *first = uiFirstSelected();
+	if (first == nullptr)
+	{
+		logLine("uiScript: dock %s: nothing of the local player is selected", l.arg);
+		return 0;
+	}
+	const Coord3D *from = first->getPosition();
+	Object *target = nullptr;
+	Real best = 0.0f;
+	for (Object *obj = TheGameLogic->getFirstObject(); obj; obj = obj->getNextObject())
+	{
+		if (obj->isEffectivelyDead() || obj->getTemplate()->getName().compareNoCase(l.arg) != 0)
+			continue;
+		const Real dx = obj->getPosition()->x - from->x;
+		const Real dy = obj->getPosition()->y - from->y;
+		const Real d = dx * dx + dy * dy;
+		if (target == nullptr || d < best || (d == best && obj->getID() < target->getID()))
+		{
+			target = obj;
+			best = d;
+		}
+	}
+	if (target == nullptr)
+	{
+		logLine("uiScript: dock %s: no such object on the map", l.arg);
+		return 0;
+	}
+	GameMessage *msg = TheMessageStream->appendMessage(GameMessage::MSG_DOCK);
+	msg->appendObjectIDArgument(target->getID());
+	logLine("uiScript: dock %s: target %u at (%.0f, %.0f), first selected %u, legal for it: %d", l.arg, (UnsignedInt)target->getID(),
+		target->getPosition()->x, target->getPosition()->y, (UnsignedInt)first->getID(),
+		TheActionManager->canDockAt(first, target, CMD_FROM_PLAYER) ? 1 : 0);
+	return AOC_UI_SETTLE_ITERATIONS;
+}
+
+/// bank: one stderr line with the local player's bank and the first selected object's cargo. Reads only.
+void uiBank( UnsignedInt frame )
+{
+	HarnessState &s = state();
+	Player *local = ThePlayerList->getLocalPlayer();
+	std::string text = fmt("[AoC bank] frame %u logic %u", frame, s.lastLogicFrame);
+	const Int typeCount = AoCRules::typeCount();
+	for (Int t = 0; t < typeCount && t < AOC_MAX_RESOURCES; ++t)
+		text += fmt(" %s=%u", TheAoCRules ? TheAoCRules->getTypeName(t).str() : "Cash", local ? local->getAoCBank()->count(t) : 0u);
+	// the first selected object (lowest id) first, then the rest of the selection in id order: cargo, position, AI
+	// state type and goal object, so a line shows where each gatherer is in its loop
+	std::vector<Object *> selected;
+	const DrawableList *list = TheInGameUI->getAllSelectedDrawables();
+	if (list)
+		for (DrawableListCIt it = list->begin(); it != list->end(); ++it)
+			if (*it && (*it)->getObject() && (*it)->getObject()->getControllingPlayer() == local)
+				selected.push_back((*it)->getObject());
+	std::sort(selected.begin(), selected.end(), [](const Object *a, const Object *b) { return a->getID() < b->getID(); });
+	if (selected.empty())
+		text += " cargo -";
+	for (size_t i = 0; i < selected.size(); ++i)
+	{
+		Object *obj = selected[i];
+		AIUpdateInterface *ai = obj->getAI();
+		const SupplyTruckAIInterface *gatherer = ai ? ai->getSupplyTruckAIInterface() : nullptr;
+		if (gatherer)
+		{
+#if RTS_ZEROHOUR
+			// the saved state, both halves: the cargo (type, count) and the assignment (asg, - when unassigned)
+			const Int assigned = gatherer->getAssignedResourceType();
+			text += fmt(" cargo %u %s:%d/%d asg %s", (UnsignedInt)obj->getID(), TheAoCRules ? TheAoCRules->getTypeName(gatherer->getCargoType()).str() : "Cash",
+				gatherer->getNumberBoxes(), gatherer->getMaxUnitsFor(gatherer->getCargoType()),
+				assigned >= 0 ? (TheAoCRules ? TheAoCRules->getTypeName(assigned).str() : "Cash") : "-");
+#else
+			text += fmt(" cargo %u boxes:%d", (UnsignedInt)obj->getID(), gatherer->getNumberBoxes());	// base Generals: no typed cargo, no getMaxBoxes
+#endif
+		}
+		else
+			text += fmt(" cargo %u -", (UnsignedInt)obj->getID());
+		const Object *goal = ai ? ai->getGoalObject() : nullptr;
+		const Coord3D *goalPos = ai ? ai->getGoalPosition() : nullptr;
+		text += fmt(" at %.0f,%.0f ai %d goal %u to %.0f,%.0f%s;", obj->getPosition()->x, obj->getPosition()->y, ai ? (int)ai->getAIStateType() : -1,
+			goal ? (UnsignedInt)goal->getID() : 0u, goalPos ? goalPos->x : 0.0f, goalPos ? goalPos->y : 0.0f,
+			(ai && ai->getCurLocomotor() == nullptr) ? " no-locomotor" : "");
+	}
+	fprintf(stderr, "%s\n", text.c_str());
+	fflush(stderr);
+}
+
 /// Runs one line; returns the engine iterations to wait before the next.
 Int uiRunLine( const HarnessState::UiLine &l )
 {
@@ -646,6 +826,26 @@ Int uiRunLine( const HarnessState::UiLine &l )
 		uiLog(l.frame);
 		return 0;
 	}
+	if (strcmp(l.cmd, "bank") == 0)
+	{
+		uiBank(l.frame);
+		return 0;
+	}
+	if (strcmp(l.cmd, "count") == 0)
+	{
+		// live objects of a template, any owner (F2 evidence: a node before and after it is killed). Reads only.
+		Int n = 0;
+		for (Object *obj = TheGameLogic->getFirstObject(); obj; obj = obj->getNextObject())
+			if (!obj->isEffectivelyDead() && obj->getTemplate()->getName().compareNoCase(l.arg) == 0)
+				++n;
+		fprintf(stderr, "[AoC count] frame %u logic %u %s %d\n", l.frame, s.lastLogicFrame, l.arg, n);
+		fflush(stderr);
+		return 0;
+	}
+	if (strcmp(l.cmd, "selectall") == 0)
+		return uiSelectAll(l);
+	if (strcmp(l.cmd, "dock") == 0)
+		return uiDock(l);
 	if (strcmp(l.cmd, "select") == 0)
 	{
 		// the local player's object of that template with the lowest id, selected as a left click selects it
@@ -725,9 +925,11 @@ void runUiScript()
 	{
 		const HarnessState::UiLine &l = s.uiLines[s.uiNext++];
 		logLine("uiScript line %d at logic frame %u: %s %s", s.uiNext, s.lastLogicFrame, l.cmd, l.arg);
-		if (strcmp(l.cmd, "select") == 0 && s.lastLogicFrame > l.frame)
-			logLine("uiScript: warning: line %d (select, frame %u) runs late, at logic frame %u: its selection message lands on a "
-				"frame that depends on the render rate, so the CRC log is not reproducible; make a select the first line of its frame", s.uiNext, l.frame, s.lastLogicFrame);
+		// select, selectall and dock (F2) send a logic message, so each must be the first line of its frame
+		const Bool sendsLogicMessage = strcmp(l.cmd, "select") == 0 || strcmp(l.cmd, "selectall") == 0 || strcmp(l.cmd, "dock") == 0;
+		if (sendsLogicMessage && s.lastLogicFrame > l.frame)
+			logLine("uiScript: warning: line %d (%s, frame %u) runs late, at logic frame %u: its message lands on a "
+				"frame that depends on the render rate, so the CRC log is not reproducible; make it the first line of its frame", s.uiNext, l.cmd, l.frame, s.lastLogicFrame);
 		s.uiWait = uiRunLine(l);
 	}
 }
@@ -847,7 +1049,7 @@ Int AoCHarness::parseAocUiScript( char *args[], int num )
 		logLine("-aocUiScript: cannot open '%s'; flag ignored", args[1]);
 		return 2;
 	}
-	static const char *const known[] = { "select", "press", "back", "log", "screenshot" };
+	static const char *const known[] = { "select", "press", "back", "log", "screenshot", "dock", "selectall", "bank", "count" };	// F2: dock, selectall, bank, count
 	char text[512];
 	Int lineNumber = 0;
 	Int dropped = 0;
@@ -878,7 +1080,7 @@ Int AoCHarness::parseAocUiScript( char *args[], int num )
 		if (ok)
 			s.uiLineCount++;
 		else
-			logLine("-aocUiScript: unknown command '%s' skipped (select, press, back, log, screenshot)", l.cmd);
+			logLine("-aocUiScript: unknown command '%s' skipped (select, selectall, press, back, dock, log, bank, count, screenshot)", l.cmd);
 	}
 	fclose(f);
 	if (dropped > 0)

@@ -29,6 +29,7 @@
 
 #include "PreRTS.h"	// This must go first in EVERY cpp file in the GameEngine
 
+#include "AoC/AoCRules.h"	// AoC @feature F2
 #include "Common/Player.h"
 #include "Common/Xfer.h"
 #include "GameLogic/Module/SupplyCenterDockUpdate.h"
@@ -44,6 +45,8 @@
 SupplyCenterDockUpdateModuleData::SupplyCenterDockUpdateModuleData()
 {
 	m_grantTemporaryStealthFrames = 0;
+	m_aocAcceptsMask = AoCGather::typeBit( AOC_RESOURCE_CASH );	// AoC @hook 31/10/2026 A drop-off takes cash unless AoCAccepts says otherwise (D11 F2).
+	m_aocValuePerUnit = 1;
 }
 
 // ------------------------------------------------------------------------------------------------
@@ -56,6 +59,9 @@ SupplyCenterDockUpdateModuleData::SupplyCenterDockUpdateModuleData()
 	static const FieldParse dataFieldParse[] =
 	{
 		{ "GrantTemporaryStealth",		INI::parseDurationUnsignedInt,  nullptr, offsetof( SupplyCenterDockUpdateModuleData, m_grantTemporaryStealthFrames ) },
+		// AoC @hook 31/10/2026 The types this drop-off takes and what a unit of them is worth (D11 F2).
+		{ "AoCAccepts",				AoCGather::parseResourceTypeList,  nullptr, offsetof( SupplyCenterDockUpdateModuleData, m_aocAcceptsMask ) },
+		{ "AoCValuePerUnit",	AoCGather::parsePositiveUnsignedInt,  nullptr, offsetof( SupplyCenterDockUpdateModuleData, m_aocValuePerUnit ) },	// at least 1: a negative value wrapped, 0 paid nothing (review F2)
 		{ nullptr, nullptr, nullptr, 0 }
 	};
 
@@ -97,6 +103,24 @@ static UnsignedInt getUpgradedSupplyBoostValue( SupplyTruckAIInterface* supplyTr
 }
 
 // ------------------------------------------------------------------------------------------------
+// AoC @feature F2: floating text of a typed deposit, "+10 Wood": the type's DisplayName when it names a string,
+// else the type name. Text only, for the stock local-player floating text block.
+// ------------------------------------------------------------------------------------------------
+static UnicodeString aocDepositText( Int type, UnsignedInt amount )
+{
+	UnicodeString label;
+	Bool exists = FALSE;
+	if( TheAoCRules && TheAoCRules->getDisplayLabel( type ).isNotEmpty() )
+		label = TheGameText->fetch( TheAoCRules->getDisplayLabel( type ), &exists );
+	if( !exists )
+		label.translate( AsciiString( AoCGather::typeName( type ) ) );
+	UnicodeString text;
+	text.format( L"+%u ", amount );
+	text.concat( label );
+	return text;
+}
+
+// ------------------------------------------------------------------------------------------------
 // ------------------------------------------------------------------------------------------------
 Bool SupplyCenterDockUpdate::action( Object* docker, Object *drone )
 {
@@ -113,17 +137,36 @@ Bool SupplyCenterDockUpdate::action( Object* docker, Object *drone )
 
 	UnsignedInt value = 0;
 
-	value += getUpgradedSupplyBoostValue( supplyTruckAI );
+	// AoC @hook 31/10/2026 Typed cargo: a type this drop-off does not take is refused and kept (D11 F2).
+	const Int aocType = supplyTruckAI->getCargoType();
+	const Bool aocIsCash = (aocType == AOC_RESOURCE_CASH);
+	const Int aocUnits = supplyTruckAI->getNumberBoxes();
+	if( !aocAccepts( aocType ) )
+	{
+		AoCGather::log( docker->getID(), "refused %s %d at dropoff %u reason not-accepted", AoCGather::typeName( aocType ), aocUnits, (UnsignedInt)getObject()->getID() );
+		return FALSE;
+	}
+
+	if( aocIsCash )	// AoC @hook 31/10/2026 The supply boost upgrades are a cash rule (D11 F2).
+		value += getUpgradedSupplyBoostValue( supplyTruckAI );
 
 	Player *ownerPlayer = getObject()->getControllingPlayer();
 	while( supplyTruckAI->loseOneBox() )
-		value += ownerPlayer->getSupplyBoxValue();
+		value += aocIsCash ? ownerPlayer->getSupplyBoxValue() : data->m_aocValuePerUnit;	// AoC @hook 31/10/2026 Cash keeps the box value, other types AoCValuePerUnit (D11 F2).
 
 	if( value > 0)
 	{
-		Money *ownerPlayerMoney = ownerPlayer->getMoney();
-		ownerPlayerMoney->deposit(value);
-		ownerPlayer->getScoreKeeper()->addMoneyEarned(value);
+		// AoC @hook 31/10/2026 Cash keeps the stock deposit and score; any other type goes into the bank (D11 F2).
+		if( aocIsCash )
+		{
+			Money *ownerPlayerMoney = ownerPlayer->getMoney();
+			ownerPlayerMoney->deposit(value);
+			ownerPlayer->getScoreKeeper()->addMoneyEarned(value);
+		}
+		else
+		{
+			ownerPlayer->getAoCBank()->deposit( aocType, value );
+		}
 
 
 		if( data->m_grantTemporaryStealthFrames > 0 )
@@ -146,6 +189,10 @@ Bool SupplyCenterDockUpdate::action( Object* docker, Object *drone )
 		}
 	}
 
+	// AoC @hook 31/10/2026 Gather log line for the deposit (D11 F2).
+	if( aocUnits > 0 )
+		AoCGather::log( docker->getID(), "deposited %s %d value %u dropoff %u", AoCGather::typeName( aocType ), aocUnits, value, (UnsignedInt)getObject()->getID() );
+
 	if (value > 0 && getObject()->isLogicallyVisible())
 	{
 		// OY LOOK!  I AM USING LOCAL PLAYER.  Do not put anything other than TheInGameUI->addFloatingText in the block this controls!!!
@@ -153,7 +200,10 @@ Bool SupplyCenterDockUpdate::action( Object* docker, Object *drone )
 		Coord3D pos;
 		const Coord3D *dockerPos;
 		UnicodeString moneys;
-		moneys.format( TheGameText->fetch( "GUI:AddCash" ), value );
+		if( aocIsCash )
+			moneys.format( TheGameText->fetch( "GUI:AddCash" ), value );
+		else
+			moneys = aocDepositText( aocType, value );	// AoC @hook 31/10/2026 The type label in the floating text (D11 F2).
 		dockerPos = docker->getPosition();
 		pos.x = dockerPos->x;
 		pos.y = dockerPos->y;

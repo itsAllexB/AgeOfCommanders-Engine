@@ -1,6 +1,7 @@
 set(GAMEENGINE_SRC
     Include/AoC/AoCCost.h
     Include/AoC/AoCFolder.h
+    Include/AoC/AoCGather.h
     Include/AoC/AoCHarness.h
     Include/AoC/AoCPopulation.h
     Include/AoC/AoCResourceBank.h
@@ -580,6 +581,7 @@ set(GAMEENGINE_SRC
     Include/Precompiled/PreRTS.h
     Source/AoC/AoCCost.cpp
     Source/AoC/AoCFolder.cpp
+    Source/AoC/AoCGather.cpp
     Source/AoC/AoCHarness.cpp
     Source/AoC/AoCPopulation.cpp
     Source/AoC/AoCResourceBank.cpp

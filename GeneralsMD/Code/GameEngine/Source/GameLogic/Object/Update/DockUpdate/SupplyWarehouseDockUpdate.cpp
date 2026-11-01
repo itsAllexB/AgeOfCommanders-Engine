@@ -44,6 +44,8 @@ SupplyWarehouseDockUpdateModuleData::SupplyWarehouseDockUpdateModuleData()
 {
 	m_startingBoxesData = 1;
 	m_deleteWhenEmpty = FALSE;
+	m_aocResourceType = AOC_RESOURCE_CASH;	// AoC @hook 31/10/2026 A node is cash unless AoCResourceType says otherwise (D11 F2).
+	m_aocKillWhenEmpty = FALSE;
 }
 
 // ------------------------------------------------------------------------------------------------
@@ -57,6 +59,9 @@ SupplyWarehouseDockUpdateModuleData::SupplyWarehouseDockUpdateModuleData()
 	{
 		{ "StartingBoxes",	INI::parseInt,	nullptr, offsetof( SupplyWarehouseDockUpdateModuleData, m_startingBoxesData ) },
 		{ "DeleteWhenEmpty",	INI::parseBool,	nullptr, offsetof( SupplyWarehouseDockUpdateModuleData, m_deleteWhenEmpty ) },
+		// AoC @hook 31/10/2026 The node's resource type and the kill at zero (D11 F2).
+		{ "AoCResourceType",	AoCGather::parseResourceType,	nullptr, offsetof( SupplyWarehouseDockUpdateModuleData, m_aocResourceType ) },
+		{ "AoCKillWhenEmpty",	INI::parseBool,	nullptr, offsetof( SupplyWarehouseDockUpdateModuleData, m_aocKillWhenEmpty ) },
 		{ nullptr, nullptr, nullptr, 0 }
 	};
 
@@ -96,6 +101,8 @@ Bool SupplyWarehouseDockUpdate::action( Object* docker, Object *drone )
 	Real curDistSqr = ThePartitionManager->getDistanceSquared(docker, getObject(), FROM_BOUNDINGSPHERE_2D);
 	if (curDistSqr > closeEnoughSqr) {
 		DEBUG_LOG(("Failing dock, dist %f, not close enough(%f).", WWMath::SqrtOrigin(curDistSqr), WWMath::SqrtOrigin(closeEnoughSqr)));
+		// AoC @hook 31/10/2026 Gather log line for a refused pick-up: the docker stands too far from the node (D11 F2).
+		AoCGather::log( docker->getID(), "refused at node %u reason too-far dist2 %.0f limit2 %.0f", (UnsignedInt)getObject()->getID(), curDistSqr, closeEnoughSqr );
 		// Make it twitch a little.
 		Coord3D newPos = *docker->getPosition();
 		Real range = 0.4*PATHFIND_CELL_SIZE_F;
@@ -108,12 +115,31 @@ Bool SupplyWarehouseDockUpdate::action( Object* docker, Object *drone )
 	--m_boxesStored;// so the docker sees that I am shy by one box (or empty) from within his gainOneBox()
 
 	SupplyTruckAIInterface *ai = docker->getAIUpdateInterface()->getSupplyTruckAIInterface();
+	// AoC @hook 31/10/2026 One type at a time: refuse a type the docker cannot carry, drop a load of another type first (D11 F2).
+	if( ai && !aocPreparePickup( docker, ai ) )
+	{
+		++m_boxesStored;
+		return FALSE;
+	}
 	if( ai && ai->gainOneBox( m_boxesStored ) )
 	{
+		// AoC @hook 31/10/2026 Gather log lines: the unit picked and, at zero, what happens to the node (D11 F2).
+		AoCGather::log( docker->getID(), "picked %s 1 carried %d/%d left %d node %u", AoCGather::typeName( ai->getCargoType() ),
+			ai->getNumberBoxes(), ai->getMaxUnitsFor( ai->getCargoType() ), m_boxesStored, (UnsignedInt)getObject()->getID() );
+		if( m_boxesStored == 0 )
+			AoCGather::log( docker->getID(), "depleted node %u %s", (UnsignedInt)getObject()->getID(),
+				getSupplyWarehouseDockUpdateModuleData()->m_deleteWhenEmpty ? "deleted" : (getSupplyWarehouseDockUpdateModuleData()->m_aocKillWhenEmpty ? "killed" : "kept") );
+
 		if( m_boxesStored == 0 && getSupplyWarehouseDockUpdateModuleData()->m_deleteWhenEmpty )
 		{
 			TheGameLogic->destroyObject( getObject() );
 			return FALSE; //Yer done.  And so am I.
+		}
+		// AoC @hook 31/10/2026 AoCKillWhenEmpty: kill() runs the Die modules (stump, DirtMound), which destroyObject skips (D11 F2).
+		else if( m_boxesStored == 0 && getSupplyWarehouseDockUpdateModuleData()->m_aocKillWhenEmpty )
+		{
+			getObject()->kill();
+			return FALSE;
 		}
 		else
 		{
@@ -132,6 +158,41 @@ Bool SupplyWarehouseDockUpdate::action( Object* docker, Object *drone )
 
 
 	return FALSE;
+}
+
+// ------------------------------------------------------------------------------------------------
+// AoC @feature F2: typed pick-up (D11 2.2, D2 3.1). With stock data the node and the cargo are cash, nothing is
+// dropped and the type does not change.
+// ------------------------------------------------------------------------------------------------
+Bool SupplyWarehouseDockUpdate::aocPreparePickup( Object *docker, SupplyTruckAIInterface *ai )
+{
+	const Int nodeType = getAoCResourceType();
+	if( !ai->canCarryResourceType( nodeType ) )
+	{
+		AoCGather::log( docker->getID(), "refused %s at node %u reason cannot-carry", AoCGather::typeName( nodeType ), (UnsignedInt)getObject()->getID() );
+		return FALSE;
+	}
+	const Int oldType = ai->getCargoType();
+	if( AoCGather::mustDropBeforePickup( oldType, ai->getNumberBoxes(), nodeType ) )
+	{
+		Int dropped = 0;
+		while( ai->loseOneBox() )
+			++dropped;
+		AoCGather::log( docker->getID(), "dropped %s %d reason type-switch-to-%s", AoCGather::typeName( oldType ), dropped, AoCGather::typeName( nodeType ) );
+	}
+	if( oldType != nodeType )
+		ai->setCargoType( nodeType );
+	return TRUE;
+}
+
+// ------------------------------------------------------------------------------------------------
+/*static*/ Int SupplyWarehouseDockUpdate::getAoCNodeTypeOf( const Object *obj )
+{
+	if( obj == nullptr )
+		return -1;
+	static const NameKeyType key_warehouseUpdate = NAMEKEY("SupplyWarehouseDockUpdate");
+	const SupplyWarehouseDockUpdate *warehouseModule = (const SupplyWarehouseDockUpdate *)obj->findUpdateModule( key_warehouseUpdate );
+	return warehouseModule ? warehouseModule->getAoCResourceType() : -1;
 }
 
 void SupplyWarehouseDockUpdate::setDockCrippled( Bool setting )

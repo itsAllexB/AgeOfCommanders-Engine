@@ -41,10 +41,15 @@
 //                                   e.g. NO_HOUSING:12) and blocked_units (the templates refused for
 //                                   housing since the previous row with the population each needs, its
 //                                   initial payload included, e.g. ChinaVehicleTroopCrawler(9), up to 8
-//                                   names, |-separated). With -aiLog, stderr also gets each AI player's
+//                                   names, |-separated), then (F2) workers_<Type> (gatherers whose assigned
+//                                   type is that type) and workers_idle (gatherers neither ferrying nor
+//                                   doing anything else). With -aiLog, stderr also gets each AI player's
 //                                   population when -saveAtFrame saves and at the first frame of a loaded
 //                                   game, and, at a row where used + reserved is above the cap, what the
 //                                   population is made of (template x count).
+//   (any flag)                      F2: the typed gather path prints one stderr line per event while any harness
+//                                   flag is given, "[AoC gather] frame N <objectId> <event>": picked, deposited,
+//                                   dropped, depleted, refused. Nothing in a stock run; logic never reads it.
 //   -saveAtFrame <N> <name>         F1: write the stock save game <name>.sav (the save menu's path,
 //                                   TheGameState->saveGame) once logic frame N (1 or more) has run, from the
 //                                   engine loop. Load it with the stock -loadsave <name>.sav at the same
@@ -64,11 +69,25 @@
 //                                                        plus " place=<template>" while a placement is pending
 //                                     screenshot <file>  the engine's Release PNG screenshot (Ctrl+F12 path),
 //                                                        moved from <user data>/Screenshots to <file>
-//                                   After select, press and back the next line waits 3 engine iterations so the
-//                                   control bar re-evaluates. Use absolute paths. select sends the stock selection
-//                                   message, as a click does, and so moves the CRC; press, back, log and screenshot
-//                                   send nothing. A select must be the first line of its frame and come after the
-//                                   lines before it have settled: a late select (warned on stderr) lands on a frame
+//                                     selectall <Template> F2: every object of the local player with that
+//                                                        template, selected in one stock selection message
+//                                     dock <Template>    F2: the stock dock order (MSG_DOCK, a right-click's) of
+//                                                        the selection on the object of that template nearest
+//                                                        the first selected object (lowest id)
+//                                     bank               F2: stderr "[AoC bank] frame <frame> logic <frame run>
+//                                                        <Type>=<n>... cargo <id> <Type>:<n>/<capacity> asg <Type>
+//                                                        at <x>,<y> ai <state type> goal <id> to <x>,<y>;" (asg: the
+//                                                        assigned type, - when none) with the local
+//                                                        player's bank and one cargo segment per selected object,
+//                                                        the first selected (lowest id) first
+//                                     count <Template>   F2: stderr "[AoC count] frame <frame> logic <frame run>
+//                                                        <Template> <n>", the live objects of that template
+//                                   After select, selectall, press, back and dock the next line waits 3 engine
+//                                   iterations so the control bar re-evaluates. Use absolute paths. select, selectall
+//                                   and dock send the stock message a click sends, so they move the CRC and the
+//                                   replay records them; press, back, log, bank, count and screenshot send nothing. Each of
+//                                   select, selectall and dock must be the first line of its frame and come after the
+//                                   lines before it have settled: a late one (warned on stderr) lands on a frame
 //                                   that depends on the render rate, and the CRC log is no longer reproducible.
 //                                   Refused under -headless (no windows). Over 64 lines or a line over 511
 //                                   characters is reported on stderr and skipped.

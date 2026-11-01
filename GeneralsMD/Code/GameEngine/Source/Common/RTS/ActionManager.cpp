@@ -240,6 +240,9 @@ Bool ActionManager::canTransferSuppliesAt( const Object *obj, const Object *tran
 	if( warehouseModule )
 		if( warehouseModule->getBoxesStored() == 0 || transferDest->getRelationship( obj ) == ENEMIES )
 			return FALSE;
+	// AoC @hook 31/10/2026 A node of a type the gatherer cannot carry is not a dock for it (D11 F2).
+	if( warehouseModule && !supplyTruck->canCarryResourceType( warehouseModule->getAoCResourceType() ) )
+		return FALSE;
 
 	// if it is a supply center, I must have boxes, and must be controlled by the same player
 	// (not merely an ally... otherwise you may find yourself funding your allies. ick.)
@@ -248,6 +251,9 @@ Bool ActionManager::canTransferSuppliesAt( const Object *obj, const Object *tran
 	if( centerModule  )
 		if( supplyTruck->getNumberBoxes() == 0  || transferDest->getControllingPlayer() != obj->getControllingPlayer() )
 			return FALSE;
+	// AoC @hook 31/10/2026 Nor is a drop-off that does not take the type carried (D11 F2).
+	if( centerModule && !centerModule->aocAccepts( supplyTruck->getCargoType() ) )
+		return FALSE;
 
 	// if he is not a warehouse or a center, then shut the hell up
 	if( (warehouseModule == nullptr)  &&  (centerModule == nullptr) )
