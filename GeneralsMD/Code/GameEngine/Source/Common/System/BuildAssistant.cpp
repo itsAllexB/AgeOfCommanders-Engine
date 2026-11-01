@@ -486,7 +486,11 @@ void BuildAssistant::buildObjectLineNow( Object *constructorObject, const ThingT
 			// null for a human player when units in the way refuse to move: that segment is not charged
 			if( buildObjectNow( constructorObject, what, &tileBuildInfo->positions[ i ], angle, owningPlayer ) == nullptr )
 				continue;
-			bank->withdraw( segmentCost, placed == 0 );	// the cash sound once per line, not per segment
+			// the count covered this segment and nothing in the instant branch spends: a failed withdrawal means something
+			// in the loop did, and a typed vector's all-or-nothing withdrawal would leave the segment unpaid (review F10, finding 3)
+			const Bool paid = bank->withdraw( segmentCost, placed == 0 );	// the cash sound once per line, not per segment
+			DEBUG_ASSERTCRASH( paid, ("AoC F10: segment %d of %s placed but not paid; the bank changed inside the line", i, what->getName().str()) );
+			(void)paid;
 			++placed;
 		}
 		if( AoCWall::logEnabled() )
