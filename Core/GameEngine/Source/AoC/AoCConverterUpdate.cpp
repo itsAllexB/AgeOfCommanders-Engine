@@ -54,6 +54,7 @@ AoCConverterRecipe::AoCConverterRecipe()
 	outputAmount = 1;
 	cycleMsecs = 0;
 	cycleFrames = 0;
+	retryFrames = 0;
 	requiresPower = FALSE;
 	runningCondition = -1;
 }
@@ -76,6 +77,8 @@ void AoCConverterRecipe::finish()
 		input.amount[inputType] = inputAmount;
 	output.clear();
 	output.amount[outputType] = outputAmount;
+	// The one-second retry, converted once here at the live rate like cycleFrames, so a cycle end does no float maths.
+	retryFrames = AoCConverter::retryFrames();
 }
 
 // ------------------------------------------------------------------------------------------------
@@ -150,17 +153,19 @@ AoCConverterState::AoCConverterState()
 {
 	cycleEndFrame = 0;
 	running = FALSE;
-	idleReason = AOC_CONVERTER_IDLE_NONE;
+	idleReason = AOC_CONVERTER_IDLE_STARTING;	// until the first cycle end (review F3, finding 3)
 }
 
 // ------------------------------------------------------------------------------------------------
-void AoCConverterState::xfer( Xfer *xfer )
+void AoCConverterState::xfer( Xfer *xfer, XferVersion version )
 {
+	if (version < 1)
+		return;
 	xfer->xferUnsignedInt( &cycleEndFrame );
 	xfer->xferBool( &running );
 	xfer->xferInt( &idleReason );
 	if (xfer->getXferMode() == XFER_LOAD && (idleReason < AOC_CONVERTER_IDLE_NONE || idleReason >= AOC_CONVERTER_IDLE_COUNT))
-		idleReason = AOC_CONVERTER_IDLE_NONE;
+		idleReason = running ? AOC_CONVERTER_IDLE_NONE : AOC_CONVERTER_IDLE_STARTING;
 }
 
 // ------------------------------------------------------------------------------------------------
@@ -182,6 +187,8 @@ AoCConverterIdleReason AoCConverter::blockedReason( const AoCConverterRecipe &re
 		return AOC_CONVERTER_IDLE_SOLD;
 	if (facts.neutral)
 		return AOC_CONVERTER_IDLE_NEUTRAL;
+	if (facts.disabled)
+		return AOC_CONVERTER_IDLE_DISABLED;
 	if (recipe.requiresPower && facts.underpowered)
 		return AOC_CONVERTER_IDLE_NO_POWER;
 	return AOC_CONVERTER_IDLE_NONE;
@@ -194,7 +201,7 @@ AoCConverterStep AoCConverter::endCycle( AoCConverterState &state, const AoCConv
 	AoCConverterStep step;
 	step.ran = FALSE;
 	step.logIdle = FALSE;
-	step.sleepFrames = retryFrames();
+	step.sleepFrames = recipe.retryFrames;	// computed at parse time (finish)
 
 	AoCConverterIdleReason reason = blockedReason(recipe, facts);
 	if (reason == AOC_CONVERTER_IDLE_NONE && bank == nullptr)
@@ -250,6 +257,8 @@ const char *AoCConverter::reasonName( Int reason )
 		case AOC_CONVERTER_IDLE_UNDER_CONSTRUCTION: return "under-construction";
 		case AOC_CONVERTER_IDLE_SOLD: return "sold";
 		case AOC_CONVERTER_IDLE_NEUTRAL: return "neutral";
+		case AOC_CONVERTER_IDLE_DISABLED: return "disabled";
+		case AOC_CONVERTER_IDLE_STARTING: return "starting";
 		default: return "?";
 	}
 }
@@ -342,7 +351,8 @@ void AoCConverter::log( UnsignedInt objectId, const char *format, ... )
 // ------------------------------------------------------------------------------------------------
 AoCConverterUpdate::AoCConverterUpdate( Thing *thing, const ModuleData *moduleData ) : UpdateModule( thing, moduleData )
 {
-	// The first cycle ends one CycleTime after the object appears (a save load overwrites this in xfer).
+	// The first cycle ends one CycleTime after the object appears, the reason "starting" until then (the constructor
+	// of the state); a save load overwrites both in xfer.
 	m_state.cycleEndFrame = TheGameLogic->getFrame() + getAoCConverterUpdateModuleData()->m_recipe.cycleFrames;
 }
 
@@ -354,7 +364,33 @@ AoCConverterUpdate::~AoCConverterUpdate()
 // ------------------------------------------------------------------------------------------------
 DisabledMaskType AoCConverterUpdate::getDisabledTypesToProcess() const
 {
-	return MAKE_DISABLED_MASK2( DISABLED_UNDERPOWERED, DISABLED_SCRIPT_UNDERPOWERED );
+	// Every type (review F3, finding 2): the cycle end decides, so an EMP'd or hacked converter clears its condition and
+	// reports "disabled" instead of keeping the last cycle's state while the scheduler skips it.
+	return DISABLEDMASK_ALL;
+}
+
+// ------------------------------------------------------------------------------------------------
+void AoCConverterUpdate::onObjectCreated()
+{
+	UpdateModule::onObjectCreated();
+#ifdef DEBUG_CRASHING
+	// The data rule of the header: each converter clears its own condition when it idles, so two converters on one object
+	// must not share a RunningCondition. Checked once per object in debug builds; a parse-time refusal would need the
+	// template inside the module data parse, which the module factory does not pass.
+	const Int condition = getAoCConverterUpdateModuleData()->m_recipe.runningCondition;
+	if (condition >= 0)
+	{
+		for (BehaviorModule **m = getObject()->getBehaviorModules(); *m; ++m)
+		{
+			const AoCConverterInterface *other = (*m)->getAoCConverterInterface();
+			if (other == nullptr || other == this)
+				continue;
+			DEBUG_ASSERTCRASH(((const AoCConverterUpdate *)other)->getAoCConverterUpdateModuleData()->m_recipe.runningCondition != condition,
+				("%s: two AoCConverterUpdate modules share RunningCondition %s", getObject()->getTemplate()->getName().str(),
+				ModelConditionFlags::getNameFromSingleBit(condition)));
+		}
+	}
+#endif
 }
 
 // ------------------------------------------------------------------------------------------------
@@ -372,6 +408,10 @@ UpdateSleepTime AoCConverterUpdate::update()
 	facts.sold = obj->testStatus( OBJECT_STATUS_SOLD );
 	facts.neutral = (owner == nullptr) || obj->isNeutralControlled();
 	facts.underpowered = obj->isDisabledByType( DISABLED_UNDERPOWERED ) || obj->isDisabledByType( DISABLED_SCRIPT_UNDERPOWERED );
+	DisabledMaskType otherDisables = obj->getDisabledFlags();
+	otherDisables.set( DISABLED_UNDERPOWERED, 0 );
+	otherDisables.set( DISABLED_SCRIPT_UNDERPOWERED, 0 );
+	facts.disabled = otherDisables.any();
 
 	const AoCConverterStep step = AoCConverter::endCycle( m_state, getAoCConverterUpdateModuleData()->m_recipe, facts,
 		owner ? owner->getAoCBank() : nullptr, now );
@@ -529,14 +569,14 @@ void AoCConverterUpdate::crc( Xfer *xfer )
 void AoCConverterUpdate::xfer( Xfer *xfer )
 {
 	// version
-	const XferVersion currentVersion = 1;
+	const XferVersion currentVersion = AoCConverterState::XFER_VERSION;
 	XferVersion version = currentVersion;
 	xfer->xferVersion( &version, currentVersion );
 
 	// extend base class (it saves the next call frame, so the sleep resumes on load)
 	UpdateModule::xfer( xfer );
 
-	m_state.xfer( xfer );
+	m_state.xfer( xfer, version );
 }
 
 // ------------------------------------------------------------------------------------------------

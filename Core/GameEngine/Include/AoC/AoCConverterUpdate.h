@@ -31,11 +31,17 @@
 //     RunningCondition = USER_1    ; model condition set while a cycle runs; default none
 //   End
 //
-// At each cycle end: if the object is under construction, sold, owned by the neutral player, or (RequiresPower)
-// underpowered, it records that idle reason, clears the condition and retries in one second; else, if the owner's bank
-// holds the input, it withdraws the input, deposits the output, sets the condition and sleeps CycleTime; else it clears
-// the condition, records "no input" and retries in one second. The first cycle ends CycleTime after the object appears.
-// D8's "smoke only while converting" is the running condition. Power draw is the stock EnergyProduction.
+// At each cycle end: if the object is under construction, sold, owned by the neutral player, disabled (EMP, hacked,
+// subdued, a script's disable and the like), or (RequiresPower) underpowered, it records that idle reason, clears the
+// condition and retries in one second; else, if the owner's bank holds the input, it withdraws the input, deposits the
+// output, sets the condition and sleeps CycleTime; else it clears the condition, records "no input" and retries in one
+// second. The first cycle ends CycleTime after the object appears; until then the reason is "starting". D8's "smoke
+// only while converting" is the running condition, so it is off whenever the converter does not convert. Power draw is
+// the stock EnergyProduction.
+//
+// Data rule: one object carries at most one converter per RunningCondition (two converters may share an object only
+// with distinct conditions, or with none), because each converter clears its own condition when it idles. A debug
+// build asserts on it when the object is created.
 //
 // Type names resolve through TheAoCRules at parse time, like AoCCost. With no AoCResourceType defined a template that
 // carries the module is an INI error: the stock game never carries it, so stock stays byte-identical.
@@ -55,17 +61,20 @@ class Xfer;
 /// Why a converter is not running. Saved as an Int: append only.
 enum AoCConverterIdleReason CPP_11(: Int)
 {
-	AOC_CONVERTER_IDLE_NONE = 0,						///< running, or no cycle has ended yet
+	AOC_CONVERTER_IDLE_NONE = 0,						///< running (the last cycle end converted)
 	AOC_CONVERTER_IDLE_NO_INPUT,						///< the owner's bank lacks the input
 	AOC_CONVERTER_IDLE_NO_POWER,						///< RequiresPower and the object is underpowered
 	AOC_CONVERTER_IDLE_UNDER_CONSTRUCTION,
 	AOC_CONVERTER_IDLE_SOLD,
 	AOC_CONVERTER_IDLE_NEUTRAL,							///< owned by the neutral player (or by none)
+	AOC_CONVERTER_IDLE_DISABLED,						///< disabled by anything but the two power types (EMP, hacked, subdued, script)
+	AOC_CONVERTER_IDLE_STARTING,						///< created, and its first cycle has not ended yet (F6 shows "starting")
 	AOC_CONVERTER_IDLE_COUNT
 };
 
 /// What F6's steel tooltip reads per converter. Reached from an object the stock way: every BehaviorModule answers
-/// getAoCConverterInterface(), NULL unless it is a converter.
+/// getAoCConverterInterface(), NULL unless it is a converter. isRunning() is TRUE exactly while the running condition is
+/// set; otherwise getIdleReason() says why (STARTING before the first cycle end).
 class AoCConverterInterface
 {
 public:
@@ -82,6 +91,7 @@ struct AoCConverterRecipe
 	UnsignedInt outputAmount;	///< OutputAmount, at least 1
 	UnsignedInt cycleMsecs;		///< CycleTime as written
 	UnsignedInt cycleFrames;	///< CycleTime in frames at the live rate, converted at parse time
+	UnsignedInt retryFrames;	///< the one-second retry in frames at the live rate, set by finish (no float at a cycle end)
 	Bool requiresPower;				///< RequiresPower
 	Int runningCondition;			///< RunningCondition, a ModelConditionFlagType; -1 none
 	AoCCost input;						///< inputType:inputAmount, zero for a passive producer (built by finish)
@@ -91,8 +101,8 @@ struct AoCConverterRecipe
 
 	Bool isPassive() const { return inputType < 0; }
 
-	/// After the block: OutputType is required (INI_INVALID_DATA otherwise); builds the input and output vectors so
-	/// the bank's withdraw and deposit take them as they are.
+	/// After the block: OutputType and CycleTime are required (INI_INVALID_DATA otherwise); builds the input and output
+	/// vectors so the bank's withdraw and deposit take them as they are, and sets retryFrames.
 	void finish();
 
 	/// The module needs resource types: INI_INVALID_DATA while TheAoCRules is disabled (stock data).
@@ -108,16 +118,20 @@ struct AoCConverterRecipe
 	static void parseRunningCondition( INI *ini, void *instance, void *store, const void *userData );
 };
 
-/// The runtime fields (D11 F3 decision 2), saved by the module's xfer (version 1) and written into its crc.
+/// The runtime fields (D11 F3 decision 2), saved by the module's xfer and written into its crc.
 struct AoCConverterState
 {
+	enum { XFER_VERSION = 1 };	///< the module's block version: 1, the three fields below
+
 	UnsignedInt cycleEndFrame;	///< the frame of the next cycle end
 	Bool running;								///< the last cycle end converted (the running condition is set)
-	Int idleReason;							///< AoCConverterIdleReason of the last cycle end; NONE while running
+	Int idleReason;							///< AoCConverterIdleReason; NONE while running, STARTING until the first cycle end
 
 	AoCConverterState();
 
-	void xfer( Xfer *xfer );
+	/// The fields of the module's block, after its version byte and the UpdateModule block: AoCConverterUpdate::xfer
+	/// calls this with the version it read. A loaded reason outside the enum becomes NONE when running, else STARTING.
+	void xfer( Xfer *xfer, XferVersion version );
 	void crc( Xfer *xfer );
 };
 
@@ -127,9 +141,10 @@ struct AoCConverterFacts
 	Bool underConstruction;		///< OBJECT_STATUS_UNDER_CONSTRUCTION
 	Bool sold;								///< OBJECT_STATUS_SOLD
 	Bool neutral;							///< owned by the neutral player, or by none
+	Bool disabled;						///< any disable but the two power types (EMP, hacked, subdued, a script's disable ...)
 	Bool underpowered;				///< DISABLED_UNDERPOWERED (or the script's DISABLED_SCRIPT_UNDERPOWERED)
 
-	AoCConverterFacts() : underConstruction( FALSE ), sold( FALSE ), neutral( FALSE ), underpowered( FALSE ) {}
+	AoCConverterFacts() : underConstruction( FALSE ), sold( FALSE ), neutral( FALSE ), disabled( FALSE ), underpowered( FALSE ) {}
 };
 
 /// What one cycle end did, for the module to apply and log.
@@ -142,7 +157,8 @@ struct AoCConverterStep
 
 namespace AoCConverter
 {
-	/// The idle reason the object itself imposes (construction, sale, neutral owner, power), NONE when it may convert.
+	/// The idle reason the object itself imposes (construction, sale, neutral owner, a disable, power), NONE when it
+	/// may convert.
 	AoCConverterIdleReason blockedReason( const AoCConverterRecipe &recipe, const AoCConverterFacts &facts );
 
 	/// One cycle end at frame 'now': updates the state and, when it runs, withdraws the input from and deposits the output
@@ -150,10 +166,11 @@ namespace AoCConverter
 	AoCConverterStep endCycle( AoCConverterState &state, const AoCConverterRecipe &recipe, const AoCConverterFacts &facts,
 		AoCResourceBank *bank, UnsignedInt now );
 
-	/// The one-second retry in frames, through the F15 helper (AoCGather::msecsToFrames), never a fixed count.
+	/// The one-second retry in frames, through the F15 helper (AoCGather::msecsToFrames), never a fixed count. Called at
+	/// parse time (AoCConverterRecipe::finish), which stores it in the recipe.
 	UnsignedInt retryFrames();
 
-	/// "no-input", "no-power", "under-construction", "sold", "neutral", "none".
+	/// "no-input", "no-power", "under-construction", "sold", "neutral", "disabled", "starting", "none".
 	const char *reasonName( Int reason );
 
 	/// "Iron:2" (every non-zero component, "Name:amount" separated by spaces), "none" for a zero vector.
@@ -197,9 +214,12 @@ public:
 
 	virtual AoCConverterInterface *getAoCConverterInterface() override { return this; }
 
-	/// Underpowered objects still update: RequiresPower = No keeps converting, Yes records "no power". Any other disable
-	/// (EMP, hacked, subdued, script) skips the update as for the stock modules, so the cycle waits until it ends.
+	/// Every disable type: the module decides (RequiresPower = No keeps converting while underpowered, Yes records
+	/// "no power"; any other disable records "disabled" and clears the condition), the same under either mask rule of
+	/// GameLogic::update.
 	virtual DisabledMaskType getDisabledTypesToProcess() const override;
+	/// Debug builds: asserts the data rule (no second converter with the same RunningCondition on the object).
+	virtual void onObjectCreated() override;
 	virtual UpdateSleepTime update() override;
 
 	// AoCConverterInterface

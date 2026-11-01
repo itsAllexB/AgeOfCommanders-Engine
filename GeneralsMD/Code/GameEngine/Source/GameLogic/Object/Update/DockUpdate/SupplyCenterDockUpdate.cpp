@@ -184,7 +184,7 @@ Bool SupplyCenterDockUpdate::action( Object* docker, Object *drone )
 		if( aocIsCash )
 			moneys.format( TheGameText->fetch( "GUI:AddCash" ), value );
 		else
-			moneys = AoCGather::depositText( aocType, value );	// AoC @hook 31/10/2026 The type label in the floating text (D11 F2; the text helper is shared with F3).
+			moneys = AoCGather::depositText( aocType, value );	// AoC @hook 01/11/2026 The type label in the floating text, through the text helper F2 and F3 share (D11 F2, F3).
 		dockerPos = docker->getPosition();
 		pos.x = dockerPos->x;
 		pos.y = dockerPos->y;

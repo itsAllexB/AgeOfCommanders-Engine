@@ -54,7 +54,7 @@
 //                                   dropped, depleted, refused. Nothing in a stock run; logic never reads it.
 //                                   F3: a converter prints "[AoC convert] frame N <objectId> ran <input> -> <output>
 //                                   bank <Type>=<n>... player <index> [<condition> on|off]" at each cycle end that converts
-//                                   and "... idle <reason> bank ..." (no-input, no-power, under-construction, sold, neutral)
+//                                   and "... idle <reason> bank ..." (no-input, no-power, under-construction, sold, neutral, disabled)
 //                                   once per change of reason. Nothing in a stock run; logic never reads it.
 //   -saveAtFrame <N> <name>         F1: write the stock save game <name>.sav (the save menu's path,
 //                                   TheGameState->saveGame) once logic frame N (1 or more) has run, from the
