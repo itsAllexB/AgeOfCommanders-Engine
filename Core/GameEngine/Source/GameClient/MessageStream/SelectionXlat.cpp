@@ -28,6 +28,8 @@
 
 #include "PreRTS.h"	// This must go first in EVERY cpp file in the GameEngine
 
+#include "AoC/AoCNodePick.h"	// AoC @hook 02/11/2026 F2b: the mouse-over pick finds a resource node for gatherers (D11 F2).
+
 #include "Common/ActionManager.h"
 #include "Common/GameAudio.h"
 #include "Common/GameEngine.h"
@@ -575,6 +577,8 @@ GameMessageDisposition SelectionTranslator::onRawMousePosition(MAYBE_UNUSED cons
 		UnsignedInt pickType = getPickTypesForContext( true /*TheInGameUI->isInForceAttackMode()*/ );
 
 		Drawable *underCursor = TheTacticalView->pickDrawable( &pixel, TheInGameUI->isInForceAttackMode(), (PickType) pickType );
+		// AoC @hook 02/11/2026 F2b: a node the gatherer selection can dock at gets the drawable hint, so the dock cursor (D11 F2).
+		underCursor = AoCNodePick::nodeOrStockPick( &pixel, TheInGameUI->isInForceAttackMode(), pickType, underCursor );
 		Object *objUnderCursor = underCursor ? underCursor->getObject() : nullptr;
 
 		if( objUnderCursor && (!objUnderCursor->isEffectivelyDead() || objUnderCursor->isKindOf( KINDOF_ALWAYS_SELECTABLE )) )

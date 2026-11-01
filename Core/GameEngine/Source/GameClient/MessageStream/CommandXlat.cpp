@@ -30,6 +30,8 @@
 
 #include "stdlib.h"				// VC++ wants this here, or gives compile error...
 
+#include "AoC/AoCNodePick.h"	// AoC @hook 02/11/2026 F2b: a resource node under the cursor is a click target for gatherers (D11 F2).
+
 #include "Common/AudioAffect.h"
 #include "Common/ActionManager.h"
 #include "Common/FramePacer.h"
@@ -4895,6 +4897,8 @@ GameMessageDisposition CommandTranslator::translateGameMessage(const GameMessage
 					Drawable *draw = TheTacticalView->pickDrawable(&msg->getArgument(0)->pixelRegion.lo,
 																													TheInGameUI->isInForceAttackMode(),
 																													(PickType) pickType);
+					// AoC @hook 02/11/2026 F2b: a node the gatherer selection can dock at is the clicked drawable (D11 F2).
+					draw = AoCNodePick::nodeOrStockPick(&msg->getArgument(0)->pixelRegion.lo, TheInGameUI->isInForceAttackMode(), pickType, draw);
 
 					// TheSuperHackers @bugfix Stubbjax 07/08/2025 Prevent dead units blocking positional context commands
 					Object* obj = draw ? draw->getObject() : nullptr;
@@ -4976,6 +4980,8 @@ GameMessageDisposition CommandTranslator::translateGameMessage(const GameMessage
 				Drawable *draw = TheTacticalView->pickDrawable(&msg->getArgument(0)->pixelRegion.lo,
 																												TheInGameUI->isInForceAttackMode(),
 																												(PickType) pickType);
+				// AoC @hook 02/11/2026 F2b: a node the gatherer selection can dock at is the clicked drawable (D11 F2).
+				draw = AoCNodePick::nodeOrStockPick(&msg->getArgument(0)->pixelRegion.lo, TheInGameUI->isInForceAttackMode(), pickType, draw);
 
 				// TheSuperHackers @bugfix Stubbjax 07/08/2025 Prevent dead units blocking positional context commands
 				Object* obj = draw ? draw->getObject() : nullptr;
