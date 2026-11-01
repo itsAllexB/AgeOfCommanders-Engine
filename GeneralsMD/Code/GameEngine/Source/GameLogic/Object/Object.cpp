@@ -5012,6 +5012,22 @@ void Object::onPartitionCellChange()
 }
 
 //-------------------------------------------------------------------------------------------------
+// AoC @hook 01/11/2026 The first cell update of an object loaded from a save. Its look and shroud are already in the saved
+// cells, so only the value and threat maps (not saved) are built again. An object made after the saving frame's partition
+// update (a pilot ejected by delayed damage) had not looked yet: no look, no shroud to keep, so it takes the stock path and
+// looks now, as the stock load does (the saving game looks in the next frame's update) (D11 F14).
+void Object::friend_aocOnPartitionCellAfterLoad()
+{
+	if( m_partitionLastLook->isInvalid() && m_partitionLastShroud->isInvalid() )
+	{
+		onPartitionCellChange();
+		return;
+	}
+	handleValueMap();
+	handleThreatMap();
+}
+
+//-------------------------------------------------------------------------------------------------
 void Object::handlePartitionCellMaintenance()
 {
 	handleShroud();
