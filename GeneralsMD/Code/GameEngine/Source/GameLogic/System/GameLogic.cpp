@@ -5322,14 +5322,15 @@ void GameLogic::prepareLogicForObjectLoad()
 	*     cannot load, so every build also saves the objects in the version 11 order (newest first, no reversal on load)
 	* 13: AoC F4: m_aocPopulationCap, the lobby population cap (D11 F4).
 	* 14: AoC F7: m_aocAmbientCivilians, m_aocVictory and m_aocRichnessPerMille, the lobby fields the logic reads (D11 F7).
-	* 15: AoC F14a: the logic random generator and the sleepy-update heap layout (AoCSaveFidelity, D11 F14).
+	* 15: AoC F14a: the logic random generator, the sleepy-update heap layout, the AI groups, the pathfind queue and the
+	*     pathfinder zones (AoCSaveFidelity, D11 F14).
 	*/
 // ------------------------------------------------------------------------------------------------
 void GameLogic::xfer( Xfer *xfer )
 {
 
 	// version
-	const XferVersion currentVersion = 15;	// AoC @hook 01/11/2026 14 to 15, the generator and the heap layout (D11 F14).
+	const XferVersion currentVersion = 15;	// AoC @hook 01/11/2026 14 to 15, the save fidelity block (D11 F14).
 	XferVersion version = currentVersion;
 	xfer->xferVersion( &version, currentVersion );
 
@@ -5713,8 +5714,8 @@ void GameLogic::xfer( Xfer *xfer )
 		m_aocVictory = AOC_VICTORY_CONQUEST;
 		m_aocRichnessPerMille = AOC_RICHNESS_DEFAULT_PER_MILLE;
 	}
-	// AoC @hook 01/11/2026 The logic random generator and the sleepy-update heap layout, restored by loadPostProcess and
-	// GameState::gameStatePostProcessLoad; an older save keeps the stock behaviour (D11 F14).
+	// AoC @hook 01/11/2026 The logic random generator, the heap layout, the AI groups, the pathfind queue and the zones,
+	// restored by loadPostProcess and GameState::gameStatePostProcessLoad; an older save keeps the stock behaviour (D11 F14).
 	if( version >= AoCSaveFidelity::XFER_FIRST_VERSION )
 		AoCSaveFidelity::xfer( xfer, m_sleepyUpdates );
 	else if( xfer->getXferMode() == XFER_LOAD )

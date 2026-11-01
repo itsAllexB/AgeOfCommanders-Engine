@@ -2819,7 +2819,11 @@ void PartitionManager::update()
 #endif
 		TheContactList = nullptr;
 
-		processPendingUndoShroudRevealQueue();
+		// AoC @fix 01/11/2026 Not during a save game load: the update at the end of gameStatePostProcessLoad runs with the
+		// next frame's number, so it took the unlooks due on that frame before the frame's CRC, which the saving game takes
+		// in that frame's own update (D11 F14).
+		if( !(TheGameState && TheGameState->isInLoadGame()) )
+			processPendingUndoShroudRevealQueue();
 	}
 
 #if defined(RTS_DEBUG)

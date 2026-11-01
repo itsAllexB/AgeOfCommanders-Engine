@@ -5093,6 +5093,7 @@ void AIUpdateInterface::crc( Xfer *x )
 	* 3: Removed lastFrameMoved and repulsorCountdown; removed surrender and demoralize variables
 	* 4: Read m_curLocomotorSet from ini
 	* 5: TheSuperHackers @fix Fixed out-of-bounds xfer of m_guardTargetType
+	* 6: AoC F14a: m_pathTimestamp and the blocked state (m_blockedFrames, m_curMaxBlockedSpeed, m_isBlocked, m_isBlockedAndStuck)
 	*/
 // ------------------------------------------------------------------------------------------------
 void AIUpdateInterface::xfer( Xfer *xfer )
@@ -5100,6 +5101,8 @@ void AIUpdateInterface::xfer( Xfer *xfer )
   // version
 #if RETAIL_COMPATIBLE_CRC || (RETAIL_COMPATIBLE_XFER_SAVE && !AOC_FULL_XFER_SAVE)	// AoC @hook 01/11/2026 Newest save version in the AoC build (AOC_FULL_XFER_SAVE, D11 F14).
 	const XferVersion currentVersion = 4;
+#elif AOC_FULL_XFER_SAVE
+	const XferVersion currentVersion = 6;	// AoC @hook 01/11/2026 5 to 6, the path timestamp and the blocked state (D11 F14).
 #else
 	const XferVersion currentVersion = 5;
 #endif
@@ -5331,6 +5334,18 @@ void AIUpdateInterface::xfer( Xfer *xfer )
 	{
 		Int repulsorCountdown = 0;
 		xfer->xferInt(&repulsorCountdown);
+	}
+
+	// AoC @hook 01/11/2026 Version 6: the frame of the last path, which decides whether a new request waits a second ("repathing
+	// very quickly"), and the blocked state, which decides when a unit gives up and repaths. Stock left them out ("not needed"),
+	// so a loaded unit pathed at once where the saving game's waited, or kept going where it stopped (D11 F14).
+	if (version >= 6)
+	{
+		xfer->xferUnsignedInt(&m_pathTimestamp);
+		xfer->xferInt(&m_blockedFrames);
+		xfer->xferReal(&m_curMaxBlockedSpeed);
+		xfer->xferBool(&m_isBlocked);
+		xfer->xferBool(&m_isBlockedAndStuck);
 	}
 
 

@@ -53,12 +53,14 @@
 // offers no save in a network game or a replay; if one is ever added, every peer restores the same state from the shared
 // file, which is what keeps them in step after the load.
 //
-// The stock fixes of the same ticket, each marked "AoC @fix ... (D11 F14)" in its file: Object::xfer sets the matrix only
-// on load and (version 11) saves Thing's cached angle, direction and altitudes (Thing::xferAoCTransformCache);
+// The stock fixes of the same ticket, each marked "AoC @fix" or "AoC @hook ... (D11 F14)" in its file: Object::xfer sets the
+// matrix only on load and (version 11) saves Thing's cached angle, direction and altitudes (Thing::xferAoCTransformCache);
 // WeaponSet::xfer empties a slot saved empty; PartitionData::updateCellsTouched does not relook on a loaded object's
-// first cell update; AIUpdateInterface::loadPostProcess registers the saved goal and position cells; the dozer action
-// machine, DozerAIUpdate, the turret machine and ExperienceTracker write their upstream versions in every build;
-// AIDockProcessDockState saves its next action frame and drone.
+// first cell update, and PartitionManager::update leaves the undo queue alone during a load; AIUpdateInterface::xfer
+// (version 6) saves the path timestamp and the blocked state, and its loadPostProcess registers the saved goal and
+// position cells; Player::xfer (version 11) saves the retaliation mode; AIDockProcessDockState saves its next action
+// frame and drone; and every save-only RETAIL_COMPATIBLE_XFER_SAVE site writes its newest version (AOC_FULL_XFER_SAVE,
+// GameDefines.h: the dozer action machine, DozerAIUpdate, the turret machine, ExperienceTracker, delayed scripts, ...).
 //
 // While any harness flag is given, stderr gets "[AoC save] ..." lines at the save and at each restore (D11 F12);
 // logic never reads them.
