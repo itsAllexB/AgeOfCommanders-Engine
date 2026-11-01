@@ -72,6 +72,16 @@ UnsignedInt AoCCargoData::gatherDelayFor( Int type, UnsignedInt stockDelayFrames
 // ------------------------------------------------------------------------------------------------
 void AoCCargoData::setMaxUnits( const AoCCost &units, UnsignedInt presentMask )
 {
+	// A capacity of 0 for a type the gatherer may carry would let it dock and fail the pick-up forever (review F2,
+	// finding 5): refuse it at parse time, as an unknown type name is refused.
+	for (Int i = 0; i < AOC_MAX_RESOURCES; ++i)
+	{
+		if ((presentMask & AoCGather::typeBit(i)) && units.amount[i] == 0)
+		{
+			DEBUG_CRASH(("AoCMaxUnits: the capacity of %s must be at least 1", AoCGather::typeName(i)));
+			throw INI_INVALID_DATA;
+		}
+	}
 	maxUnitsMask = presentMask;
 	for (Int i = 0; i < AOC_MAX_RESOURCES; ++i)
 		maxUnits[i] = (presentMask & AoCGather::typeBit(i)) ? units.amount[i] : 0;
@@ -137,6 +147,13 @@ void AoCCargoState::xfer( Xfer *xfer )
 }
 
 // ------------------------------------------------------------------------------------------------
+void AoCCargoState::xferSince( Xfer *xfer, UnsignedByte blockVersion, UnsignedByte sinceVersion )
+{
+	if (blockVersion >= sinceVersion)
+		this->xfer( xfer );
+}
+
+// ------------------------------------------------------------------------------------------------
 void AoCCargoState::crc( Xfer *xfer )
 {
 	if (!AoCRules::enabled())
@@ -167,6 +184,16 @@ UnsignedInt AoCGather::scaleDelayByRate( UnsignedInt delayFrames, Int ratePerMil
 	if (ratePerMille <= 0 || ratePerMille == 1000)
 		return delayFrames;
 	return (UnsignedInt)(((UnsignedInt64)delayFrames * 1000u) / (UnsignedInt64)ratePerMille);
+}
+
+// ------------------------------------------------------------------------------------------------
+UnsignedInt AoCGather::gatherDelayFrames( const AoCCargoData &cargo, Int nodeType, UnsignedInt stockDelayFrames, const Player * /*owner*/ )
+{
+	const UnsignedInt delay = cargo.gatherDelayFor( nodeType, stockDelayFrames );
+	// F13's multiplication point: the owner's gather rate for this type, per mille (Player::m_aocGatherPerMille[type]
+	// from AoCGatherRateUpgrade, times the horde bonus), scales the delay here and nowhere else. 1000 until F13.
+	const Int gatherRatePerMille = 1000;
+	return scaleDelayByRate( delay, gatherRatePerMille );
 }
 
 // ------------------------------------------------------------------------------------------------
@@ -231,6 +258,28 @@ void AoCGather::parseResourceTypeList( INI * /*ini*/, void * /*instance*/, void 
 	if (mask == 0)
 		throw INI_INVALID_DATA;	// an empty list would make a node or gatherer that can never be used
 	*(UnsignedInt *)store = mask;
+}
+
+// ------------------------------------------------------------------------------------------------
+void AoCGather::parsePositiveUnsignedInt( INI * /*ini*/, void * /*instance*/, void *store, const void * /*userData*/ )
+{
+	// A negative value would wrap into a huge deposit per unit (review F2, finding 2), and 0 would make a drop-off that
+	// takes a type and pays nothing: both are refused like a bad type name, the INI loader names the file and line.
+	const char *token = INI::getNextToken();
+	while (*token == ' ' || *token == '\t')
+		++token;
+	if (*token == '-')
+	{
+		DEBUG_CRASH(("AoCGather: '%s' must be a whole number of at least 1", token));
+		throw INI_INVALID_DATA;
+	}
+	const UnsignedInt value = INI::scanUnsignedInt(token);
+	if (value == 0)
+	{
+		DEBUG_CRASH(("AoCGather: '%s' must be at least 1", token));
+		throw INI_INVALID_DATA;
+	}
+	*(UnsignedInt *)store = value;
 }
 
 // ------------------------------------------------------------------------------------------------

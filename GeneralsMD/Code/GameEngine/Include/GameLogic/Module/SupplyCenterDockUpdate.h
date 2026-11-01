@@ -45,7 +45,7 @@ public:
 
 	UnsignedInt m_grantTemporaryStealthFrames;
 	UnsignedInt m_aocAcceptsMask;	///< AoC @feature F2: AoCAccepts, one bit per type taken (default cash only); template data
-	Int m_aocValuePerUnit;				///< AoC @feature F2: AoCValuePerUnit, bank units per carried unit of every type but cash (default 1)
+	UnsignedInt m_aocValuePerUnit;	///< AoC @feature F2: AoCValuePerUnit, bank units per carried unit of every type but cash (default 1, at least 1)
 };
 
 // ------------------------------------------------------------------------------------------------

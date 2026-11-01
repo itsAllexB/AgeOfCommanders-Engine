@@ -61,7 +61,7 @@ SupplyCenterDockUpdateModuleData::SupplyCenterDockUpdateModuleData()
 		{ "GrantTemporaryStealth",		INI::parseDurationUnsignedInt,  nullptr, offsetof( SupplyCenterDockUpdateModuleData, m_grantTemporaryStealthFrames ) },
 		// AoC @hook 31/10/2026 The types this drop-off takes and what a unit of them is worth (D11 F2).
 		{ "AoCAccepts",				AoCGather::parseResourceTypeList,  nullptr, offsetof( SupplyCenterDockUpdateModuleData, m_aocAcceptsMask ) },
-		{ "AoCValuePerUnit",	INI::parseInt,  nullptr, offsetof( SupplyCenterDockUpdateModuleData, m_aocValuePerUnit ) },
+		{ "AoCValuePerUnit",	AoCGather::parsePositiveUnsignedInt,  nullptr, offsetof( SupplyCenterDockUpdateModuleData, m_aocValuePerUnit ) },	// at least 1: a negative value wrapped, 0 paid nothing (review F2)
 		{ nullptr, nullptr, nullptr, 0 }
 	};
 
@@ -152,7 +152,7 @@ Bool SupplyCenterDockUpdate::action( Object* docker, Object *drone )
 
 	Player *ownerPlayer = getObject()->getControllingPlayer();
 	while( supplyTruckAI->loseOneBox() )
-		value += aocIsCash ? ownerPlayer->getSupplyBoxValue() : (UnsignedInt)data->m_aocValuePerUnit;	// AoC @hook 31/10/2026 Cash keeps the box value, other types AoCValuePerUnit (D11 F2).
+		value += aocIsCash ? ownerPlayer->getSupplyBoxValue() : data->m_aocValuePerUnit;	// AoC @hook 31/10/2026 Cash keeps the box value, other types AoCValuePerUnit (D11 F2).
 
 	if( value > 0)
 	{
