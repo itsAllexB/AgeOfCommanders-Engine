@@ -10,6 +10,7 @@ set(COREI_GOOGLETEST_SRC
     GameEngine/AoC/AoCResourceBankTest.cpp
     GameEngine/AoC/AoCSaveFidelityTest.cpp
     GameEngine/AoC/AoCUserDataTest.cpp
+    GameEngine/AoC/AoCWallTest.cpp
     GameEngine/AoC/AoCWanderTest.cpp
     GameEngine/Common/AsciiStringTest.cpp
     GameEngine/Common/INITest.cpp
