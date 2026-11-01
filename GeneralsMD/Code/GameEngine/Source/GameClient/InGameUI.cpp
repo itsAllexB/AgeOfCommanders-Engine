@@ -33,6 +33,8 @@
 
 #define DEFINE_SHADOW_NAMES
 
+#include "AoC/AoCRules.h"	// AoC @feature F10
+#include "AoC/AoCWall.h"	// AoC @feature F10
 #include "Common/ActionManager.h"
 #include "Common/FramePacer.h"
 #include "Common/GameAudio.h"
@@ -1799,6 +1801,24 @@ void InGameUI::handleBuildPlacements()
 					// set the drawable angle
 					m_placeIcon[ i ]->setOrientation( angle );
 
+				}
+
+				// AoC @hook 02/11/2026 Walls under the AoC rules: segments beyond what the local player's bank can pay for are tinted red; reads only (D11 F10).
+				Player *aocLocalPlayer = ThePlayerList->getLocalPlayer();
+				if( AoCRules::enabled() && aocLocalPlayer != nullptr )
+				{
+					AoCCost segmentCost;
+					m_pendingPlaceType->calcAoCCost( aocLocalPlayer, segmentCost );
+					const Int affordable = AoCWall::affordableCount( *aocLocalPlayer->getAoCBank(), segmentCost, tileBuildInfo->tilesUsed );
+					for( i = 0; i < tileBuildInfo->tilesUsed; i++ )
+					{
+						if( i >= affordable )
+							m_placeIcon[ i ]->colorTint( &IllegalBuildColor );
+						else if( i > 0 )
+							m_placeIcon[ i ]->colorTint( nullptr );	// the first icon keeps the legality tint above
+					}
+					if( AoCWall::logEnabled() )
+						AoCWall::logPreview( TheGameClient->getFrame(), tileBuildInfo->tilesUsed, affordable );
 				}
 
 			}

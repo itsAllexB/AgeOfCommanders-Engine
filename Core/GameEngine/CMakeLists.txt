@@ -15,6 +15,7 @@ set(GAMEENGINE_SRC
     Include/AoC/AoCSaveFidelity.h
     Include/AoC/AoCSimRate.h
     Include/AoC/AoCUserData.h
+    Include/AoC/AoCWall.h
     Include/AoC/AoCWander.h
     Include/AoC/AoCWanderAIUpdate.h
     Include/Common/AcademyStats.h
@@ -604,6 +605,7 @@ set(GAMEENGINE_SRC
     Source/AoC/AoCSaveFidelity.cpp
     Source/AoC/AoCSimRate.cpp
     Source/AoC/AoCUserData.cpp
+    Source/AoC/AoCWall.cpp
     Source/AoC/AoCWander.cpp
     Source/AoC/AoCWanderAIUpdate.cpp
     Source/Common/AddonCompat.cpp

@@ -60,6 +60,8 @@
 #include "GameClient/InGameUI.h"
 #include "GameClient/KeyDefs.h"
 #include "GameClient/MapUtil.h"
+#include "GameClient/Mouse.h"
+#include "GameClient/View.h"
 #include "GameLogic/GameLogic.h"
 #include "GameLogic/Object.h"
 #include "GameLogic/TerrainLogic.h"
@@ -900,6 +902,144 @@ Int uiPlace( const HarnessState::UiLine &l )
 	return AOC_UI_SETTLE_ITERATIONS;
 }
 
+/// Two world points "x1 y1 x2 y2" on the ground (z from the terrain), for line and drag (F10).
+Bool uiParseLinePoints( const HarnessState::UiLine &l, Coord3D &start, Coord3D &end )
+{
+	float x1 = 0.0f, y1 = 0.0f, x2 = 0.0f, y2 = 0.0f;
+	if (sscanf(l.arg, "%f %f %f %f", &x1, &y1, &x2, &y2) != 4)
+		return FALSE;
+	start.x = x1;
+	start.y = y1;
+	start.z = TheTerrainLogic ? TheTerrainLogic->getGroundHeight(x1, y1) : 0.0f;
+	end.x = x2;
+	end.y = y2;
+	end.z = TheTerrainLogic ? TheTerrainLogic->getGroundHeight(x2, y2) : 0.0f;
+	return TRUE;
+}
+
+/// line <x1> <y1> <x2> <y2> (F10): while a line-build placement is pending (after press on a wall button), what the click
+/// that ends a wall drag from world point 1 to world point 2 sends (PlaceEventTranslator, MSG_MOUSE_LEFT_CLICK with the
+/// placement anchored): the click's affordability check (canMakeUnit, one segment) and its location check of the start,
+/// then MSG_DOZER_CONSTRUCT_LINE with the template, the start on the ground, the angle of the start-to-end vector (the
+/// angle InGameUI::handleBuildPlacements gives the anchored icon, Coord2D::toAngle of end - start, which the click reads
+/// back through getPlacementAngle; not the 45-degree snap that function applies in force-attack mode) and the end on the
+/// ground; placement mode ends. A refused click is reported and keeps
+/// placement mode (the translator also ends it on a CanMakeType other than money, queue, parking or unit limit; not
+/// reproduced, as in place). Only line builds; the translator's special-power branch (sneak attack) is not reproduced.
+Int uiLine( const HarnessState::UiLine &l )
+{
+	const ThingTemplate *build = TheInGameUI->getPendingPlaceType();
+	if (build == nullptr)
+	{
+		logLine("uiScript: line %s: no building placement is pending (press a wall button first)", l.arg);
+		return 0;
+	}
+	Coord3D start, end;
+	if (!uiParseLinePoints(l, start, end))
+	{
+		logLine("uiScript: line '%s': expected two world points, x1 y1 x2 y2", l.arg);
+		return 0;
+	}
+	if (!TheBuildAssistant->isLineBuildTemplate(build))
+	{
+		logLine("uiScript: line %s: %s is not a line build (use place)", l.arg, build->getName().str());
+		return 0;
+	}
+	Coord2D v;
+	v.x = end.x - start.x;
+	v.y = end.y - start.y;
+	const Real angle = (v.x != 0.0f || v.y != 0.0f) ? v.toAngle() : TheInGameUI->getPlacementAngle();
+	Object *builder = TheGameLogic->findObjectByID(TheInGameUI->getPendingPlaceSourceObjectID());
+	const CanMakeType canMake = TheBuildAssistant->canMakeUnit(builder, build);
+	if (canMake != CANMAKE_OK)
+	{
+		logLine("uiScript: line %s: %s cannot be made now (CanMakeType %d)", l.arg, build->getName().str(), (int)canMake);
+		return 0;
+	}
+	const LegalBuildCode lbc = TheBuildAssistant->isLocationLegalToBuild(&start, build, angle,
+		BuildAssistant::USE_QUICK_PATHFIND | BuildAssistant::TERRAIN_RESTRICTIONS | BuildAssistant::CLEAR_PATH |
+		BuildAssistant::NO_OBJECT_OVERLAP | BuildAssistant::SHROUD_REVEALED | BuildAssistant::IGNORE_STEALTHED |
+		BuildAssistant::FAIL_STEALTHED_WITHOUT_FEEDBACK, builder, nullptr);
+	if (lbc != LBC_OK)
+	{
+		logLine("uiScript: line %s: %s refused at the start (%.0f, %.0f), LegalBuildCode %d; placement still pending", l.arg,
+			build->getName().str(), start.x, start.y, (int)lbc);
+		return 0;
+	}
+	GameMessage *msg = TheMessageStream->appendMessage(GameMessage::MSG_DOZER_CONSTRUCT_LINE);
+	msg->appendIntegerArgument(build->getTemplateID());
+	msg->appendLocationArgument(start);
+	msg->appendRealArgument(angle);
+	msg->appendLocationArgument(end);
+	TheInGameUI->placeBuildAvailable(nullptr, nullptr);
+	logLine("uiScript: line %s: %s from (%.0f, %.0f, %.1f) to (%.0f, %.0f, %.1f) angle %.4f, builder %u", l.arg, build->getName().str(),
+		start.x, start.y, start.z, end.x, end.y, end.z, angle, builder ? (UnsignedInt)builder->getID() : 0u);
+	return AOC_UI_SETTLE_ITERATIONS;
+}
+
+/// drag <x1> <y1> <x2> <y2> (F10): while a line-build placement is pending, what holding the left button down on world
+/// point 1 and moving the mouse to world point 2 does, client only: the placement is anchored at point 1's screen position
+/// (InGameUI::setPlacementStart, as the button-down does) and the engine's mouse position, not the system cursor, is set to
+/// point 2's (Mouse::setPosition), so the stock drag path draws the wall from 1 to 2: the next mouse position message
+/// moves the anchor's end (PlaceEventTranslator) and the line preview follows (InGameUI::handleBuildPlacements). It holds
+/// until a real mouse event over the window moves the engine's mouse, or line, place or press ends the placement. Sends
+/// nothing to the logic. Both points must be on screen.
+Int uiDrag( const HarnessState::UiLine &l )
+{
+	const ThingTemplate *build = TheInGameUI->getPendingPlaceType();
+	if (build == nullptr)
+	{
+		logLine("uiScript: drag %s: no building placement is pending (press a wall button first)", l.arg);
+		return 0;
+	}
+	Coord3D start, end;
+	if (!uiParseLinePoints(l, start, end))
+	{
+		logLine("uiScript: drag '%s': expected two world points, x1 y1 x2 y2", l.arg);
+		return 0;
+	}
+	ICoord2D screenStart, screenEnd;
+	if (TheTacticalView == nullptr || TheMouse == nullptr || !TheTacticalView->worldToScreen(&start, &screenStart) ||
+			!TheTacticalView->worldToScreen(&end, &screenEnd))
+	{
+		logLine("uiScript: drag %s: a point is off screen, nothing dragged", l.arg);
+		return 0;
+	}
+	TheInGameUI->setPlacementStart(&screenStart);
+	TheInGameUI->setPlacementEnd(&screenEnd);
+	TheMouse->setPosition(screenEnd.x, screenEnd.y);
+	logLine("uiScript: drag %s: %s anchored at screen (%d, %d), mouse at (%d, %d)", l.arg, build->getName().str(), screenStart.x,
+		screenStart.y, screenEnd.x, screenEnd.y);
+	return AOC_UI_SETTLE_ITERATIONS;
+}
+
+/// move <x> <y> (F10): the stock move order of the current selection to world point x, y on the ground (MSG_DO_MOVETO, what a
+/// right-click on open ground sends, CommandTranslator::issueMoveToLocationCommand outside the waypoint, attack-move,
+/// force-move and force-attack modes), through the message stream so the replay records it.
+Int uiMove( const HarnessState::UiLine &l )
+{
+	if (uiFirstSelected() == nullptr)
+	{
+		logLine("uiScript: move %s: nothing of the local player is selected", l.arg);
+		return 0;
+	}
+	float x = 0.0f;
+	float y = 0.0f;
+	if (sscanf(l.arg, "%f %f", &x, &y) != 2)
+	{
+		logLine("uiScript: move '%s': expected two world coordinates, x y", l.arg);
+		return 0;
+	}
+	Coord3D world;
+	world.x = x;
+	world.y = y;
+	world.z = TheTerrainLogic ? TheTerrainLogic->getGroundHeight(x, y) : 0.0f;
+	GameMessage *msg = TheMessageStream->appendMessage(GameMessage::MSG_DO_MOVETO);
+	msg->appendLocationArgument(world);
+	logLine("uiScript: move %s: to (%.0f, %.0f, %.1f), first selected %u", l.arg, world.x, world.y, world.z, (UnsignedInt)uiFirstSelected()->getID());
+	return AOC_UI_SETTLE_ITERATIONS;
+}
+
 /// bank: one stderr line with the local player's bank and the first selected object's cargo. Reads only.
 void uiBank( UnsignedInt frame )
 {
@@ -982,6 +1122,12 @@ Int uiRunLine( const HarnessState::UiLine &l )
 		return uiDock(l);
 	if (strcmp(l.cmd, "place") == 0)
 		return uiPlace(l);
+	if (strcmp(l.cmd, "line") == 0)
+		return uiLine(l);
+	if (strcmp(l.cmd, "drag") == 0)
+		return uiDrag(l);
+	if (strcmp(l.cmd, "move") == 0)
+		return uiMove(l);
 	if (strcmp(l.cmd, "select") == 0)
 	{
 		// the local player's object of that template with the lowest id, selected as a left click selects it
@@ -1061,9 +1207,9 @@ void runUiScript()
 	{
 		const HarnessState::UiLine &l = s.uiLines[s.uiNext++];
 		logLine("uiScript line %d at logic frame %u: %s %s", s.uiNext, s.lastLogicFrame, l.cmd, l.arg);
-		// select, selectall and dock (F2) and place (F8) send a logic message, so each must be the first line of its frame
+		// select, selectall and dock (F2), place (F8), line and move (F10) send a logic message, so each must be the first line of its frame
 		const Bool sendsLogicMessage = strcmp(l.cmd, "select") == 0 || strcmp(l.cmd, "selectall") == 0 || strcmp(l.cmd, "dock") == 0 ||
-			strcmp(l.cmd, "place") == 0;
+			strcmp(l.cmd, "place") == 0 || strcmp(l.cmd, "line") == 0 || strcmp(l.cmd, "move") == 0;
 		if (sendsLogicMessage && s.lastLogicFrame > l.frame)
 			logLine("uiScript: warning: line %d (%s, frame %u) runs late, at logic frame %u: its message lands on a "
 				"frame that depends on the render rate, so the CRC log is not reproducible; make it the first line of its frame", s.uiNext, l.cmd, l.frame, s.lastLogicFrame);
@@ -1255,7 +1401,8 @@ Int AoCHarness::parseAocUiScript( char *args[], int num )
 		logLine("-aocUiScript: cannot open '%s'; flag ignored", args[1]);
 		return 2;
 	}
-	static const char *const known[] = { "select", "press", "back", "log", "screenshot", "dock", "selectall", "bank", "count", "place" };	// F2: dock, selectall, bank, count; F8: place
+	static const char *const known[] = { "select", "press", "back", "log", "screenshot", "dock", "selectall", "bank", "count", "place",
+		"line", "drag", "move" };	// F2: dock, selectall, bank, count; F8: place; F10: line, drag, move
 	char text[512];
 	Int lineNumber = 0;
 	Int dropped = 0;
@@ -1286,7 +1433,7 @@ Int AoCHarness::parseAocUiScript( char *args[], int num )
 		if (ok)
 			s.uiLineCount++;
 		else
-			logLine("-aocUiScript: unknown command '%s' skipped (select, selectall, press, back, dock, place, log, bank, count, screenshot)", l.cmd);
+			logLine("-aocUiScript: unknown command '%s' skipped (select, selectall, press, back, dock, place, line, drag, move, log, bank, count, screenshot)", l.cmd);
 	}
 	fclose(f);
 	if (dropped > 0)

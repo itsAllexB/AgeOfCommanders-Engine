@@ -76,6 +76,11 @@
 //                                   back-to-work <type>" when a worker's build ends and it returns to its assigned type,
 //                                   "... back-to-work none in range <type> range=<r>" when no node of that type stands
 //                                   within GameData.ini AoCBackToWorkRange of the build site and it idles.
+//                                   F10 (AoCWall), with resource types defined (nothing with stock data): "[AoC wall] frame N
+//                                   player <index> line requested <tiles> affordable <n> placed <k> cost <vector>" per wall
+//                                   line message (the stock tiling's segments, the segments the bank could pay for, the
+//                                   segments placed, the vector charged), and from the client's line preview "[AoC wall]
+//                                   preview <tiles> affordable <n>" when the pair changes or a drag starts.
 //   -saveAtFrame <N> <name>         F1: write the stock save game <name>.sav (the save menu's path,
 //                                   TheGameState->saveGame) once logic frame N (1 or more) has run, from the
 //                                   engine loop. Load it with the stock -loadsave <name>.sav at the same
@@ -132,11 +137,25 @@
 //                                                        point on the ground and the placement angle; a refused spot is
 //                                                        reported and keeps placement mode; line builds are refused; it
 //                                                        skips the click's special-power branch (GLA sneak attack)
-//                                   After select, selectall, press, back, dock and place the next line waits 3 engine
-//                                   iterations so the control bar re-evaluates. Use absolute paths. select, selectall,
-//                                   dock and place send the stock message a click sends, so they move the CRC and the
-//                                   replay records them; press, back, log, bank, count and screenshot send nothing. Each of
-//                                   select, selectall, dock and place must be the first line of its frame and come after the
+//                                     line <x1> <y1> <x2> <y2>  F10: while a line-build (wall) placement is pending, what
+//                                                        the click ending a drag from world point 1 to point 2 sends: the
+//                                                        click's checks (one segment affordable, the start legal), then
+//                                                        MSG_DOZER_CONSTRUCT_LINE with the template, the start, the angle
+//                                                        of the start-to-end vector (not force-attack mode's 45-degree
+//                                                        snap) and the end; placement mode ends; a refused click is
+//                                                        reported and keeps placement mode
+//                                     drag <x1> <y1> <x2> <y2>  F10, client only: anchors the pending placement at point
+//                                                        1's screen position and sets the engine's mouse position (not
+//                                                        the system cursor) to point 2's, so the stock drag path draws
+//                                                        the line preview from 1 to 2; both points must be on screen
+//                                     move <x> <y>       F10: the stock move order of the selection to world point x, y
+//                                                        (MSG_DO_MOVETO, a right-click on open ground)
+//                                   After select, selectall, press, back, dock, place, line, drag and move the next line
+//                                   waits 3 engine iterations so the control bar re-evaluates. Use absolute paths. select,
+//                                   selectall, dock, place, line and move send the stock message a click sends, so they move
+//                                   the CRC and the replay records them; press, back, log, bank, count, drag and screenshot
+//                                   send nothing. Each of select, selectall, dock, place, line and move must be the first
+//                                   line of its frame and come after the
 //                                   lines before it have settled: a late one (warned on stderr) lands on a frame
 //                                   that depends on the render rate, and the CRC log is no longer reproducible.
 //                                   Refused under -headless (no windows). Over 64 lines or a line over 511
