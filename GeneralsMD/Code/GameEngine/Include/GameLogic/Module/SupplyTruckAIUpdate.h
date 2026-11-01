@@ -192,6 +192,7 @@ public:
 	virtual Bool isIdleGatherer() const = 0;							///< neither ferrying nor doing anything else (D9 census)
 	virtual Int getMaxUnitsFor( Int type ) const = 0;			///< AoCMaxUnits for the type, else MaxBoxes
 	virtual Bool canCarryResourceType( Int type ) const = 0;	///< the type is in AoCCargoTypes
+	virtual void aocRememberNode( Object *node ) = 0;				///< a player's dock order on a node: preferred dock and assigned type (and the rally)
 };
 
 //-------------------------------------------------------------------------------------------------
@@ -239,6 +240,7 @@ public:
 	virtual Bool isIdleGatherer() const override;
 	virtual Int getMaxUnitsFor( Int type ) const override { return getSupplyTruckAIUpdateModuleData()->m_aocCargo.maxUnitsFor( type, getSupplyTruckAIUpdateModuleData()->m_maxBoxesData ); }
 	virtual Bool canCarryResourceType( Int type ) const override { return getSupplyTruckAIUpdateModuleData()->m_aocCargo.canCarry( type ); }
+	virtual void aocRememberNode( Object *node ) override;
 
 	virtual UpdateSleepTime update() override;
 

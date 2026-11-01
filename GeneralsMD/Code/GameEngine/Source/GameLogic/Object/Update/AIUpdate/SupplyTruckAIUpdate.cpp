@@ -224,10 +224,21 @@ void SupplyTruckAIUpdate::privateDock( Object *dock, CommandSourceType cmdSource
 		m_preferredDock = dock->getID();
 
 		// AoC @hook 31/10/2026 The player's dock order on a node assigns its type; node searches then keep to it (D11 F2).
-		const Int nodeType = SupplyWarehouseDockUpdate::getAoCNodeTypeOf( dock );
-		if( nodeType >= 0 && canCarryResourceType( nodeType ) )
-			m_aocCargo.assignedType = nodeType;
+		aocRememberNode( dock );
 	}
+}
+
+//----------------------------------------------------------------------------------------
+// AoC @feature F2: what a player's dock order on a node remembers: the node as the preferred dock and its type as
+// the assigned type, when the type can be carried. Also used by the rally on a node (ProductionUpdate).
+void SupplyTruckAIUpdate::aocRememberNode( Object *node )
+{
+	const Int nodeType = SupplyWarehouseDockUpdate::getAoCNodeTypeOf( node );
+	if( nodeType < 0 )
+		return;
+	m_preferredDock = node->getID();
+	if( canCarryResourceType( nodeType ) )
+		m_aocCargo.assignedType = nodeType;
 }
 
 //----------------------------------------------------------------------------------------
@@ -237,13 +248,9 @@ UnsignedInt SupplyTruckAIUpdate::getActionDelayForDock( Object *dock )
 	static const NameKeyType key_warehouseUpdate = NAMEKEY("SupplyWarehouseDockUpdate");
 	SupplyWarehouseDockUpdate *warehouseModule = (SupplyWarehouseDockUpdate*) dock->findUpdateModule( key_warehouseUpdate );
 	if (warehouseModule) {
-		// AoC @hook 31/10/2026 Delay per unit of the node's type: AoCGatherDelay, else SupplyWarehouseActionDelay (D11 F2).
-		const Int nodeType = warehouseModule->getAoCResourceType();
-		const UnsignedInt delay = getSupplyTruckAIUpdateModuleData()->m_aocCargo.gatherDelayFor( nodeType, getSupplyTruckAIUpdateModuleData()->m_warehouseDelay );
-		// F13 multiplication point: the player's gather rate for this type (per mille; horde bonus, gather upgrades) scales
-		// the delay here. 1000 until F13 adds Player::m_aocGatherPerMille.
-		const Int gatherRatePerMille = 1000;
-		return AoCGather::scaleDelayByRate( delay, gatherRatePerMille );
+		// AoC @hook 31/10/2026 Delay per unit of the node's type, then the owner's gather rate: F13's one multiplication point (D11 F2).
+		return AoCGather::gatherDelayFrames( getSupplyTruckAIUpdateModuleData()->m_aocCargo, warehouseModule->getAoCResourceType(),
+			getSupplyTruckAIUpdateModuleData()->m_warehouseDelay, getObject()->getControllingPlayer() );
 	}
 	static const NameKeyType key_centerUpdate = NAMEKEY("SupplyCenterDockUpdate");
 	SupplyCenterDockUpdate *centerModule = (SupplyCenterDockUpdate*) dock->findUpdateModule( key_centerUpdate );
@@ -296,9 +303,8 @@ void SupplyTruckAIUpdate::xfer( Xfer *xfer )
 	xfer->xferInt(&m_numberBoxes);
 	xfer->xferBool(&m_forcePending);
 
-	// AoC @hook 31/10/2026 Typed cargo, mapped by type name on load (D11 F2).
-	if( version >= 2 )
-		m_aocCargo.xfer( xfer );
+	// AoC @hook 31/10/2026 Typed cargo from version 2, mapped by type name on load; older saves keep cash, unassigned (D11 F2).
+	m_aocCargo.xferSince( xfer, version, 2 );
 
 }
 

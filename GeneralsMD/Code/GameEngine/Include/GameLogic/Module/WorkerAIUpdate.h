@@ -208,6 +208,7 @@ public:
 	virtual Bool isIdleGatherer() const override;
 	virtual Int getMaxUnitsFor( Int type ) const override { return getWorkerAIUpdateModuleData()->m_aocCargo.maxUnitsFor( type, getWorkerAIUpdateModuleData()->m_maxBoxesData ); }
 	virtual Bool canCarryResourceType( Int type ) const override { return getWorkerAIUpdateModuleData()->m_aocCargo.canCarry( type ); }
+	virtual void aocRememberNode( Object *node ) override;
 
 // worker specific
 	Bool isSupplyTruckBrainActiveAndBusy();
