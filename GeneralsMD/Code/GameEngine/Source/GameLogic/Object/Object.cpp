@@ -4159,10 +4159,6 @@ void Object::xfer( Xfer *xfer )
 		if( xfer->getXferMode() == XFER_LOAD )
 			setTransformMatrix(&mtx);
 	}
-	// AoC @hook 01/11/2026 Version 11: Thing's cached orientation, direction and altitudes as the saving game had them, which
-	// the matrix alone does not give back (D11 F14).
-	if( version >= 11 )
-		xferAoCTransformCache( xfer );
 	else
 	{
 		// object position
@@ -4175,6 +4171,10 @@ void Object::xfer( Xfer *xfer )
 		xfer->xferReal( &orientation );
 		setOrientation( orientation );
 	}
+	// AoC @hook 01/11/2026 Version 11: Thing's cached orientation, direction and altitudes as the saving game had them, which
+	// the matrix alone does not give back; read after the stock layout, which versions 7 to 10 keep (D11 F14).
+	if( version >= 11 )
+		xferAoCTransformCache( xfer );
 
 	// team
 	TeamID teamID = m_team ? m_team->getID() : TEAM_ID_INVALID;
