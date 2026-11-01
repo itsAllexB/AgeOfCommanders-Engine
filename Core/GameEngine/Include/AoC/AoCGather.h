@@ -46,6 +46,7 @@
 
 class INI;
 class Player;
+class UnicodeString;
 class Xfer;
 
 /// Module data of a gatherer (SupplyTruckAIUpdate, WorkerAIUpdate; the Chinook inherits the supply truck's).
@@ -139,6 +140,10 @@ namespace AoCGather
 
 	/// Type name for logs, "?" when out of range.
 	const char *typeName( Int type );
+
+	/// The floating text of a typed deposit, "+10 Wood": the type's DisplayName when it names a string, else the type name.
+	/// Text only, for the stock local-player floating text blocks (the drop-off, F2; the converter, F3).
+	UnicodeString depositText( Int type, UnsignedInt amount );
 
 	/// Evidence trail (ticket F2 decision 4): while any harness flag is given, one stderr line per gather event,
 	/// "[AoC gather] frame N <objectId> <event>". Nothing is printed in a stock run; logic never reads it.

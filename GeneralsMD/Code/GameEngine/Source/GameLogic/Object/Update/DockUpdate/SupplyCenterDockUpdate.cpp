@@ -29,7 +29,6 @@
 
 #include "PreRTS.h"	// This must go first in EVERY cpp file in the GameEngine
 
-#include "AoC/AoCRules.h"	// AoC @feature F2
 #include "Common/Player.h"
 #include "Common/Xfer.h"
 #include "GameLogic/Module/SupplyCenterDockUpdate.h"
@@ -100,24 +99,6 @@ static UnsignedInt getUpgradedSupplyBoostValue( SupplyTruckAIInterface* supplyTr
 	}
 	return 0;
 #endif
-}
-
-// ------------------------------------------------------------------------------------------------
-// AoC @feature F2: floating text of a typed deposit, "+10 Wood": the type's DisplayName when it names a string,
-// else the type name. Text only, for the stock local-player floating text block.
-// ------------------------------------------------------------------------------------------------
-static UnicodeString aocDepositText( Int type, UnsignedInt amount )
-{
-	UnicodeString label;
-	Bool exists = FALSE;
-	if( TheAoCRules && TheAoCRules->getDisplayLabel( type ).isNotEmpty() )
-		label = TheGameText->fetch( TheAoCRules->getDisplayLabel( type ), &exists );
-	if( !exists )
-		label.translate( AsciiString( AoCGather::typeName( type ) ) );
-	UnicodeString text;
-	text.format( L"+%u ", amount );
-	text.concat( label );
-	return text;
 }
 
 // ------------------------------------------------------------------------------------------------
@@ -203,7 +184,7 @@ Bool SupplyCenterDockUpdate::action( Object* docker, Object *drone )
 		if( aocIsCash )
 			moneys.format( TheGameText->fetch( "GUI:AddCash" ), value );
 		else
-			moneys = aocDepositText( aocType, value );	// AoC @hook 31/10/2026 The type label in the floating text (D11 F2).
+			moneys = AoCGather::depositText( aocType, value );	// AoC @hook 31/10/2026 The type label in the floating text (D11 F2; the text helper is shared with F3).
 		dockerPos = docker->getPosition();
 		pos.x = dockerPos->x;
 		pos.y = dockerPos->y;

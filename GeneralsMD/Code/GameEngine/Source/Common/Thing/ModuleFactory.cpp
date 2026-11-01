@@ -144,6 +144,7 @@
 #include "GameLogic/Module/LifetimeUpdate.h"
 #include "GameLogic/Module/RadiusDecalUpdate.h"
 #include "GameLogic/Module/AutoDepositUpdate.h"
+#include "AoC/AoCConverterUpdate.h"	// AoC @feature F3
 #include "GameLogic/Module/MissileAIUpdate.h"
 #include "GameLogic/Module/NeutronMissileUpdate.h"
 #include "GameLogic/Module/OCLUpdate.h"
@@ -400,6 +401,7 @@ void ModuleFactory::init()
 	addModule( EMPUpdate );
   addModule( LeafletDropBehavior );
 	addModule( AutoDepositUpdate );
+	addModule( AoCConverterUpdate );	// AoC @hook 01/11/2026 The converter module, Behavior = AoCConverterUpdate (D11 F3).
 	addModule( WeaponBonusUpdate );
 	addModule( MissileAIUpdate );
 	addModule( NeutronMissileUpdate );

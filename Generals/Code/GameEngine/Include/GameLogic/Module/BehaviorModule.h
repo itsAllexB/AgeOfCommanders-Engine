@@ -77,6 +77,7 @@ class WeaponTemplate;
 class DamageInfo;
 class ParticleSystemTemplate;
 class StealthUpdate;
+class AoCConverterInterface;	// AoC @feature F3
 
 
 //-------------------------------------------------------------------------------------------------
@@ -162,6 +163,7 @@ public:
 	virtual UpdateModuleInterface* getUpdate() override { return nullptr; }
 	virtual UpgradeModuleInterface* getUpgrade() override { return nullptr; }
 	virtual StealthUpdate* getStealth() { return nullptr; }
+	virtual AoCConverterInterface* getAoCConverterInterface() { return nullptr; }	// AoC @hook 01/11/2026 The converter interface, NULL unless the module is AoCConverterUpdate (D11 F3).
 
 	virtual ParkingPlaceBehaviorInterface* getParkingPlaceBehaviorInterface() override { return nullptr; }
 	virtual RebuildHoleBehaviorInterface* getRebuildHoleBehaviorInterface() override { return nullptr; }
