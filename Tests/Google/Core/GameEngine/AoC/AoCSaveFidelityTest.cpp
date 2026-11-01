@@ -31,6 +31,7 @@
 #include <vector>
 #include <gtest/gtest.h>
 
+#include "AoC/AoCByteStream.h"
 #include "AoC/AoCSaveFidelity.h"
 #include "Common/GameCommon.h"
 #include "Common/RandomValue.h"
@@ -559,4 +560,46 @@ TEST(AoCSaveFidelityTest, PlanLayoutFallsBackWhenTheSavedLayoutCannotStand)
 
 	std::vector<UnsignedInt> short3(priorities.begin(), priorities.end() - 1);
 	EXPECT_EQ(AoCSaveFidelity::planLayout(saved, live, short3, order), AOC_LAYOUT_NOT_MATCHED) << "a priority per module";
+}
+
+// Review finding 9: the zones' run-length packing (Pathfinder::getAoCZoneData and setAoCZoneData). A round trip gives
+// the cells back; a blob cut anywhere, runs covering another cell count, or a run that overshoots are refused with nothing
+// decoded, so setAoCZoneData keeps the zones the load computed.
+TEST(AoCSaveFidelityTest, ZoneRunsRoundTripAndRefuseAShortBlob)
+{
+	std::vector<UnsignedShort> cells;
+	cells.insert(cells.end(), 5, (UnsignedShort)1);
+	cells.insert(cells.end(), 3, (UnsignedShort)7);
+	cells.insert(cells.end(), 70000, (UnsignedShort)2);	// longer than one run
+	cells.push_back(9);
+	std::vector<unsigned char> blob;
+	AoCByteStream::putRuns(blob, cells);
+	EXPECT_EQ(blob.size(), 5 * (sizeof(UnsignedShort) + sizeof(UnsignedShort)) + sizeof(UnsignedShort)) << "five runs and the end mark";
+
+	std::vector<UnsignedShort> back;
+	const unsigned char *p = &blob[0];
+	ASSERT_TRUE(AoCByteStream::getRuns(p, &blob[0] + blob.size(), cells.size(), back));
+	EXPECT_EQ(back, cells);
+	EXPECT_EQ(p, &blob[0] + blob.size()) << "every byte read";
+
+	for (size_t cut = 0; cut < blob.size(); ++cut)
+	{
+		std::vector<UnsignedShort> partial(1, (UnsignedShort)4);
+		const unsigned char *q = &blob[0];
+		EXPECT_FALSE(AoCByteStream::getRuns(q, &blob[0] + cut, cells.size(), partial)) << "cut at byte " << cut;
+		EXPECT_TRUE(partial.empty()) << "cut at byte " << cut;
+	}
+
+	p = &blob[0];
+	EXPECT_FALSE(AoCByteStream::getRuns(p, &blob[0] + blob.size(), cells.size() + 1, back)) << "a cell short";
+	EXPECT_TRUE(back.empty());
+	p = &blob[0];
+	EXPECT_FALSE(AoCByteStream::getRuns(p, &blob[0] + blob.size(), cells.size() - 1, back)) << "a cell over";
+
+	std::vector<UnsignedShort> none;
+	std::vector<unsigned char> empty;
+	AoCByteStream::putRuns(empty, none);
+	p = &empty[0];
+	EXPECT_TRUE(AoCByteStream::getRuns(p, &empty[0] + empty.size(), 0, back)) << "no cells: the end mark alone";
+	EXPECT_TRUE(back.empty());
 }

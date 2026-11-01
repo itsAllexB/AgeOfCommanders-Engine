@@ -7532,30 +7532,12 @@ void Pathfinder::getAoCZoneData( std::vector<unsigned char> &out ) const
 	AoCByteStream::put( out, version );
 	AoCByteStream::put( out, m_extent );
 	// Ground cells, column by column, as runs of (count, zone).
-	UnsignedShort run = 0;
-	zoneStorageType runZone = 0;
+	std::vector<zoneStorageType> zones;
+	zones.reserve((size_t)(m_extent.hi.x - m_extent.lo.x + 1) * (size_t)(m_extent.hi.y - m_extent.lo.y + 1));
 	for (Int x = m_extent.lo.x; x <= m_extent.hi.x; ++x)
-	{
 		for (Int y = m_extent.lo.y; y <= m_extent.hi.y; ++y)
-		{
-			const zoneStorageType zone = m_map ? m_map[x][y].getZone() : 0;
-			if (run > 0 && (zone != runZone || run == 0xFFFF))
-			{
-				AoCByteStream::put( out, run );
-				AoCByteStream::put( out, runZone );
-				run = 0;
-			}
-			runZone = zone;
-			++run;
-		}
-	}
-	if (run > 0)
-	{
-		AoCByteStream::put( out, run );
-		AoCByteStream::put( out, runZone );
-	}
-	const UnsignedShort endOfRuns = 0;
-	AoCByteStream::put( out, endOfRuns );
+			zones.push_back(m_map ? m_map[x][y].getZone() : 0);
+	AoCByteStream::putRuns( out, zones );
 	const Int layers = LAYER_LAST + 1;
 	AoCByteStream::put( out, layers );
 	for (Int i = 0; i < layers; ++i)
@@ -7578,24 +7560,10 @@ Bool Pathfinder::setAoCZoneData( const std::vector<unsigned char> &in )
 		return FALSE;
 	if (extent.lo.x != m_extent.lo.x || extent.lo.y != m_extent.lo.y || extent.hi.x != m_extent.hi.x || extent.hi.y != m_extent.hi.y)
 		return FALSE;
-	// Read the runs first, so a short blob changes nothing.
-	std::vector< std::pair<UnsignedShort, zoneStorageType> > runs;
-	UnsignedInt cells = 0;
-	for (;;)
-	{
-		UnsignedShort run = 0;
-		if (!AoCByteStream::get( p, end, run ))
-			return FALSE;
-		if (run == 0)
-			break;
-		zoneStorageType zone = 0;
-		if (!AoCByteStream::get( p, end, zone ))
-			return FALSE;
-		runs.push_back(std::make_pair(run, zone));
-		cells += run;
-	}
-	const UnsignedInt expected = (UnsignedInt)(m_extent.hi.x - m_extent.lo.x + 1) * (UnsignedInt)(m_extent.hi.y - m_extent.lo.y + 1);
-	if (cells != expected)
+	// Read the runs first, so a short blob changes nothing (AoCByteStream::getRuns, unit tested).
+	const size_t expected = (size_t)(m_extent.hi.x - m_extent.lo.x + 1) * (size_t)(m_extent.hi.y - m_extent.lo.y + 1);
+	std::vector<zoneStorageType> zones;
+	if (!AoCByteStream::getRuns( p, end, expected, zones ))
 		return FALSE;
 	Int layers = 0;
 	if (!AoCByteStream::get( p, end, layers ) || layers != LAYER_LAST + 1)
@@ -7604,18 +7572,10 @@ Bool Pathfinder::setAoCZoneData( const std::vector<unsigned char> &in )
 	for (Int i = 0; i < layers; ++i)
 		if (!AoCByteStream::get( p, end, layerZones[i] ))
 			return FALSE;
-	size_t r = 0;
-	UnsignedShort left = runs.empty() ? 0 : runs[0].first;
+	size_t cell = 0;
 	for (Int x = m_extent.lo.x; x <= m_extent.hi.x; ++x)
-	{
 		for (Int y = m_extent.lo.y; y <= m_extent.hi.y; ++y)
-		{
-			while (left == 0 && r + 1 < runs.size())
-				left = runs[++r].first;
-			m_map[x][y].setZone(runs[r].second);
-			--left;
-		}
-	}
+			m_map[x][y].setZone(zones[cell++]);
 	for (Int i = 0; i < layers; ++i)
 	{
 		m_layers[i].setZone(layerZones[i]);

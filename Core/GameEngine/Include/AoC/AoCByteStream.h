@@ -61,4 +61,56 @@ namespace AoCByteStream
 		p += sizeof(T) * count;
 		return true;
 	}
+
+	/// 'values' as runs of equal values: (count as unsigned short, value) pairs, a run at most 0xFFFF long, ended by a
+	/// zero count. The pathfinder's ground cell zones, column by column (Pathfinder::getAoCZoneData).
+	template <class T> inline void putRuns( std::vector<unsigned char> &out, const std::vector<T> &values )
+	{
+		unsigned short run = 0;
+		T runValue = T();
+		for( size_t i = 0; i < values.size(); ++i )
+		{
+			if( run > 0 && (!(values[i] == runValue) || run == 0xFFFF) )
+			{
+				put( out, run );
+				put( out, runValue );
+				run = 0;
+			}
+			runValue = values[i];
+			++run;
+		}
+		if( run > 0 )
+		{
+			put( out, run );
+			put( out, runValue );
+		}
+		const unsigned short endOfRuns = 0;
+		put( out, endOfRuns );
+	}
+
+	/// Reads what putRuns wrote back into 'values'. FALSE ('values' cleared, 'p' wherever reading stopped) when the bytes
+	/// end before the zero count or inside a pair, or when the runs cover other than 'expected' values.
+	template <class T> inline bool getRuns( const unsigned char *&p, const unsigned char *end, size_t expected, std::vector<T> &values )
+	{
+		values.clear();
+		values.reserve( expected );
+		for( ;; )
+		{
+			unsigned short run = 0;
+			if( !get( p, end, run ) )
+				break;
+			if( run == 0 )
+			{
+				if( values.size() == expected )
+					return true;
+				break;
+			}
+			T value = T();
+			if( !get( p, end, value ) || values.size() + run > expected )
+				break;
+			values.insert( values.end(), run, value );
+		}
+		values.clear();
+		return false;
+	}
 }
