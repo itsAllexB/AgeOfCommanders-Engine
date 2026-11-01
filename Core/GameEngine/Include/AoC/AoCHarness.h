@@ -175,6 +175,12 @@
 //                                   kind I or R, u or r for the ...Unchanged variants that do not advance the seed), and
 //                                   "#frame,crc-point,SEED" at each frame's CRC point. AoCTrace.h has the formats.
 //                                   Reads only; the logic never reads a trace.
+//   (any flag)                      F12b: "[AoC fx] frame N null system at <spot> (<what>)" the first time per spot and
+//                                   object (OCL debris: the particle system and the object that died; wheel emitters:
+//                                   the unit that came into view) a stock site that creates
+//                                   a particle system got none (only the headless dummy manager refuses: it loads the
+//                                   templates and creates no system), and "[AoC fx] null systems at exit: <spot> <n>, ..."
+//                                   at exit. Nothing in a windowed game; logic never reads it.
 //
 // Exit codes: 0 normal, 2 CRC mismatch seen, 3 unsupported -simrate, 4 -skirmish could not start,
 // 5 a replay or save made at the other simulation rate was refused, 6 the -aocUserData folder is unusable.
@@ -238,6 +244,11 @@ public:
 	static void onLogicRandomInt( char kind, const char *file, Int line, Int lo, Int hi, Int value );
 	/// F12b: the same for a real draw (kind R, or r for GetGameLogicRandomValueRealUnchanged).
 	static void onLogicRandomReal( char kind, const char *file, Int line, Real lo, Real hi, Real value );
+	/// F12b: a stock site that creates a particle system got none, which only the headless dummy manager does (it loads the
+	/// templates but creates no system). Under any harness flag, stderr "[AoC fx] frame N null system at <spot> (<detail>)"
+	/// the first time per spot and detail (spot: a string literal; detail: what asked, e.g. the template, may be null), and
+	/// finalExitCode prints the count per spot. Reads only.
+	static void onNoParticleSystem( const char *spot, const char *detail = nullptr );
 	/// RecorderClass::handleCRCMessage, where a replay CRC mismatch is reported.
 	static void onCRCMismatch( UnsignedInt frame, UnsignedInt inGameCRC, UnsignedInt replayCRC );
 	/// GameEngine::execute, after each update(): runs due -aocUiScript lines, writes the save requested by -saveAtFrame, performs the clean quit requested by -quitAtFrame.

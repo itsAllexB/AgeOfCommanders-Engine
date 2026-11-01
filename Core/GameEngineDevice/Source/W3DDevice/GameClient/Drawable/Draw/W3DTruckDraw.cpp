@@ -29,6 +29,7 @@
 #include <stdlib.h>
 #include <math.h>
 
+#include "AoC/AoCHarness.h"	// AoC @hook 01/11/2026 The headless dummy creates no system (D11 F12).
 #include "Common/Thing.h"
 #include "Common/ThingFactory.h"
 #include "Common/GameAudio.h"
@@ -173,10 +174,16 @@ void W3DTruckDraw::createWheelEmitters()
 				if (const ParticleSystemTemplate *sysTemplate = TheParticleSystemManager->findTemplate(*effectNames[i]))
 				{
 					ParticleSystem *particleSys = TheParticleSystemManager->createParticleSystem( sysTemplate );
-					particleSys->attachToObject(getDrawable()->getObject());
-					// important: mark it as do-not-save, since we'll just re-create it when we reload.
-					particleSys->setSaveable(FALSE);
-					m_truckEffectIDs[i] = particleSys->getSystemID();
+					// AoC @hook 01/11/2026 The headless dummy creates no system (D11 F12).
+					if (particleSys)
+					{
+						particleSys->attachToObject(getDrawable()->getObject());
+						// important: mark it as do-not-save, since we'll just re-create it when we reload.
+						particleSys->setSaveable(FALSE);
+						m_truckEffectIDs[i] = particleSys->getSystemID();
+					}
+					else
+						AoCHarness::onNoParticleSystem("W3DTruckDraw::createWheelEmitters", getDrawable()->getObject() ? getDrawable()->getObject()->getTemplate()->getName().str() : nullptr);
 				}
 				else
 				{

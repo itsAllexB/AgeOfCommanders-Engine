@@ -36,6 +36,7 @@
 
 #define NO_DEBUG_CRC
 
+#include "AoC/AoCHarness.h"	// AoC @hook 01/11/2026 The headless dummy creates no system (D11 F12).
 #include "Common/AudioEventRTS.h"
 #include "Common/DrawModule.h"
 #include "Common/GlobalData.h"
@@ -981,7 +982,11 @@ protected:
 			if (tmp)
 			{
 				ParticleSystem *sys = TheParticleSystemManager->createParticleSystem(tmp);
-				sys->attachToObject(obj);
+				// AoC @hook 01/11/2026 The headless dummy creates no system (D11 F12).
+				if (sys)
+					sys->attachToObject(obj);
+				else
+					AoCHarness::onNoParticleSystem("ObjectCreationList debris", sourceObj ? sourceObj->getTemplate()->getName().str() : nullptr);
 			}
 		}
 

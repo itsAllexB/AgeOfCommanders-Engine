@@ -130,6 +130,13 @@ struct HarnessState
 	FILE *crcDump;
 	Bool warnedCrcDump;
 
+	// F12b: stock sites that got no particle system (only the headless dummy refuses one), by spot
+	struct NullSystemSpot { const char *spot; UnsignedInt count; };
+	NullSystemSpot nullSystemSpots[16];
+	Int nullSystemSpotCount;
+	char nullSystemSeen[48][96];	///< "<spot>|<detail>" pairs already printed (first 48)
+	Int nullSystemSeenCount;
+
 	char aiLogDir[1024];
 	Bool aiLogDirCreated;
 
@@ -1681,6 +1688,45 @@ void AoCHarness::onLogicRandomReal( char kind, const char *file, Int line, Real 
 	}
 }
 
+void AoCHarness::onNoParticleSystem( const char *spot, const char *detail )
+{
+	HarnessState &s = state();
+	if (!s.anyFlag || spot == nullptr)
+		return;
+
+	// the count per spot, for the line at exit
+	Bool counted = FALSE;
+	for (Int i = 0; i < s.nullSystemSpotCount && !counted; ++i)
+	{
+		if (strcmp(s.nullSystemSpots[i].spot, spot) == 0)
+		{
+			++s.nullSystemSpots[i].count;
+			counted = TRUE;
+		}
+	}
+	if (!counted && s.nullSystemSpotCount < (Int)ARRAY_SIZE(s.nullSystemSpots))
+	{
+		HarnessState::NullSystemSpot &e = s.nullSystemSpots[s.nullSystemSpotCount++];
+		e.spot = spot;	// a string literal at every call site
+		e.count = 1;
+	}
+
+	// one line per spot and detail, the first time (the first 48 pairs)
+	char key[96];
+	snprintf(key, sizeof(key), "%s|%s", spot, detail ? detail : "");
+	for (Int i = 0; i < s.nullSystemSeenCount; ++i)
+	{
+		if (strcmp(s.nullSystemSeen[i], key) == 0)
+			return;
+	}
+	if (s.nullSystemSeenCount >= (Int)ARRAY_SIZE(s.nullSystemSeen))
+		return;
+	copyArg(s.nullSystemSeen[s.nullSystemSeenCount++], sizeof(s.nullSystemSeen[0]), key);
+	fprintf(stderr, "[AoC fx] frame %u null system at %s%s%s%s\n", TheGameLogic ? TheGameLogic->getFrame() : 0, spot,
+		detail ? " (" : "", detail ? detail : "", detail ? ")" : "");
+	fflush(stderr);
+}
+
 void AoCHarness::onCRCMismatch( UnsignedInt frame, UnsignedInt inGameCRC, UnsignedInt replayCRC )
 {
 	HarnessState &s = state();
@@ -1813,6 +1859,14 @@ void AoCHarness::pollQuit()
 int AoCHarness::finalExitCode( int exitcode )
 {
 	HarnessState &s = state();
+	if (s.anyFlag && s.nullSystemSpotCount > 0)	// F12b: what the headless dummy refused, by spot
+	{
+		std::string counts;
+		for (Int i = 0; i < s.nullSystemSpotCount; ++i)
+			counts += fmt("%s%s %u", i ? ", " : "", s.nullSystemSpots[i].spot, s.nullSystemSpots[i].count);
+		fprintf(stderr, "[AoC fx] null systems at exit: %s\n", counts.c_str());
+		fflush(stderr);
+	}
 	if (s.exitCodeOverride >= 0)
 		return s.exitCodeOverride;
 	if (!s.anyFlag)
