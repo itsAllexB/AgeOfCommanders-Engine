@@ -32,6 +32,8 @@
 #include "PreRTS.h"	// This must go first in EVERY cpp file in the GameEngine
 
 #include "AoC/AoCFolder.h"	// AoC @feature F5
+#include "AoC/AoCRules.h"	// AoC @feature F10
+#include "AoC/AoCWall.h"	// AoC @feature F10
 #include "Common/BuildAssistant.h"
 #include "Common/GlobalData.h"
 #include "Common/Player.h"
@@ -469,6 +471,32 @@ void BuildAssistant::buildObjectLineNow( Object *constructorObject, const ThingT
 	// build an array of locations that we want to build from start to end
 	tileBuildInfo = buildTiledLocations( what, angle, start, end,
 																			 objectSize, maxObjects, constructorObject );
+
+	// AoC @hook 02/11/2026 Walls under the AoC rules: the line is cut to the segments the player can afford, and each placed segment is charged its cost vector (D11 F10).
+	if( AoCRules::enabled() && owningPlayer != nullptr )
+	{
+		AoCCost segmentCost;
+		what->calcAoCCost( owningPlayer, segmentCost );
+		AoCResourceBank *bank = owningPlayer->getAoCBank();
+		const Int requested = tileBuildInfo->tilesUsed;
+		const Int affordable = AoCWall::affordableCount( *bank, segmentCost, requested );
+		Int placed = 0;
+		for( Int i = 0; i < affordable; i++ )
+		{
+			// null for a human player when units in the way refuse to move: that segment is not charged
+			if( buildObjectNow( constructorObject, what, &tileBuildInfo->positions[ i ], angle, owningPlayer ) == nullptr )
+				continue;
+			bank->withdraw( segmentCost, placed == 0 );	// the cash sound once per line, not per segment
+			++placed;
+		}
+		if( AoCWall::logEnabled() )
+		{
+			AoCCost charged;
+			AoCWall::multiply( segmentCost, placed, charged );
+			AoCWall::logLine( TheGameLogic->getFrame(), owningPlayer->getPlayerIndex(), requested, affordable, placed, charged );
+		}
+		return;
+	}
 
 	// create an object at each position
 	for( Int i = 0; i < tileBuildInfo->tilesUsed; i++ )
