@@ -29,6 +29,7 @@
 
 #include "WWMath/wwmath.h"
 #include "GameLogic/AIPathfind.h"
+#include "AoC/AoCByteStream.h"	// AoC @hook 01/11/2026 Zones in the save (D11 F14).
 #include "GameLogic/Pathfinder/PathfindConstants.h"
 
 #include "Common/PerfTimer.h"
@@ -7519,6 +7520,112 @@ void Pathfinder::getAoCQueueState( ObjectID *requests, Int count, Int *head, Int
 	*tail = m_queuePRTail;
 	*cells = m_cumulativeCellsAllocated;
 	*zoneFrame = m_zoneManager.getAoCNextZoneFrame();
+}
+
+// AoC @hook 01/11/2026 The zones for the save game. The saving game recalculates its zones up to ZONE_UPDATE_FREQUENCY
+// frames after the map changes, so between two recalculations they describe an older map; a load computes them fresh
+// from the current map (newMap), and a path search then examines other cells and can finish in another frame (D11 F14).
+void Pathfinder::getAoCZoneData( std::vector<unsigned char> &out ) const
+{
+	out.clear();
+	const Int version = 1;
+	AoCByteStream::put( out, version );
+	AoCByteStream::put( out, m_extent );
+	// Ground cells, column by column, as runs of (count, zone).
+	UnsignedShort run = 0;
+	zoneStorageType runZone = 0;
+	for (Int x = m_extent.lo.x; x <= m_extent.hi.x; ++x)
+	{
+		for (Int y = m_extent.lo.y; y <= m_extent.hi.y; ++y)
+		{
+			const zoneStorageType zone = m_map ? m_map[x][y].getZone() : 0;
+			if (run > 0 && (zone != runZone || run == 0xFFFF))
+			{
+				AoCByteStream::put( out, run );
+				AoCByteStream::put( out, runZone );
+				run = 0;
+			}
+			runZone = zone;
+			++run;
+		}
+	}
+	if (run > 0)
+	{
+		AoCByteStream::put( out, run );
+		AoCByteStream::put( out, runZone );
+	}
+	const UnsignedShort endOfRuns = 0;
+	AoCByteStream::put( out, endOfRuns );
+	const Int layers = LAYER_LAST + 1;
+	AoCByteStream::put( out, layers );
+	for (Int i = 0; i < layers; ++i)
+	{
+		const Int zone = const_cast<PathfindLayer &>(m_layers[i]).getZone();
+		AoCByteStream::put( out, zone );
+	}
+	m_zoneManager.appendAoCData( out );
+}
+
+Bool Pathfinder::setAoCZoneData( const std::vector<unsigned char> &in )
+{
+	if (in.empty() || m_map == nullptr)
+		return FALSE;
+	const unsigned char *p = &in[0];
+	const unsigned char *end = p + in.size();
+	Int version = 0;
+	IRegion2D extent;
+	if (!AoCByteStream::get( p, end, version ) || version != 1 || !AoCByteStream::get( p, end, extent ))
+		return FALSE;
+	if (extent.lo.x != m_extent.lo.x || extent.lo.y != m_extent.lo.y || extent.hi.x != m_extent.hi.x || extent.hi.y != m_extent.hi.y)
+		return FALSE;
+	// Read the runs first, so a short blob changes nothing.
+	std::vector< std::pair<UnsignedShort, zoneStorageType> > runs;
+	UnsignedInt cells = 0;
+	for (;;)
+	{
+		UnsignedShort run = 0;
+		if (!AoCByteStream::get( p, end, run ))
+			return FALSE;
+		if (run == 0)
+			break;
+		zoneStorageType zone = 0;
+		if (!AoCByteStream::get( p, end, zone ))
+			return FALSE;
+		runs.push_back(std::make_pair(run, zone));
+		cells += run;
+	}
+	const UnsignedInt expected = (UnsignedInt)(m_extent.hi.x - m_extent.lo.x + 1) * (UnsignedInt)(m_extent.hi.y - m_extent.lo.y + 1);
+	if (cells != expected)
+		return FALSE;
+	Int layers = 0;
+	if (!AoCByteStream::get( p, end, layers ) || layers != LAYER_LAST + 1)
+		return FALSE;
+	Int layerZones[LAYER_LAST + 1];
+	for (Int i = 0; i < layers; ++i)
+		if (!AoCByteStream::get( p, end, layerZones[i] ))
+			return FALSE;
+	size_t r = 0;
+	UnsignedShort left = runs.empty() ? 0 : runs[0].first;
+	for (Int x = m_extent.lo.x; x <= m_extent.hi.x; ++x)
+	{
+		for (Int y = m_extent.lo.y; y <= m_extent.hi.y; ++y)
+		{
+			while (left == 0 && r + 1 < runs.size())
+				left = runs[++r].first;
+			m_map[x][y].setZone(runs[r].second);
+			--left;
+		}
+	}
+	for (Int i = 0; i < layers; ++i)
+	{
+		m_layers[i].setZone(layerZones[i]);
+		if (!m_layers[i].isUnused())
+			m_layers[i].applyZone();
+	}
+	if (m_zoneManager.readAoCData( p, end ))
+		return TRUE;
+	m_zoneManager.calculateZones(m_map, m_layers, m_extent);	// a partial restore must not stand: compute them fresh
+	return FALSE;
 }
 
 void Pathfinder::setAoCQueueState( const ObjectID *requests, Int count, Int head, Int tail, Int cells, UnsignedInt zoneFrame )

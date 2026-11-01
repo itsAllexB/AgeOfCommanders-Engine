@@ -221,6 +221,37 @@ namespace
 			moduleMs, objectsMs, objects, modules, (Int)PASSES, sink );
 	}
 
+	/// The pathfinder's ground map, which no save holds and the load rebuilds: per row, a CRC of the cells' zones, and one
+	/// of their types, flags and the units that hold them as a goal or a position (the pathfinder's own CRC covers none).
+	void writePathMap( FILE *fp )
+	{
+		Pathfinder *pf = TheAI->pathfinder();
+		const ICoord2D *hi = pf ? pf->getExtent() : nullptr;
+		if( hi == nullptr )
+			return;
+		for( Int y = 0; y <= hi->y; ++y )
+		{
+			DumpCRC zones, state;
+			for( Int x = 0; x <= hi->x; ++x )
+			{
+				PathfindCell *cell = pf->getCell( LAYER_GROUND, x, y );
+				if( cell == nullptr )
+					continue;
+				UnsignedShort zone = (UnsignedShort)cell->getZone();
+				zones.xferUnsignedShort( &zone );
+				Int type = (Int)cell->getType();
+				Int flags = (Int)cell->getFlags();
+				ObjectID goal = cell->getGoalUnit();
+				ObjectID pos = cell->getPosUnit();
+				state.xferInt( &type );
+				state.xferInt( &flags );
+				state.xferObjectID( &goal );
+				state.xferObjectID( &pos );
+			}
+			fprintf( fp, "pathrow %d zones %08X cells %08X\n", (Int)y, zones.getCRC(), state.getCRC() );
+		}
+	}
+
 	void writeModules( FILE *fp, Object *obj )
 	{
 		Int index = 0;
@@ -305,6 +336,7 @@ void AoCCrcDump::write( FILE *fp, UnsignedInt frame, Bool frameHasCRC, UnsignedI
 		fprintf( fp, "ai pathfinder %08X aidata %08X groups %d lastgroupid %u\n", crcOf( TheAI->pathfinder() ),
 			aiDataCRC.getCRC(), (Int)groups.size(), TheAI->getAoCLastGroupID() );
 		fprintf( fp, "pathfinder %s\n", bytesOf( TheAI->pathfinder() ).c_str() );
+		writePathMap( fp );
 		for( std::list<AIGroup *>::const_iterator it = groups.begin(); it != groups.end(); ++it )
 		{
 			if( *it == nullptr )

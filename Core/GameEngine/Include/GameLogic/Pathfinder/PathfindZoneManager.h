@@ -21,6 +21,8 @@
 #include "GameLogic/GameLogic.h"
 #include "GameLogic/LocomotorSet.h"
 
+#include <vector>	// AoC @hook 01/11/2026 PathfindZoneManager::appendAoCData (D11 F14).
+
 class PathfindCell;
 class PathfindLayer;
 class ZoneBlock;
@@ -53,6 +55,9 @@ public:
 	// the pathfind requests of that frame (D11 F14).
 	UnsignedInt getAoCNextZoneFrame() const { return m_nextFrameToCalculateZones; }
 	void setAoCNextZoneFrame( UnsignedInt frame ) { m_nextFrameToCalculateZones = frame; }
+	// AoC @hook 01/11/2026 The zone tables and every block's, packed for the save game and put back by a load (D11 F14).
+	void appendAoCData( std::vector<unsigned char> &out ) const;
+	Bool readAoCData( const unsigned char *&p, const unsigned char *end );
 	void updateZonesForModify( PathfindCell **map,  PathfindLayer layers[], const IRegion2D &structureBounds, const IRegion2D &globalBounds ) ; ///< Called to recalculate an area when a structure has been removed.
 	void calculateZones(	PathfindCell **map, PathfindLayer layers[], const IRegion2D &bounds);	///< Does zone calculations.
 	zoneStorageType getEffectiveZone(LocomotorSurfaceTypeMask acceptableSurfaces, Bool crusher, zoneStorageType zone) const;

@@ -207,6 +207,12 @@ void AoCSaveFidelity::xferPathfindQueue( Xfer *xfer, AoCPathfindQueue &queue )
 	xfer->xferInt( &queue.tail );
 	xfer->xferInt( &queue.cells );
 	xfer->xferUnsignedInt( &queue.zoneFrame );
+	UnsignedInt bytes = (UnsignedInt)queue.zones.size();
+	xfer->xferUnsignedInt( &bytes );
+	if (xfer->getXferMode() == XFER_LOAD)
+		queue.zones.assign(bytes, 0);
+	if (bytes > 0)
+		xfer->xferUser( &queue.zones[0], (Int)bytes );
 }
 
 // ------------------------------------------------------------------------------------------------
@@ -390,6 +396,7 @@ void AoCSaveFidelity::xfer( Xfer *xfer, std::vector<UpdateModule *> &heap )
 	{
 		queue.requests.assign(PATHFIND_QUEUE_LEN, INVALID_ID);
 		TheAI->pathfinder()->getAoCQueueState(&queue.requests[0], PATHFIND_QUEUE_LEN, &queue.head, &queue.tail, &queue.cells, &queue.zoneFrame);
+		TheAI->pathfinder()->getAoCZoneData(queue.zones);
 	}
 	xferPathfindQueue(xfer, queue);
 	if (xfer->getXferMode() == XFER_SAVE)
@@ -469,7 +476,9 @@ void AoCSaveFidelity::applyPendingLoad()
 		if (TheAI && TheAI->pathfinder() && !p.queue.requests.empty())
 		{
 			TheAI->pathfinder()->setAoCQueueState(&p.queue.requests[0], (Int)p.queue.requests.size(), p.queue.head, p.queue.tail, p.queue.cells, p.queue.zoneFrame);
-			harnessLine("pathfind queue restored (head %d tail %d cells %d, zones recalculated at frame %u)", p.queue.head, p.queue.tail, p.queue.cells, p.queue.zoneFrame);
+			const Bool zones = !p.queue.zones.empty() && TheAI->pathfinder()->setAoCZoneData(p.queue.zones);
+			harnessLine("pathfind queue restored (head %d tail %d cells %d, zones recalculated at frame %u); zones %s (%u bytes)", p.queue.head, p.queue.tail, p.queue.cells, p.queue.zoneFrame,
+				zones ? "restored" : "not restored, computed fresh", (UnsignedInt)p.queue.zones.size());
 		}
 	}
 	if (p.hasGroups)

@@ -270,7 +270,7 @@ TEST(AoCSaveFidelityTest, GroupsRoundTripThroughTheirSaveBlock)
 }
 
 // The pathfind queue block (Pathfinder::xfer saves only a version, Pathfinder::crc covers the queue): every slot in order,
-// then head, tail, the cells examined and the pending zone recalculation frame, back unchanged.
+// then head, tail, the cells examined, the pending zone recalculation frame and the packed zones, back unchanged.
 TEST(AoCSaveFidelityTest, PathfindQueueRoundTripsThroughItsSaveBlock)
 {
 	const std::string path = ::testing::TempDir() + "AoCSaveFidelityQueue.sav";
@@ -282,13 +282,15 @@ TEST(AoCSaveFidelityTest, PathfindQueueRoundTripsThroughItsSaveBlock)
 	written.tail = 116;
 	written.cells = 204;
 	written.zoneFrame = 1817;
+	const unsigned char packed[] = { 1, 0, 0, 0, 7, 9, 255 };
+	written.zones.assign(packed, packed + sizeof(packed));
 	{
 		XferSave save;
 		save.open(path.c_str());
 		AoCSaveFidelity::xferPathfindQueue(&save, written);
 		save.close();
 	}
-	EXPECT_EQ(readFile(path).size(), sizeof(UnsignedInt) + 512 * sizeof(ObjectID) + 3 * sizeof(Int) + sizeof(UnsignedInt));
+	EXPECT_EQ(readFile(path).size(), sizeof(UnsignedInt) + 512 * sizeof(ObjectID) + 3 * sizeof(Int) + sizeof(UnsignedInt) + sizeof(UnsignedInt) + sizeof(packed));
 	AoCPathfindQueue loaded;
 	{
 		XferLoad load;
@@ -302,6 +304,7 @@ TEST(AoCSaveFidelityTest, PathfindQueueRoundTripsThroughItsSaveBlock)
 	EXPECT_EQ(loaded.tail, 116);
 	EXPECT_EQ(loaded.cells, 204);
 	EXPECT_EQ(loaded.zoneFrame, 1817u);
+	EXPECT_EQ(loaded.zones, written.zones) << "the packed zones as one blob";
 	AoCPathfindQueue fresh;
 	EXPECT_EQ(fresh.zoneFrame, 0xFFFFFFFFu) << "no recalculation pending by default";
 }

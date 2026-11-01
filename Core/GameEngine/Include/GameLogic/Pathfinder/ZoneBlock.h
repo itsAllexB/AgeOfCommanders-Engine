@@ -18,6 +18,8 @@
 
 #pragma once
 
+#include <vector>	// AoC @hook 01/11/2026 ZoneBlock::appendAoCData (D11 F14).
+
 #include "GameLogic/LocomotorSet.h"
 
 class PathfindCell;
@@ -46,6 +48,11 @@ public:
 
 	Bool getInteractsWithBridge() const {return m_interactsWithBridge;}
 	void setInteractsWithBridge(Bool interacts) {m_interactsWithBridge = interacts;}
+
+	// AoC @hook 01/11/2026 The block's zone tables as computed, packed for the save game and put back by a load
+	// (PathfindZoneManager::appendAoCData) (D11 F14).
+	void appendAoCData( std::vector<unsigned char> &out ) const;
+	Bool readAoCData( const unsigned char *&p, const unsigned char *end );
 
 	static void __fastcall resolveBlockZones(Int srcZone, Int targetZone, zoneStorageType* zoneEquivalency, Int sizeOfZE);
 	static void __fastcall resolveZones(Int srcZone, Int targetZone, zoneStorageType* zoneEquivalency, Int sizeOfZE);

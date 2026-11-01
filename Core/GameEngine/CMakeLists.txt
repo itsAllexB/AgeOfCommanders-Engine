@@ -1,5 +1,6 @@
 set(GAMEENGINE_SRC
     Include/AoC/AoCBuildSpeed.h
+    Include/AoC/AoCByteStream.h
     Include/AoC/AoCConverterUpdate.h
     Include/AoC/AoCCost.h
     Include/AoC/AoCCrcDump.h

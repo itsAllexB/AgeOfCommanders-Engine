@@ -29,7 +29,10 @@
 //   3. The AI groups (AIGroup and AI::xfer save nothing): their ids, which AIGroup::crc carries, the members, the speed
 //      and dirty bit, and the group id counter.
 //   4. The pathfinder's request queue, its head and tail and the cells examined this frame (Pathfinder::crc covers them,
-//      Pathfinder::xfer writes only a version), and the frame of the pending zone recalculation.
+//      Pathfinder::xfer writes only a version), the frame of the pending zone recalculation and the zones themselves:
+//      the saving game recalculates them up to ZONE_UPDATE_FREQUENCY frames after the map changes, a load computes
+//      them fresh, and a path search then examines other cells (every ground cell's zone, run-length packed, each
+//      layer's zone and the zone manager's and blocks' tables; Pathfinder::getAoCZoneData).
 //   5. Units' attack priority sets made by scripts during play: the sets load with the script engine, after the objects,
 //      so AIUpdateInterface::xfer found none and kept the default set (any save version; deferAttackInfo).
 //
@@ -128,6 +131,7 @@ struct AoCPathfindQueue
 	Int tail;
 	Int cells;
 	UnsignedInt zoneFrame;		///< PathfindZoneManager's next recalculation frame (0xFFFFFFFF: none pending)
+	std::vector<unsigned char> zones;	///< Pathfinder::getAoCZoneData: the zones as last computed, packed
 
 	AoCPathfindQueue() : head( 0 ), tail( 0 ), cells( 0 ), zoneFrame( 0xFFFFFFFF ) {}
 };
@@ -153,8 +157,8 @@ namespace AoCSaveFidelity
 	/// count and member ids. Load replaces both.
 	void xferGroups( Xfer *xfer, UnsignedInt &lastGroupID, std::vector<AoCSavedGroup> &groups );
 
-	/// The pathfind queue of a save block: the slot count, each slot, then head, tail, cells and the zone frame. Load
-	/// replaces 'queue'.
+	/// The pathfind queue of a save block: the slot count, each slot, then head, tail, cells, the zone frame and the
+	/// packed zones (byte count, bytes). Load replaces 'queue'.
 	void xferPathfindQueue( Xfer *xfer, AoCPathfindQueue &queue );
 
 	// --- engine glue -------------------------------------------------------------------------------------------------
