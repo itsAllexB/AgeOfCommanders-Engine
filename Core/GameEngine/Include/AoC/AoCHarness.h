@@ -45,7 +45,9 @@
 //                                   type is that type) and workers_idle (gatherers neither ferrying nor
 //                                   doing anything else), then (F3) converters_running and converters_idle (the
 //                                   player's AoCConverterUpdate modules by AoCConverterInterface::isRunning), then (F9)
-//                                   wanderers (live objects whose AI module is AoCWanderAIUpdate). With -aiLog, stderr
+//                                   wanderers (live objects whose AI module is AoCWanderAIUpdate), then (F8)
+//                                   builders_busy (dozers and workers whose current dozer task is a build, walking to the
+//                                   site or constructing). With -aiLog, stderr
 //                                   also gets each AI player's
 //                                   population when -saveAtFrame saves and at the first frame of a loaded
 //                                   game, and, at a row where used + reserved is above the cap, what the
@@ -63,6 +65,15 @@
 //                                   the anchor's clearance plus WanderRadius), "... pick failed pause=<frames>
 //                                   max=<m>" when no draw gave a usable destination, "... unstuck dist=<d> max=<m>"
 //                                   when the watchdog takes over a walker locked in a stock move.
+//                                   F8 (AoCBuildSpeed), with resource types defined (nothing with stock data):
+//                                   "[AoC build] frame N <builderId> start <template> <objectId>
+//                                   speed=<perMille>" when a builder starts constructing (its first construction frame on
+//                                   the structure, or its first after a gap; " resumed progress=<percent>" on a structure
+//                                   with progress and no start line in this process, as after a load), "[AoC build] frame N
+//                                   <objectId> complete <template> builders=<n> frames=<k> base=<framesToBuild>" (n distinct
+//                                   builders since the first start line, k frames from that line to this one, both
+//                                   counted; base: calcTimeToBuild on the last frame), "[AoC build] frame N <builderId>
+//                                   back-to-work <type>" when a worker's build ends and it returns to its assigned type.
 //   -saveAtFrame <N> <name>         F1: write the stock save game <name>.sav (the save menu's path,
 //                                   TheGameState->saveGame) once logic frame N (1 or more) has run, from the
 //                                   engine loop. Load it with the stock -loadsave <name>.sav at the same
@@ -105,11 +116,16 @@
 //                                                        the first selected (lowest id) first
 //                                     count <Template>   F2: stderr "[AoC count] frame <frame> logic <frame run>
 //                                                        <Template> <n>", the live objects of that template
-//                                   After select, selectall, press, back and dock the next line waits 3 engine
-//                                   iterations so the control bar re-evaluates. Use absolute paths. select, selectall
-//                                   and dock send the stock message a click sends, so they move the CRC and the
+//                                     place <x> <y>      F8: while a building placement is pending (press on a build
+//                                                        button), what a left click on world point x, y sends: the
+//                                                        click's checks, then MSG_DOZER_CONSTRUCT with the template, the
+//                                                        point on the ground and the placement angle; a refused spot is
+//                                                        reported and keeps placement mode; line builds are refused
+//                                   After select, selectall, press, back, dock and place the next line waits 3 engine
+//                                   iterations so the control bar re-evaluates. Use absolute paths. select, selectall,
+//                                   dock and place send the stock message a click sends, so they move the CRC and the
 //                                   replay records them; press, back, log, bank, count and screenshot send nothing. Each of
-//                                   select, selectall and dock must be the first line of its frame and come after the
+//                                   select, selectall, dock and place must be the first line of its frame and come after the
 //                                   lines before it have settled: a late one (warned on stderr) lands on a frame
 //                                   that depends on the render rate, and the CRC log is no longer reproducible.
 //                                   Refused under -headless (no windows). Over 64 lines or a line over 511

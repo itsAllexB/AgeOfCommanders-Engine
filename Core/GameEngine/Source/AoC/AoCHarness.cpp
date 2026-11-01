@@ -59,7 +59,9 @@
 #include "GameClient/MapUtil.h"
 #include "GameLogic/GameLogic.h"
 #include "GameLogic/Object.h"
+#include "GameLogic/TerrainLogic.h"
 #include "GameLogic/Module/AIUpdate.h"
+#include "GameLogic/Module/DozerAIUpdate.h"
 #include "GameLogic/Module/ProductionUpdate.h"
 #include "GameLogic/Module/SupplyTruckAIUpdate.h"
 #include "GameNetwork/GameInfo.h"
@@ -324,6 +326,17 @@ void wandererCensusCallback( Object *obj, void *userData )
 		++*(Int *)userData;
 }
 
+// F8: builders (dozers and workers) whose current dozer task is a build, walking to the site or constructing, the -aiLog
+// builders_busy column
+void busyBuilderCensusCallback( Object *obj, void *userData )
+{
+	if (obj == nullptr || obj->isEffectivelyDead() || obj->getAI() == nullptr)
+		return;
+	const DozerAIInterface *dozer = obj->getAI()->getDozerAIInterface();
+	if (dozer != nullptr && dozer->getCurrentTask() == DOZER_TASK_BUILD)
+		++*(Int *)userData;
+}
+
 bool newerObjectFirst( const std::pair<UnsignedInt, std::string> &a, const std::pair<UnsignedInt, std::string> &b )
 {
 	return a.first > b.first;
@@ -563,6 +576,9 @@ void writeAiLog( UnsignedInt frame )
 			Int wanderers = 0;	// AoC F9
 			p->iterateObjects(wandererCensusCallback, &wanderers);
 			row.add("wanderers", wanderers);
+			Int buildersBusy = 0;	// AoC F8
+			p->iterateObjects(busyBuilderCensusCallback, &buildersBusy);
+			row.add("builders_busy", buildersBusy);
 		}
 
 		std::string path = dir + fmt("ai_%d.csv", (int)p->getPlayerIndex());
@@ -808,6 +824,63 @@ Int uiDock( const HarnessState::UiLine &l )
 	return AOC_UI_SETTLE_ITERATIONS;
 }
 
+/// place <x> <y> (F8): while a building placement is pending (after press on a build button), what a left click on the
+/// world point (x, y) sends (PlaceEventTranslator, MSG_MOUSE_LEFT_CLICK with the placement anchored): the same
+/// affordability and location checks, then MSG_DOZER_CONSTRUCT with the template, the point on the ground and the
+/// placement angle (the template's PlacementViewAngle while the mouse has not turned it), and placement mode ends.
+/// A refused spot keeps placement mode, as a refused click does. Line builds (walls) are refused.
+Int uiPlace( const HarnessState::UiLine &l )
+{
+	const ThingTemplate *build = TheInGameUI->getPendingPlaceType();
+	if (build == nullptr)
+	{
+		logLine("uiScript: place %s: no building placement is pending (press a build button first)", l.arg);
+		return 0;
+	}
+	float x = 0.0f;
+	float y = 0.0f;
+	if (sscanf(l.arg, "%f %f", &x, &y) != 2)
+	{
+		logLine("uiScript: place '%s': expected two world coordinates, x y", l.arg);
+		return 0;
+	}
+	if (TheBuildAssistant->isLineBuildTemplate(build))
+	{
+		logLine("uiScript: place %s: %s is a line build, which place does not support", l.arg, build->getName().str());
+		return 0;
+	}
+	Coord3D world;
+	world.x = x;
+	world.y = y;
+	world.z = TheTerrainLogic ? TheTerrainLogic->getGroundHeight(x, y) : 0.0f;
+	const Real angle = TheInGameUI->getPlacementAngle();
+	Object *builder = TheGameLogic->findObjectByID(TheInGameUI->getPendingPlaceSourceObjectID());
+	const CanMakeType canMake = TheBuildAssistant->canMakeUnit(builder, build);
+	if (canMake != CANMAKE_OK)
+	{
+		logLine("uiScript: place %s: %s cannot be made now (CanMakeType %d)", l.arg, build->getName().str(), (int)canMake);
+		return 0;
+	}
+	const LegalBuildCode lbc = TheBuildAssistant->isLocationLegalToBuild(&world, build, angle,
+		BuildAssistant::USE_QUICK_PATHFIND | BuildAssistant::TERRAIN_RESTRICTIONS | BuildAssistant::CLEAR_PATH |
+		BuildAssistant::NO_OBJECT_OVERLAP | BuildAssistant::SHROUD_REVEALED | BuildAssistant::IGNORE_STEALTHED |
+		BuildAssistant::FAIL_STEALTHED_WITHOUT_FEEDBACK, builder, nullptr);
+	if (lbc != LBC_OK)
+	{
+		logLine("uiScript: place %s: %s refused at (%.0f, %.0f), LegalBuildCode %d; placement still pending", l.arg, build->getName().str(),
+			world.x, world.y, (int)lbc);
+		return 0;
+	}
+	GameMessage *msg = TheMessageStream->appendMessage(GameMessage::MSG_DOZER_CONSTRUCT);
+	msg->appendIntegerArgument(build->getTemplateID());
+	msg->appendLocationArgument(world);
+	msg->appendRealArgument(angle);
+	TheInGameUI->placeBuildAvailable(nullptr, nullptr);
+	logLine("uiScript: place %s: %s at (%.0f, %.0f, %.1f) angle %.4f, builder %u", l.arg, build->getName().str(), world.x, world.y, world.z,
+		angle, builder ? (UnsignedInt)builder->getID() : 0u);
+	return AOC_UI_SETTLE_ITERATIONS;
+}
+
 /// bank: one stderr line with the local player's bank and the first selected object's cargo. Reads only.
 void uiBank( UnsignedInt frame )
 {
@@ -886,6 +959,8 @@ Int uiRunLine( const HarnessState::UiLine &l )
 		return uiSelectAll(l);
 	if (strcmp(l.cmd, "dock") == 0)
 		return uiDock(l);
+	if (strcmp(l.cmd, "place") == 0)
+		return uiPlace(l);
 	if (strcmp(l.cmd, "select") == 0)
 	{
 		// the local player's object of that template with the lowest id, selected as a left click selects it
@@ -965,8 +1040,9 @@ void runUiScript()
 	{
 		const HarnessState::UiLine &l = s.uiLines[s.uiNext++];
 		logLine("uiScript line %d at logic frame %u: %s %s", s.uiNext, s.lastLogicFrame, l.cmd, l.arg);
-		// select, selectall and dock (F2) send a logic message, so each must be the first line of its frame
-		const Bool sendsLogicMessage = strcmp(l.cmd, "select") == 0 || strcmp(l.cmd, "selectall") == 0 || strcmp(l.cmd, "dock") == 0;
+		// select, selectall and dock (F2) and place (F8) send a logic message, so each must be the first line of its frame
+		const Bool sendsLogicMessage = strcmp(l.cmd, "select") == 0 || strcmp(l.cmd, "selectall") == 0 || strcmp(l.cmd, "dock") == 0 ||
+			strcmp(l.cmd, "place") == 0;
 		if (sendsLogicMessage && s.lastLogicFrame > l.frame)
 			logLine("uiScript: warning: line %d (%s, frame %u) runs late, at logic frame %u: its message lands on a "
 				"frame that depends on the render rate, so the CRC log is not reproducible; make it the first line of its frame", s.uiNext, l.cmd, l.frame, s.lastLogicFrame);
@@ -1107,7 +1183,7 @@ Int AoCHarness::parseAocUiScript( char *args[], int num )
 		logLine("-aocUiScript: cannot open '%s'; flag ignored", args[1]);
 		return 2;
 	}
-	static const char *const known[] = { "select", "press", "back", "log", "screenshot", "dock", "selectall", "bank", "count" };	// F2: dock, selectall, bank, count
+	static const char *const known[] = { "select", "press", "back", "log", "screenshot", "dock", "selectall", "bank", "count", "place" };	// F2: dock, selectall, bank, count; F8: place
 	char text[512];
 	Int lineNumber = 0;
 	Int dropped = 0;
@@ -1138,7 +1214,7 @@ Int AoCHarness::parseAocUiScript( char *args[], int num )
 		if (ok)
 			s.uiLineCount++;
 		else
-			logLine("-aocUiScript: unknown command '%s' skipped (select, selectall, press, back, dock, log, bank, count, screenshot)", l.cmd);
+			logLine("-aocUiScript: unknown command '%s' skipped (select, selectall, press, back, dock, place, log, bank, count, screenshot)", l.cmd);
 	}
 	fclose(f);
 	if (dropped > 0)
