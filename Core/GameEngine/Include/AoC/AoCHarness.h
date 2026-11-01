@@ -75,8 +75,9 @@
 //                                                        the selection on the object of that template nearest
 //                                                        the first selected object (lowest id)
 //                                     bank               F2: stderr "[AoC bank] frame <frame> logic <frame run>
-//                                                        <Type>=<n>... cargo <id> <Type>:<n>/<capacity> at <x>,<y>
-//                                                        ai <state type> goal <id> to <x>,<y>;" with the local
+//                                                        <Type>=<n>... cargo <id> <Type>:<n>/<capacity> asg <Type>
+//                                                        at <x>,<y> ai <state type> goal <id> to <x>,<y>;" (asg: the
+//                                                        assigned type, - when none) with the local
 //                                                        player's bank and one cargo segment per selected object,
 //                                                        the first selected (lowest id) first
 //                                     count <Template>   F2: stderr "[AoC count] frame <frame> logic <frame run>

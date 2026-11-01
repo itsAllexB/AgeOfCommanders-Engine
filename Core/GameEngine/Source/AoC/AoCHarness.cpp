@@ -796,8 +796,11 @@ void uiBank( UnsignedInt frame )
 		if (gatherer)
 		{
 #if RTS_ZEROHOUR
-			text += fmt(" cargo %u %s:%d/%d", (UnsignedInt)obj->getID(), TheAoCRules ? TheAoCRules->getTypeName(gatherer->getCargoType()).str() : "Cash",
-				gatherer->getNumberBoxes(), gatherer->getMaxUnitsFor(gatherer->getCargoType()));
+			// the saved state, both halves: the cargo (type, count) and the assignment (asg, - when unassigned)
+			const Int assigned = gatherer->getAssignedResourceType();
+			text += fmt(" cargo %u %s:%d/%d asg %s", (UnsignedInt)obj->getID(), TheAoCRules ? TheAoCRules->getTypeName(gatherer->getCargoType()).str() : "Cash",
+				gatherer->getNumberBoxes(), gatherer->getMaxUnitsFor(gatherer->getCargoType()),
+				assigned >= 0 ? (TheAoCRules ? TheAoCRules->getTypeName(assigned).str() : "Cash") : "-");
 #else
 			text += fmt(" cargo %u boxes:%d", (UnsignedInt)obj->getID(), gatherer->getNumberBoxes());	// base Generals: no typed cargo, no getMaxBoxes
 #endif
