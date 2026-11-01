@@ -28,6 +28,7 @@
 #include "AoC/AoCResourceBank.h"
 #include "AoC/AoCRules.h"
 #include "AoC/AoCSimRate.h"
+#include "AoC/AoCUserData.h"
 #include "AoC/AoCWanderAIUpdate.h"
 
 #include "Common/ActionManager.h"
@@ -101,6 +102,8 @@ struct HarnessState
 	char skirmishSlots[1024];
 	Int skirmishSeed;
 	char aocOptions[512];		///< F7: options string keys -aocOptions appends to the -skirmish string, "" when unused
+
+	char userDataDir[1024];	///< F12a: the folder -aocUserData installed (trailing separator), "" when unused
 
 	UnsignedInt quitAtFrame;
 	Bool quitRequested;		///< frame N was reached inside the logic update
@@ -1167,6 +1170,42 @@ Int AoCHarness::parseAocOptions( char *args[], int num )
 	return 2;
 }
 
+Int AoCHarness::parseAocUserData( char *args[], int num )
+{
+	// Runs in a pass of its own at the start of CommandLine::parseCommandLineForStartup, before Options.ini is read and
+	// before -setCwd, with TheGlobalData just created. A run that asked for its own folder never falls back to the shared
+	// one: an unusable folder ends the process (exit code 6).
+	if (num < 2)
+	{
+		logLine("usage: -aocUserData <dir>; leaving (exit code 6)");
+		exit(6);
+	}
+	HarnessState &s = state();
+	std::error_code ec;
+	const std::filesystem::path cwd = std::filesystem::current_path(ec);
+	const std::string base = ec ? std::string() : cwd.string();
+	std::string dir;
+	if (!AoCUserData::resolve(args[1], base.c_str(), dir) || dir.size() >= sizeof(s.userDataDir))
+	{
+		logLine("-aocUserData: '%s' is not a usable folder name; leaving (exit code 6)", args[1]);
+		exit(6);
+	}
+	// The filesystem calls get the folder without its trailing separator.
+	const std::filesystem::path folder(dir.substr(0, dir.size() - 1));
+	std::filesystem::create_directories(folder, ec);
+	std::error_code isDirError;
+	if (!std::filesystem::is_directory(folder, isDirError))
+	{
+		logLine("-aocUserData: cannot create the folder '%s' (%s); leaving (exit code 6)", dir.c_str(), ec ? ec.message().c_str() : "not a folder");
+		exit(6);
+	}
+	copyArg(s.userDataDir, sizeof(s.userDataDir), dir.c_str());
+	TheWritableGlobalData->setPath_UserData(AsciiString(s.userDataDir));
+	s.anyFlag = TRUE;
+	logLine("user data folder: %s (-aocUserData)", s.userDataDir);
+	return 2;
+}
+
 Int AoCHarness::parseAocUiScript( char *args[], int num )
 {
 	if (num < 2)
@@ -1231,6 +1270,27 @@ Int AoCHarness::parseAocUiScript( char *args[], int num )
 Bool AoCHarness::isActive()
 {
 	return state().anyFlag;
+}
+
+Bool AoCHarness::isUnthrottled()
+{
+	return state().anyFlag && TheGlobalData != nullptr && TheGlobalData->m_headless;
+}
+
+const char *AoCHarness::userDataOverride()
+{
+	const HarnessState &s = state();
+	return s.userDataDir[0] != '\0' ? s.userDataDir : nullptr;
+}
+
+const char *AoCHarness::instanceMutexName( const char *firstInstanceName )
+{
+	const HarnessState &s = state();
+	if (s.userDataDir[0] == '\0')
+		return firstInstanceName;
+	static char name[160];	// fixed storage, like the rest of the harness state
+	copyArg(name, sizeof(name), AoCUserData::instanceName(firstInstanceName, s.userDataDir).c_str());
+	return name;
 }
 
 // --- skirmish start -----------------------------------------------------------------------------

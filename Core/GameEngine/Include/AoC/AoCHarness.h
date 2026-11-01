@@ -135,8 +135,23 @@
 //                                   Refused under -headless (no windows). Over 64 lines or a line over 511
 //                                   characters is reported on stderr and skipped.
 //
+//   -aocUserData <dir>              F12a: the user-data folder of this process (created if missing) instead of the one
+//                                   the registry names (Documents\Command and Conquer Generals Zero Hour Data), so a
+//                                   run's saves, replays (Replays\00000000.rep), preferences (Options.ini, Skirmish.ini,
+//                                   Network.ini, SagePatch.ini), map cache (Maps\MapCache.ini), screenshots, crash files
+//                                   and Debug dumps land in a folder of its own and several games can run at once.
+//                                   Parsed in a pass of its own before anything reads the folder (Options.ini's
+//                                   SimulationRate included); a relative path is taken against the working directory
+//                                   before -setCwd changes it (AoCUserData.h has the rules). -loadsave <name> and
+//                                   -loadreplay <name> resolve inside it, and so do user maps: copy the maps a run
+//                                   needs into <dir>\Maps first. A folder that cannot be made exits with code 6.
+//   (-headless)                     F12a: a -headless process with any harness flag runs unthrottled: the engine steps
+//                                   the logic at every engine iteration and the frame pacer does not wait, so the game
+//                                   runs as fast as the CPU allows. Only wall-clock pacing changes: the logic still
+//                                   counts 30 or 60 frames per game second and the CRC log equals a windowed run's.
+//
 // Exit codes: 0 normal, 2 CRC mismatch seen, 3 unsupported -simrate, 4 -skirmish could not start,
-// 5 a replay or save made at the other simulation rate was refused.
+// 5 a replay or save made at the other simulation rate was refused, 6 the -aocUserData folder is unusable.
 //
 // Everything lives in this class; stock files only gain one hook line each (see the "Hooks" section).
 // The harness never changes logic state and never branches on the local player, so stock replay CRCs
@@ -161,9 +176,22 @@ public:
 	static Int parseSaveAtFrame( char *args[], int num );	// AoC F1
 	static Int parseAocUiScript( char *args[], int num );	// AoC F5
 	static Int parseAocOptions( char *args[], int num );	// AoC F7
+	static Int parseAocUserData( char *args[], int num );	// AoC F12a: in a pass of its own, before Options.ini is read
 
 	/// TRUE when any harness flag was given on the command line.
 	static Bool isActive();
+
+	/// F12a: TRUE in a -headless process with any harness flag. GameEngine::canUpdateRegularGameLogic then steps the logic
+	/// at every engine iteration and FramePacer::isActualFramesPerSecondLimitEnabled says no, so nothing waits on the wall
+	/// clock; the logic frame count and every CRC stay those of a windowed run.
+	static Bool isUnthrottled();
+
+	/// F12a: the folder -aocUserData installed, with its trailing separator; nullptr without the flag.
+	static const char *userDataOverride();
+
+	/// F12a: rts::ClientInstance::initialize, the instance mutex name: the stock name without -aocUserData, else the name
+	/// of the first instance of that folder (AoCUserData::instanceName), so one game runs per user-data folder.
+	static const char *instanceMutexName( const char *firstInstanceName );
 
 	// Hooks, one call each in a stock file:
 	/// GameEngine::init, right after the RTS_DEBUG-only -file block: builds TheSkirmishGameInfo and sends MSG_NEW_GAME.
