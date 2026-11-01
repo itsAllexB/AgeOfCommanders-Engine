@@ -165,7 +165,7 @@ TEST_F(AoCPopulationTest, HeadroomCountsUsedAndReserved)
 
 // --- the lobby cap: 0 means no lobby cap, housing still limits --------------------------------------
 
-TEST_F(AoCPopulationTest, LobbyCapZeroIsUnlimitedAndOtherwiseClampsCapacity)
+TEST_F(AoCPopulationTest, LobbyCapZeroIsNoClampAndOtherwiseClampsCapacity)
 {
 	EXPECT_EQ(AoCPopulation::capFor(25, 0), 25) << "lobby cap 0: only housing limits";
 	EXPECT_EQ(AoCPopulation::capFor(25, 12), 12) << "the lobby cap binds below the housing";

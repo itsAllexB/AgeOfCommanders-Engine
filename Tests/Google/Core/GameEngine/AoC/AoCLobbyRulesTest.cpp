@@ -18,8 +18,9 @@
 
 // AoC F7: the lobby choice lists, the options string keys and the index-to-value mapping (design D11 section 2.7).
 // GameInfoToAsciiString and ParseAsciiStringToGameInfo need TheGameState and TheMapCache, which the test executable
-// does not have; they call appendOptionsString and parseOptionsKey for the AoC keys, so the round trip is tested on
-// those, and the game runs (gates b, c and f) cover the glue.
+// does not have; they call appendOptionsString and parseOptionsKey for the AoC key, so the round trip is tested on
+// those, and the game runs (gates b, c and f) cover the glue. GameInfo itself links (TheGlobalData exists here), so the
+// starting cash rule of GameInfo::setAoCLobbySettings is tested on a GameInfo.
 
 #include <string.h>
 #include <string>
@@ -29,7 +30,9 @@
 #include "AoC/AoCLobbyRules.h"
 #include "AoC/AoCRules.h"
 #include "Common/INI.h"
+#include "Common/Money.h"
 #include "Common/UserPreferences.h"
+#include "GameNetwork/GameInfo.h"
 
 namespace
 {
@@ -175,6 +178,40 @@ TEST_F(AoCLobbyRulesTest, NoListsKeepTheStockGame)
 	TheAoCLobbyRules = m_lobby;
 }
 
+// Review of PR #6, finding 1: with no list at all, a hand-made AO key or a mod session's preference file cannot change
+// ambient civilians or victory either; a stock game always runs at the defaults.
+TEST_F(AoCLobbyRulesTest, WithoutAnyListAmbientAndVictoryStayAtTheirDefaults)
+{
+	AoCLobbySettings odd = AoCLobbyRules::defaults();
+	odd.ambientCivilians = FALSE;
+	odd.victory = AOC_VICTORY_SCORE;
+	const AoCLobbySettings fixed = AoCLobbyRules::sanitize(odd);
+	EXPECT_TRUE(fixed.ambientCivilians);
+	EXPECT_EQ(fixed.victory, (Int)AOC_VICTORY_CONQUEST);
+	EXPECT_TRUE(fixed == AoCLobbyRules::defaults());
+
+	AoCLobbySettings parsed = AoCLobbyRules::defaults();
+	ASSERT_TRUE(parseKeys("AO=000N2;", parsed)) << "well formed, so the string is not rejected";
+	EXPECT_TRUE(AoCLobbyRules::sanitize(parsed) == AoCLobbyRules::defaults()) << "but it stores the defaults";
+
+	// A preference file written by a mod session.
+	UserPreferences modPrefs;
+	modPrefs["AoCAmbientCivilians"] = "No";
+	modPrefs["AoCVictory"] = "Score";
+	modPrefs["AoCStartingStock"] = "GUI:AoCStockHigh";
+	AoCLobbySettings read = AoCLobbyRules::defaults();
+	AoCLobbyRules::readPreferences(modPrefs, read);
+	EXPECT_TRUE(read == AoCLobbyRules::defaults()) << "a stock session reads none of the mod's choices";
+
+	// With lists the same file is read.
+	loadTestLists();
+	AoCLobbySettings withLists = AoCLobbyRules::defaults();
+	AoCLobbyRules::readPreferences(modPrefs, withLists);
+	EXPECT_FALSE(withLists.ambientCivilians);
+	EXPECT_EQ(withLists.victory, (Int)AOC_VICTORY_SCORE);
+	EXPECT_EQ(withLists.startingStock, 2);
+}
+
 // --- the INI blocks ------------------------------------------------------------------------------------------------------
 
 TEST_F(AoCLobbyRulesTest, ChoiceListsParseFromINI)
@@ -309,9 +346,9 @@ TEST_F(AoCLobbyRulesTest, RichnessArithmeticIsIntegerPerMilleRoundedDownNeverBel
 	EXPECT_EQ(AoCLobbyRules::scaleBoxes(2000000000, 1600), 0x7FFFFFFF) << "clamped to Int";
 }
 
-// --- the options string (decision 1) --------------------------------------------------------------------------------------
+// --- the options string (decision 1, one combined key: review of PR #6, finding 2) ------------------------------------
 
-TEST_F(AoCLobbyRulesTest, OptionsStringRoundTripForTheFiveKeys)
+TEST_F(AoCLobbyRulesTest, OptionsStringRoundTripForTheCombinedKey)
 {
 	loadTestLists();
 	AoCLobbySettings s;
@@ -321,29 +358,32 @@ TEST_F(AoCLobbyRulesTest, OptionsStringRoundTripForTheFiveKeys)
 	s.ambientCivilians = FALSE;
 	s.victory = AOC_VICTORY_WONDER;
 	const std::string text = written(s);
-	EXPECT_EQ(text, "AS=2;AR=2;AP=2;AA=N;AV=1;");
-	EXPECT_LE(text.size(), 25u) << "25 characters with all five keys at one-digit indices";
+	EXPECT_EQ(text, "AO=222N1;");
+	EXPECT_EQ(text.size(), 9u) << "nine characters with every field non-default (28 with the five keys of the first build)";
 
 	AoCLobbySettings back = AoCLobbyRules::defaults();
 	ASSERT_TRUE(parseKeys(text.c_str(), back));
 	EXPECT_TRUE(back == s);
 
-	// Only the fields that differ from their default are written.
+	// One field off its default writes the whole key, the others at their defaults.
 	AoCLobbySettings one = AoCLobbyRules::defaults();
 	one.startingStock = 2;
 	one.ambientCivilians = FALSE;
-	EXPECT_EQ(written(one), "AS=2;AA=N;");
+	EXPECT_EQ(written(one), "AO=210N0;");
 	AoCLobbySettings oneBack = AoCLobbyRules::defaults();
 	ASSERT_TRUE(parseKeys(written(one).c_str(), oneBack));
 	EXPECT_TRUE(oneBack == one);
 
-	// Two-digit indices (lists of up to 16) are the longest form.
+	// The sixteenth choice of a list is the hex digit F.
 	AoCLobbySettings wide = AoCLobbyRules::defaults();
 	wide.populationCap = 15;
-	EXPECT_EQ(written(wide), "AP=15;");
+	EXPECT_EQ(written(wide), "AO=11FY0;");
+	AoCLobbySettings wideBack = AoCLobbyRules::defaults();
+	ASSERT_TRUE(parseKeys("AO=11fY0;", wideBack)) << "either case";
+	EXPECT_EQ(wideBack.populationCap, 15);
 }
 
-TEST_F(AoCLobbyRulesTest, NoKeysMeansDefaultsAndExplicitDefaultsParseTheSame)
+TEST_F(AoCLobbyRulesTest, NoKeyMeansDefaultsAndExplicitDefaultsParseTheSame)
 {
 	loadTestLists();
 	AoCLobbySettings none = AoCLobbyRules::defaults();
@@ -351,25 +391,113 @@ TEST_F(AoCLobbyRulesTest, NoKeysMeansDefaultsAndExplicitDefaultsParseTheSame)
 	EXPECT_TRUE(none == AoCLobbyRules::defaults()) << "a stock string (no AoC key) is a default game";
 
 	AoCLobbySettings explicitDefaults = AoCLobbyRules::defaults();
-	ASSERT_TRUE(parseKeys("AS=1;AR=1;AP=0;AA=Y;AV=0;", explicitDefaults));
+	ASSERT_TRUE(parseKeys("AO=110Y0;", explicitDefaults));
 	EXPECT_TRUE(explicitDefaults == none);
 	EXPECT_EQ(written(explicitDefaults), "") << "written back, explicit defaults disappear";
 
-	// A stock key is not ours; malformed values are refused like a stock empty value.
+	// Stock keys and the five keys of the first build are not ours (the stock parser then rejects an unknown key).
 	AoCLobbySettings s = AoCLobbyRules::defaults();
 	Bool ok = TRUE;
 	EXPECT_FALSE(AoCLobbyRules::parseOptionsKey("SC", "10000", s, ok));
 	EXPECT_FALSE(AoCLobbyRules::parseOptionsKey("AF", "60", s, ok));
+	EXPECT_FALSE(AoCLobbyRules::parseOptionsKey("AS", "2", s, ok));
+	EXPECT_FALSE(AoCLobbyRules::parseOptionsKey("AA", "N", s, ok));
 	EXPECT_TRUE(ok);
-	EXPECT_TRUE(AoCLobbyRules::parseOptionsKey("AS", "x2", s, ok));
-	EXPECT_FALSE(ok);
-	ok = TRUE;
-	EXPECT_TRUE(AoCLobbyRules::parseOptionsKey("AA", "maybe", s, ok));
-	EXPECT_FALSE(ok);
-	ok = TRUE;
-	EXPECT_TRUE(AoCLobbyRules::parseOptionsKey("AP", "2 ", s, ok));
-	EXPECT_FALSE(ok) << "trailing characters are malformed";
-	EXPECT_TRUE(s == AoCLobbyRules::defaults()) << "a refused value changes nothing";
+}
+
+TEST_F(AoCLobbyRulesTest, MalformedCombinedValuesRejectAndOutOfRangeIndicesBecomeDefaults)
+{
+	loadTestLists();
+	const char *const malformed[] = {
+		"110Y",			// four characters
+		"110Y00",		// six: an index past F does not fit one digit
+		"1100Y0",		// six
+		"-10Y0",		// a negative index is not a hex digit
+		"G10Y0",		// not hex
+		"110X0",		// ambient is Y or N
+		"11 Y0",		// a space
+		"110YZ",		// victory not hex
+		"99999999999",	// an overflowing number
+	};
+	for (const char *v : malformed)
+	{
+		SCOPED_TRACE(v);
+		AoCLobbySettings s = AoCLobbyRules::defaults();
+		Bool ok = TRUE;
+		EXPECT_TRUE(AoCLobbyRules::parseOptionsKey("AO", v, s, ok)) << "the key is ours";
+		EXPECT_FALSE(ok) << "and the value rejects the string";
+		EXPECT_TRUE(s == AoCLobbyRules::defaults()) << "a refused value changes nothing";
+	}
+
+	// Well formed but outside the lists (three choices each) or the victory modes: stored as the defaults.
+	AoCLobbySettings far = AoCLobbyRules::defaults();
+	ASSERT_TRUE(parseKeys("AO=FA9n7;", far));
+	EXPECT_EQ(far.startingStock, 15);
+	EXPECT_FALSE(far.ambientCivilians) << "n is N";
+	const AoCLobbySettings fixed = AoCLobbyRules::sanitize(far);
+	EXPECT_EQ(fixed.startingStock, 1);
+	EXPECT_EQ(fixed.richness, 1);
+	EXPECT_EQ(fixed.populationCap, 0);
+	EXPECT_EQ(fixed.victory, (Int)AOC_VICTORY_CONQUEST);
+	EXPECT_FALSE(fixed.ambientCivilians) << "ambient is kept: lists exist";
+}
+
+// --- GameInfo: the chosen stock's cash is the starting cash (decision 4) ------------------------------------------------
+
+TEST_F(AoCLobbyRulesTest, GameInfoStockChoiceOverridesADisagreeingStartingCash)
+{
+	loadTestLists();
+	GameInfo game;
+	EXPECT_EQ(game.getStartingCash().countMoney(), 500u) << "reset: the default stock (Standard) gives its cash";
+
+	// ParseAsciiStringToGameInfo's order: SC= first, then the lobby fields.
+	Money sc;
+	sc.setStartingCash(10000);
+	game.setStartingCash(sc);
+	EXPECT_EQ(game.getStartingCash().countMoney(), 10000u);
+	AoCLobbySettings s = game.getAoCLobbySettings();
+	s.startingStock = 2;
+	game.setAoCLobbySettings(s);
+	EXPECT_EQ(game.getStartingCash().countMoney(), 1500u) << "the stock choice wins over SC=10000";
+	EXPECT_EQ(game.getAoCStartingStock(), 2);
+
+	// Storing the same settings again (what startNewGame does for every lobby screen, finding 5) fixes a cash that a
+	// money list set afterwards.
+	game.setStartingCash(sc);
+	game.setAoCLobbySettings(game.getAoCLobbySettings());
+	EXPECT_EQ(game.getStartingCash().countMoney(), 1500u);
+}
+
+TEST_F(AoCLobbyRulesTest, GameInfoZeroCashChoiceGivesZeroCashAndStillTheVector)
+{
+	AoCCost value;
+	AoCCost::parseText("Food:50 Wood:20", value);
+	m_lobby->addStartingStockChoice("GUI:AoCStockNoCash", value, TRUE);
+	GameInfo game;
+	EXPECT_EQ(game.getStartingCash().countMoney(), 0u) << "SC=0";
+	UnsignedInt cash = 99;
+	EXPECT_TRUE(AoCLobbyRules::startingCashFor(game.getAoCLobbySettings(), cash));
+	EXPECT_EQ(cash, 0u);
+	AoCCost fallback;
+	AoCCost::parseText("Food:9", fallback);
+	const AoCCost deposit = AoCLobbyRules::startingStockDepositFor(game.getAoCLobbySettings(), fallback);
+	EXPECT_EQ(deposit.amount[m_rules->findType("Food")], 50u) << "the vector is still deposited";
+	EXPECT_EQ(deposit.amount[m_rules->findType("Wood")], 20u);
+}
+
+TEST_F(AoCLobbyRulesTest, GameInfoWithoutListsKeepsTheCashAndTheDefaults)
+{
+	GameInfo game;
+	Money sc;
+	sc.setStartingCash(7000);
+	game.setStartingCash(sc);
+	AoCLobbySettings odd = game.getAoCLobbySettings();
+	odd.startingStock = 3;
+	odd.ambientCivilians = FALSE;
+	odd.victory = AOC_VICTORY_SCORE;
+	game.setAoCLobbySettings(odd);
+	EXPECT_EQ(game.getStartingCash().countMoney(), 7000u) << "no stock list: the money list's cash stays";
+	EXPECT_TRUE(game.getAoCLobbySettings() == AoCLobbyRules::defaults()) << "and every field at its default";
 }
 
 // --- remembered choices ------------------------------------------------------------------------------------------------------
