@@ -36,6 +36,7 @@
 #include "Common/INIException.h"
 #include "AoC/AoCLobbyRules.h"	// AoC @hook 01/11/2026 The lobby choice list blocks (D11 F7).
 #include "AoC/AoCRules.h"	// AoC @hook F1: the AoCResourceType block
+#include "AoC/AoCTrade.h"	// AoC @hook 01/11/2026 The AoCTrade block (D11 F11).
 
 #include "Common/DamageFX.h"
 #include "Common/file.h"
@@ -102,6 +103,7 @@ static const BlockParse theTypeTable[] =
 	{ "AoCResourceType",                AoCRules::parseResourceTypeDefinition },	// AoC @feature F1
 	{ "AoCRichnessChoice",              AoCLobbyRules::parseRichnessChoiceDefinition },	// AoC @hook 01/11/2026 Lobby resource richness choices (D11 F7).
 	{ "AoCStartingStockChoice",         AoCLobbyRules::parseStartingStockChoiceDefinition },	// AoC @hook 01/11/2026 Lobby starting stock choices (D11 F7).
+	{ "AoCTrade",                       AoCTradeStore::parseTradeDefinition },	// AoC @hook 01/11/2026 Import trades (D11 F11).
 	{ "Armor",                          INI::parseArmorDefinition },
 	{ "AudioEvent",                     INI::parseAudioEventDefinition },
 	{ "AudioSettings",                  INI::parseAudioSettingsDefinition },

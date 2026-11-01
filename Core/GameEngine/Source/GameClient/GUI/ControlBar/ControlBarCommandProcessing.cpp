@@ -57,6 +57,8 @@
 #include "GameLogic/Object.h"
 #include "GameLogic/Module/ProductionUpdate.h"
 
+#include "AoC/AoCTrade.h"	// AoC @feature 01/11/2026 Trade buttons and the shipment cancel (D11 F11).
+
 
 
 //-------------------------------------------------------------------------------------------------
@@ -479,7 +481,8 @@ CBCommandStatus ControlBar::processCommandUI( GameWindow *control,
 			}
 
 			// sanity
-			if( m_queueData[ i ].type != PRODUCTION_UNIT )
+			// AoC @hook 01/11/2026 a unit, or a shipment, which cancels through its production id too (D11 F11).
+			if( !AoCTrade::cancelsByProductionID( m_queueData[ i ].type ) )
 				break;
 
 			// the the production ID to cancel
@@ -677,6 +680,13 @@ CBCommandStatus ControlBar::processCommandUI( GameWindow *control,
 
 		case GUI_COMMAND_AOC_FOLDER_BACK:
 			aocFolderBack();
+			break;
+
+		//---------------------------------------------------------------------------------------------
+		// AoC @hook 01/11/2026 import trades: the stock click checks with their feedback (insufficient funds, a full queue), then
+		// MSG_AOC_QUEUE_TRADE with the trade id and a production id, as GUI_COMMAND_UNIT_BUILD sends (D11 F11).
+		case GUI_COMMAND_AOC_TRADE:
+			AoCTrade::pressTradeButton( commandButton, obj );
 			break;
 
 		//---------------------------------------------------------------------------------------------

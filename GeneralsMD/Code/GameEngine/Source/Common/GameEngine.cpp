@@ -60,6 +60,7 @@
 #include "AoC/AoCHarness.h"
 #include "AoC/AoCLobbyRules.h"	// AoC @hook 01/11/2026 The lobby choice lists (D11 F7).
 #include "AoC/AoCRules.h"	// AoC @hook F1
+#include "AoC/AoCTrade.h"	// AoC @hook 01/11/2026 The trade store (D11 F11).
 #include "Common/CommandLine.h"
 #include "Common/DamageFX.h"
 #include "Common/MultiplayerSettings.h"
@@ -297,6 +298,7 @@ GameEngine::~GameEngine()
 	TheSubsystemList->shutdownAll();
 	TheAoCRules = nullptr;	// AoC @hook F1: deleted by shutdownAll
 	TheAoCLobbyRules = nullptr;	// AoC @hook 01/11/2026 Deleted by shutdownAll (D11 F7).
+	TheAoCTradeStore = nullptr;	// AoC @hook 01/11/2026 Deleted by shutdownAll (D11 F11).
 	delete TheSubsystemList;
 	TheSubsystemList = nullptr;
 
@@ -738,6 +740,10 @@ void GameEngine::init()
 #endif
 
 		initSubsystem(TheUpgradeCenter,"TheUpgradeCenter", MSGNEW("GameEngineSubsystem") UpgradeCenter, &xferCRC, "Data\\INI\\Default\\Upgrade", "Data\\INI\\Upgrade");
+		// AoC @hook 01/11/2026 Import trades: after the templates and creation lists their names check against, before the command
+		// buttons that name them; stock data has no trade file, so the INI CRC is unchanged (D11 F11).
+		initSubsystem(TheAoCTradeStore, "TheAoCTradeStore", MSGNEW("GameEngineSubsystem") AoCTradeStore, nullptr);
+		TheAoCTradeStore->loadDefinitions(&xferCRC);
 		initSubsystem(TheGameClient,"TheGameClient", createGameClient(), nullptr);
 
 #ifdef SAGE_USE_NGMP

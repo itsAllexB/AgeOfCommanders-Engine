@@ -85,6 +85,8 @@
 
 #include "GameNetwork/NetworkInterface.h"
 
+#include "AoC/AoCTrade.h"	// AoC @feature 01/11/2026 MSG_AOC_QUEUE_TRADE (D11 F11).
+
 
 
 
@@ -694,6 +696,16 @@ void GameLogic::logicMessageDispatcher( GameMessage *msg, void *userData )
 		case GameMessage::MSG_CANCEL_UNIT_CREATE:
 		{
 			onCancelUnitCreate(msg, currentlySelectedGroup);
+			break;
+		}
+		// AoC @hook 01/11/2026 Queue an import trade at the one selected producer, as MSG_QUEUE_UNIT_CREATE does (D11 F11).
+		case GameMessage::MSG_AOC_QUEUE_TRADE:
+		{
+#if RETAIL_COMPATIBLE_AIGROUP
+			AoCTrade::queueFromMessage( getSingleObjectFromSelection(currentlySelectedGroup), msg->getArgument( 0 )->integer, msg->getArgument( 1 )->integer );
+#else
+			AoCTrade::queueFromMessage( getSingleObjectFromSelection(currentlySelectedGroup.Peek()), msg->getArgument( 0 )->integer, msg->getArgument( 1 )->integer );
+#endif
 			break;
 		}
 		case GameMessage::MSG_DOZER_CONSTRUCT:

@@ -59,6 +59,10 @@
 #include "GameClient/GameWindowManager.h"
 #include "GameClient/GadgetPushButton.h"
 
+#include "AoC/AoCTimedDropUpdate.h"	// AoC @feature 01/11/2026 The airdrop timer chip (D11 F11).
+#include "AoC/AoCTrade.h"							// AoC @feature 01/11/2026 Trade buttons and queue entries (D11 F11).
+#include "GameClient/Image.h"					// AoC @feature 01/11/2026 A shipment's queue cameo (D11 F11).
+
 
 // PRIVATE DATA ///////////////////////////////////////////////////////////////////////////////////
 static GameWindow *commandWindows[ MAX_COMMANDS_PER_SET ];
@@ -646,6 +650,21 @@ void ControlBar::populateBuildQueue( Object *producer )
 	//		GadgetButtonSetDisabledImage( m_queueData[ windowIndex ].control, image );
 
 		}
+#if RTS_ZEROHOUR
+		// AoC @hook 01/11/2026 a shipment: the trade's ButtonImage as the cameo, and the queue button cancels it through its
+		// production id, as for a unit (Command_CancelUnitCreate, MSG_CANCEL_UNIT_CREATE) (D11 F11).
+		else if( production->getProductionType() == PRODUCTION_AOC_TRADE )
+		{
+			const AoCTradeTemplate *trade = production->getProductionAoCTrade();
+			setControlCommand( m_queueData[ windowIndex ].control, cancelUnitCommand );
+			m_queueData[ windowIndex ].type = PRODUCTION_AOC_TRADE;
+			m_queueData[ windowIndex ].productionID = production->getProductionID();
+			m_queueData[ windowIndex ].control->winEnable( TRUE );
+			m_queueData[ windowIndex ].control->winSetStatus( WIN_STATUS_USE_OVERLAY_STATES );
+			image = (trade && TheMappedImageCollection) ? TheMappedImageCollection->findImageByName( trade->getButtonImageName() ) : nullptr;
+			GadgetButtonSetEnabledImage( m_queueData[ windowIndex ].control, image );
+		}
+#endif
 		else
 		{
 			const UpgradeTemplate *ut = production->getProductionUpgrade();
@@ -902,6 +921,10 @@ void ControlBar::updateContextCommand()
 
 //	// if we have a build tooltip layout, update it with the new data.
 //	repopulateBuildTooltipLayout();
+
+	// AoC @hook 01/11/2026 the airdrop chip ("Next airdrop 1:42") while the object's timed drop is armed; only when the layout has
+	// the window, so the stock bar draws nothing (D11 F11).
+	AoCTimedDropUpdate::updateTimerChip( obj );
 
 }
 
@@ -1217,6 +1240,20 @@ CommandAvailability ControlBar::getCommandAvailability( const CommandButton *com
 				return COMMAND_RESTRICTED; //COMMAND_CANT_AFFORD;
 			}
 
+			break;
+		}
+
+		// AoC @hook 01/11/2026 a trade button: greyed while RequiresObject is unmet (the tooltip names what is required) or the queue
+		// is full; otherwise enabled, and a click the bank cannot cover gets the stock insufficient-funds feedback (D11 F11).
+		case GUI_COMMAND_AOC_TRADE:
+		{
+			const AoCTradeTemplate *trade = command->getAoCTrade();
+			if( trade == nullptr || pu == nullptr )
+				return COMMAND_HIDDEN;
+			if( queueMaxed )
+				return COMMAND_RESTRICTED;
+			if( !AoCTrade::requiresMet( trade, player ) )
+				return COMMAND_RESTRICTED;
 			break;
 		}
 

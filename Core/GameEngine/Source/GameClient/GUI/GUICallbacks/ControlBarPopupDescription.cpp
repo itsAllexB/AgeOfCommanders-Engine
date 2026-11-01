@@ -88,6 +88,8 @@
 #include "GameClient/GUICallbacks.h"
 #include "GameClient/InGameUI.h"
 #include "GameClient/ControlBar.h"
+#include "AoC/AoCResourceBank.h"	// AoC @feature 01/11/2026 The trade tooltip (D11 F11).
+#include "AoC/AoCTrade.h"					// AoC @feature 01/11/2026 The trade tooltip (D11 F11).
 #include "GameClient/DisplayStringManager.h"
 #include "GameLogic/GameLogic.h"
 #include "GameLogic/Module/OverchargeBehavior.h"
@@ -582,6 +584,33 @@ void ControlBar::populateBuildTooltipLayout( const CommandButton *commandButton,
 				}
 			}
 
+		}
+		// AoC @hook 01/11/2026 a trade button: the trade's name and description when the button has none, the cost row from its
+		// Cost ("Cash 525"), the stock "Requires:" line while RequiresObject is unmet, else the stock "not enough money" line when
+		// the bank cannot cover the Cost (D11 F11, D6 section 5).
+		else if( commandButton->getCommandType() == GUI_COMMAND_AOC_TRADE && commandButton->getAoCTrade() )
+		{
+			const AoCTradeTemplate *trade = commandButton->getAoCTrade();
+			if( commandButton->getTextLabel().isEmpty() && trade->getDisplayLabel().isNotEmpty() )
+				name = TheGameText->fetch( trade->getDisplayLabel() );
+			if( commandButton->getDescriptionLabel().isEmpty() && trade->getDescriptionLabel().isNotEmpty() )
+				descrip = TheGameText->fetch( trade->getDescriptionLabel() );
+			costToBuild = trade->getCost().cashEquivalent();
+			cost = AoCTrade::vectorLabel( trade->getCost() );
+			requiresList = AoCTrade::requiresText( trade, player );
+			if( !requiresList.isEmpty() )
+			{
+				UnicodeString requireFormat = TheGameText->fetch( "CONTROLBAR:Requirements" );
+				requiresFormat.format( requireFormat.str(), requiresList.str() );
+				if( !descrip.isEmpty() )
+					descrip.concat( L"\n" );
+				descrip.concat( requiresFormat );
+			}
+			else if( player && !player->getAoCBank()->canAfford( trade->getCost() ) )
+			{
+				descrip.concat( L"\n\n" );
+				descrip.concat( TheGameText->fetch( "TOOLTIP:TooltipNotEnoughMoneyToBuild" ) );
+			}
 		}
 	}
 	else if(tooltipWin)

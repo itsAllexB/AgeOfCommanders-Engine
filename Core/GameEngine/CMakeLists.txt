@@ -14,6 +14,8 @@ set(GAMEENGINE_SRC
     Include/AoC/AoCRules.h
     Include/AoC/AoCSaveFidelity.h
     Include/AoC/AoCSimRate.h
+    Include/AoC/AoCTimedDropUpdate.h
+    Include/AoC/AoCTrade.h
     Include/AoC/AoCUserData.h
     Include/AoC/AoCWander.h
     Include/AoC/AoCWanderAIUpdate.h
@@ -603,6 +605,8 @@ set(GAMEENGINE_SRC
     Source/AoC/AoCRules.cpp
     Source/AoC/AoCSaveFidelity.cpp
     Source/AoC/AoCSimRate.cpp
+    Source/AoC/AoCTimedDropUpdate.cpp
+    Source/AoC/AoCTrade.cpp
     Source/AoC/AoCUserData.cpp
     Source/AoC/AoCWander.cpp
     Source/AoC/AoCWanderAIUpdate.cpp
