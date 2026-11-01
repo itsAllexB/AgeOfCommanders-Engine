@@ -253,4 +253,8 @@ namespace AoCTrade
 	void queueFromMessage( Object *producer, Int tradeID, Int productionID );
 	/// The queue button's cancel (GUI_COMMAND_CANCEL_UNIT_BUILD) applies to units and shipments.
 	Bool cancelsByProductionID( Int productionType );
+	/// ControlBar::setControlCommand: the button's border (a CommandButtonMappedBorderType). A trade button without a
+	/// ButtonBorderType of its own takes its trade's Direction's: BUILD for Buy, ACTION for Sell (D6 section 5); every other
+	/// button keeps its own.
+	Int borderFor( const CommandButton *button );
 }

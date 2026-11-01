@@ -655,6 +655,15 @@ void AoCTrade::queueFromMessage( Object *producer, Int tradeID, Int productionID
 }
 
 // ------------------------------------------------------------------------------------------------
+Int AoCTrade::borderFor( const CommandButton *button )
+{
+	const CommandButtonMappedBorderType border = button->getCommandButtonMappedBorderType();
+	if (button->getCommandType() != GUI_COMMAND_AOC_TRADE || border != COMMAND_BUTTON_BORDER_NONE || button->getAoCTrade() == nullptr)
+		return border;
+	return button->getAoCTrade()->getDirection() == AOC_TRADE_SELL ? COMMAND_BUTTON_BORDER_ACTION : COMMAND_BUTTON_BORDER_BUILD;
+}
+
+// ------------------------------------------------------------------------------------------------
 Bool AoCTrade::cancelsByProductionID( Int productionType )
 {
 #if RTS_ZEROHOUR

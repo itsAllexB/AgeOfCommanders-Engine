@@ -2549,7 +2549,9 @@ void ControlBar::setControlCommand( GameWindow *button, const CommandButton *com
 	GadgetButtonSetData(button, (void*)commandButton);
 	//button->winSetUserData( commandButton );
 
-	setCommandBarBorder(button, commandButton->getCommandButtonMappedBorderType());
+	// AoC @hook 01/11/2026 a trade button without a ButtonBorderType takes its trade's Direction's (Buy BUILD, Sell ACTION);
+	// every other button gets its own, as before (D11 F11, D6 section 5).
+	setCommandBarBorder(button, (CommandButtonMappedBorderType)AoCTrade::borderFor( commandButton ));
 
 	if (TheHotKeyManager)
 	{
