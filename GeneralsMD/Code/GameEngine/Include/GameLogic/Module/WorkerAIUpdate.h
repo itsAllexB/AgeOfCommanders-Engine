@@ -237,6 +237,8 @@ public:
 
 protected:
 
+	void aocBackToWork();	///< AoC @feature F8: after a build, back to the assigned resource type (D11 F8)
+
 // Dozer data
 	struct DozerTaskInfo
 	{

@@ -847,6 +847,27 @@ void WorkerAIUpdate::internalTaskComplete( DozerTask task )
 	for( Int i = 0; i < DOZER_NUM_DOCK_POINTS; i++ )
 		m_dockPoint[ task ][ i ].valid = FALSE;
 
+	// AoC @hook 02/11/2026 Back to work: after a build, a worker with an assigned resource type resumes gathering it (D11 F8).
+	if( task == DOZER_TASK_BUILD )
+		aocBackToWork();
+
+}
+
+//-------------------------------------------------------------------------------------------------
+// AoC @feature F8: back to work (D5 section 5). A worker whose build task has ended goes back to its F2 assigned
+// resource type: its supply brain is forced into wanting, as SupplyCenterProductionExitUpdate does for a new truck, and
+// docks at the nearest node of that type within its scan distance (the preferred dock was cleared when the build task
+// was given, and the node search keeps to the assigned type). Only without another dozer task pending, so a queued
+// repair still runs; a worker without an assigned type (every AI worker in B1, and every worker with stock data) idles
+// as in stock.
+//-------------------------------------------------------------------------------------------------
+void WorkerAIUpdate::aocBackToWork()
+{
+	if( m_aocCargo.assignedType < 0 || isAnyTaskPending() )
+		return;
+	setForceWantingState( TRUE );
+	if( AoCBuildSpeed::logEnabled() )
+		AoCBuildSpeed::logBackToWork( getObject()->getID(), AoCGather::typeName( m_aocCargo.assignedType ) );
 }
 
 //-------------------------------------------------------------------------------------------------
