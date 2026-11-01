@@ -1176,28 +1176,18 @@ Int AoCHarness::parseAocUserData( char *args[], int num )
 	// Runs in a pass of its own at the start of CommandLine::parseCommandLineForStartup, before Options.ini is read and
 	// before -setCwd, with TheGlobalData just created. A run that asked for its own folder never falls back to the shared
 	// one: an unusable folder ends the process (exit code 6).
-	if (num < 2)
-	{
-		logLine("usage: -aocUserData <dir>; leaving (exit code 6)");
-		exit(6);
-	}
 	HarnessState &s = state();
+	// The base of a relative argument is the working directory now: this pass runs before the startup table, so before
+	// -setCwd, and before setExecutableWorkingDirectory (CommandLine::parseCommandLineForStartup). Runners pass absolute
+	// paths; this order is what makes a relative one mean "relative to where the process was started".
 	std::error_code ec;
 	const std::filesystem::path cwd = std::filesystem::current_path(ec);
 	const std::string base = ec ? std::string() : cwd.string();
 	std::string dir;
-	if (!AoCUserData::resolve(args[1], base.c_str(), dir) || dir.size() >= sizeof(s.userDataDir))
+	const AoCUserData::PrepareResult result = AoCUserData::prepare(num < 2 ? nullptr : args[1], base.c_str(), dir);
+	if (result != AoCUserData::PREPARE_OK || dir.size() >= sizeof(s.userDataDir))
 	{
-		logLine("-aocUserData: '%s' is not a usable folder name; leaving (exit code 6)", args[1]);
-		exit(6);
-	}
-	// The filesystem calls get the folder without its trailing separator.
-	const std::filesystem::path folder(dir.substr(0, dir.size() - 1));
-	std::filesystem::create_directories(folder, ec);
-	std::error_code isDirError;
-	if (!std::filesystem::is_directory(folder, isDirError))
-	{
-		logLine("-aocUserData: cannot create the folder '%s' (%s); leaving (exit code 6)", dir.c_str(), ec ? ec.message().c_str() : "not a folder");
+		logLine("-aocUserData '%s': %s; leaving (exit code 6)", num < 2 ? "" : args[1], AoCUserData::describe(result));
 		exit(6);
 	}
 	copyArg(s.userDataDir, sizeof(s.userDataDir), dir.c_str());

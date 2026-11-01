@@ -50,6 +50,32 @@ namespace AoCUserData
 	/// resolveFor with the rules of the platform the game was built for.
 	Bool resolve( const char *arg, const char *baseDir, std::string &out );
 
+	/// The longest folder -aocUserData accepts, its trailing separator included. The engine appends file and folder
+	/// names to the user-data path in fixed buffers of _MAX_PATH (260) bytes: W3DFileSystem sprintf()s the user art and
+	/// map preview folders into its m_filePath[_MAX_PATH] (USER_W3D_DIR_PATH, USER_TGA_DIR_PATH, MAP_PREVIEW_DIR_PATH)
+	/// and then a file name, and the narrow Win32 calls fail past 260 characters. 180 leaves room for
+	/// "Maps\<name>\<name>.map", "Save\<name>.sav" and "MapPreviews\<long name>.tga".
+	enum { MAX_FOLDER_LENGTH = 180 };
+
+	/// Why prepare() refused a folder (each ends the process with exit code 6).
+	enum PrepareResult
+	{
+		PREPARE_OK,
+		PREPARE_NO_ARGUMENT,		///< no argument after the flag
+		PREPARE_BAD_NAME,				///< resolve() refused it
+		PREPARE_TOO_LONG,				///< longer than MAX_FOLDER_LENGTH after resolution
+		PREPARE_NOT_A_FOLDER,		///< it could not be created, or it names something that is not a folder (a file)
+		PREPARE_NOT_WRITABLE,		///< a file could not be created in it (a read-only folder)
+	};
+
+	/// Everything -aocUserData does before it installs the folder: resolve() against baseDir, the length limit, create
+	/// the folder (and its parents) when missing, check it is a folder, and probe write access by creating and deleting a
+	/// file in it. PREPARE_OK and the folder (with its trailing separator) in out, or the reason and out empty.
+	PrepareResult prepare( const char *arg, const char *baseDir, std::string &out );
+
+	/// A short English reason for a PrepareResult, for the stderr line.
+	const char *describe( PrepareResult result );
+
 	/// The instance mutex name (rts::ClientInstance) of a game with its own user-data folder: the stock name, then
 	/// "-AoCUserData-" and 16 hex digits of a 64-bit FNV-1a hash of the folder with ASCII letters folded to lower case
 	/// (Windows paths ignore case; a mutex name cannot hold a backslash). The stock rule "one game at a time" becomes

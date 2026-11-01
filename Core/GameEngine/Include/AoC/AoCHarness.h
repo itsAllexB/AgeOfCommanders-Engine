@@ -144,7 +144,11 @@
 //                                   SimulationRate included); a relative path is taken against the working directory
 //                                   before -setCwd changes it (AoCUserData.h has the rules). -loadsave <name> and
 //                                   -loadreplay <name> resolve inside it, and so do user maps: copy the maps a run
-//                                   needs into <dir>\Maps first. A folder that cannot be made exits with code 6.
+//                                   needs into <dir>\Maps first. Exit code 6 when the folder is unusable: no or an
+//                                   unsafe name, longer than 180 characters once resolved (the engine's 260-byte path
+//                                   buffers, AoCUserData::MAX_FOLDER_LENGTH), not creatable, a file, or not writable.
+//                                   Not for LAN tests with several clients on one machine: every folder's game is its
+//                                   folder's first instance, so RTS_MULTI_INSTANCE builds give them all one address.
 //   (-headless)                     F12a: a -headless process with any harness flag runs unthrottled: the frame pacer
 //                                   does not wait for the render cap and counts each engine iteration as one render step
 //                                   of it (1/60 s), so the engine sees a game rendering at exactly the cap and runs as

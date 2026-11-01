@@ -21,8 +21,12 @@
 // the refused shapes), the instance mutex name per folder, and that the folders the engine derives from it (replays,
 // user maps) follow an installed one.
 
+#include <stdio.h>
 #include <string.h>
+#include <chrono>
+#include <filesystem>
 #include <string>
+#include <system_error>
 #include <gtest/gtest.h>
 
 #include "AoC/AoCUserData.h"
@@ -147,6 +151,91 @@ TEST(AoCUserDataTest, OneInstanceNamePerFolder)
 	EXPECT_NE(a, std::string(guid));									// never the stock name: a normal game can still start
 	// FNV-1a 64 of the empty string is CBF29CE484222325
 	EXPECT_EQ(AoCUserData::instanceName("G", ""), "G-AoCUserData-CBF29CE484222325");
+}
+
+namespace
+{
+
+// A scratch folder under the system temp folder, removed again by the destructor.
+struct ScratchFolder
+{
+	std::filesystem::path path;
+	ScratchFolder()
+	{
+		std::error_code ec;
+		path = std::filesystem::temp_directory_path(ec) / ("aoc-userdata-test-" + std::to_string((unsigned long long)std::chrono::steady_clock::now().time_since_epoch().count()));
+		std::filesystem::create_directories(path, ec);
+	}
+	~ScratchFolder()
+	{
+		std::error_code ec;
+		std::filesystem::remove_all(path, ec);
+	}
+	std::string str() const { return path.string(); }
+};
+
+} // namespace
+
+// The refusals parseAocUserData turns into exit code 6, through AoCUserData::prepare, which it calls.
+TEST(AoCUserDataTest, PrepareRefusesTheExitSixCases)
+{
+	ScratchFolder scratch;
+	ASSERT_TRUE(std::filesystem::is_directory(scratch.path));
+	std::string out = "unchanged";
+
+	EXPECT_EQ(AoCUserData::prepare(nullptr, scratch.str().c_str(), out), AoCUserData::PREPARE_NO_ARGUMENT);	// "-aocUserData" last
+	EXPECT_TRUE(out.empty());
+	EXPECT_EQ(AoCUserData::prepare("", scratch.str().c_str(), out), AoCUserData::PREPARE_BAD_NAME);
+	EXPECT_EQ(AoCUserData::prepare("run", "", out), AoCUserData::PREPARE_BAD_NAME);						// relative, no base
+#ifdef _WIN32
+	EXPECT_EQ(AoCUserData::prepare("C:run", scratch.str().c_str(), out), AoCUserData::PREPARE_BAD_NAME);
+#endif
+
+	// a path naming an existing file, and a folder that cannot be created (under that file)
+	const std::filesystem::path file = scratch.path / "a-file.txt";
+	FILE *f = fopen(file.string().c_str(), "wb");
+	ASSERT_NE(f, nullptr);
+	fputs("x", f);
+	fclose(f);
+	EXPECT_EQ(AoCUserData::prepare(file.string().c_str(), "", out), AoCUserData::PREPARE_NOT_A_FOLDER);
+	EXPECT_EQ(AoCUserData::prepare((file / "sub").string().c_str(), "", out), AoCUserData::PREPARE_NOT_A_FOLDER);
+	EXPECT_TRUE(out.empty());
+	EXPECT_TRUE(std::filesystem::is_regular_file(file));		// the file is left alone
+}
+
+TEST(AoCUserDataTest, PrepareRefusesAFolderLongerThan180Characters)
+{
+	ScratchFolder scratch;
+	std::string out;
+	std::string base = scratch.str();
+	// pad with one segment so the resolved folder, separator included, is exactly the limit, then one more
+	std::string resolved;
+	ASSERT_TRUE(AoCUserData::resolve("x", base.c_str(), resolved));
+	ASSERT_LT(resolved.size(), (size_t)AoCUserData::MAX_FOLDER_LENGTH);
+	const size_t pad = AoCUserData::MAX_FOLDER_LENGTH - resolved.size() + 1;	// "x" grows to fill the limit
+	const std::string atLimit(pad, 'x');
+	ASSERT_TRUE(AoCUserData::resolve(atLimit.c_str(), base.c_str(), resolved));
+	EXPECT_EQ(resolved.size(), (size_t)AoCUserData::MAX_FOLDER_LENGTH);
+	EXPECT_EQ(AoCUserData::prepare(atLimit.c_str(), base.c_str(), out), AoCUserData::PREPARE_OK);
+	EXPECT_EQ(out, resolved);
+	const std::string overLimit(pad + 1, 'x');
+	EXPECT_EQ(AoCUserData::prepare(overLimit.c_str(), base.c_str(), out), AoCUserData::PREPARE_TOO_LONG);
+	EXPECT_TRUE(out.empty());
+	EXPECT_FALSE(std::filesystem::exists(scratch.path / overLimit));	// refused before anything is created
+}
+
+TEST(AoCUserDataTest, PrepareCreatesTheFolderAndLeavesNoProbeFile)
+{
+	ScratchFolder scratch;
+	std::string out;
+	EXPECT_EQ(AoCUserData::prepare("runs/gate-b1", scratch.str().c_str(), out), AoCUserData::PREPARE_OK);
+	const std::filesystem::path made = scratch.path / "runs" / "gate-b1";
+	EXPECT_TRUE(std::filesystem::is_directory(made));
+	EXPECT_TRUE(std::filesystem::is_empty(made));						// the write probe was deleted
+	std::string again;
+	EXPECT_EQ(AoCUserData::prepare(out.c_str(), "", again), AoCUserData::PREPARE_OK);	// an existing folder: the same
+	EXPECT_EQ(again, out);
+	EXPECT_STRNE(AoCUserData::describe(AoCUserData::PREPARE_TOO_LONG), AoCUserData::describe(AoCUserData::PREPARE_NOT_WRITABLE));
 }
 
 TEST(AoCUserDataTest, DerivedFoldersFollowAnInstalledFolder)

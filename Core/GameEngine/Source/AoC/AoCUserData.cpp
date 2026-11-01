@@ -23,8 +23,14 @@
 
 #include "AoC/AoCUserData.h"
 
+#include <filesystem>
+#include <stdio.h>
 #include <string.h>
+#include <system_error>
 #include <vector>
+#ifndef _WIN32
+#include <unistd.h>
+#endif
 
 namespace
 {
@@ -209,4 +215,61 @@ Bool AoCUserData::resolve( const char *arg, const char *baseDir, std::string &ou
 #else
 	return resolveFor(arg, baseDir, FALSE, out);
 #endif
+}
+
+AoCUserData::PrepareResult AoCUserData::prepare( const char *arg, const char *baseDir, std::string &out )
+{
+	out.clear();
+	if (arg == nullptr)
+		return PREPARE_NO_ARGUMENT;
+	std::string dir;
+	if (!resolve(arg, baseDir, dir))
+		return PREPARE_BAD_NAME;
+	if (dir.size() > (size_t)MAX_FOLDER_LENGTH)
+		return PREPARE_TOO_LONG;
+
+	// The filesystem calls get the folder without its trailing separator.
+	const std::filesystem::path folder(dir.substr(0, dir.size() - 1));
+	std::error_code ec;
+	std::filesystem::create_directories(folder, ec);
+	std::error_code isDirError;
+	if (!std::filesystem::is_directory(folder, isDirError))
+		return PREPARE_NOT_A_FOLDER;
+
+	// Write access: an existing read-only folder would be accepted above and the run would then write nothing. The probe
+	// file is named after the process, so two runs probing one folder at once cannot collide (the instance mutex refuses
+	// the second one afterwards).
+#ifdef _WIN32
+	const unsigned long processId = (unsigned long)GetCurrentProcessId();
+#else
+	const unsigned long processId = (unsigned long)getpid();
+#endif
+	char probeName[64];
+	snprintf(probeName, sizeof(probeName), "aoc-write-probe-%lu.tmp", processId);
+	const std::string probe = dir + probeName;
+	FILE *f = fopen(probe.c_str(), "wb");
+	if (f == nullptr)
+		return PREPARE_NOT_WRITABLE;
+	const Bool wrote = fputc('x', f) != EOF;
+	const Bool closed = fclose(f) == 0;
+	remove(probe.c_str());
+	if (!wrote || !closed)
+		return PREPARE_NOT_WRITABLE;
+
+	out = dir;
+	return PREPARE_OK;
+}
+
+const char *AoCUserData::describe( PrepareResult result )
+{
+	switch (result)
+	{
+		case PREPARE_OK: return "usable";
+		case PREPARE_NO_ARGUMENT: return "no folder given";
+		case PREPARE_BAD_NAME: return "not a usable folder name";
+		case PREPARE_TOO_LONG: return "longer than 180 characters once resolved";
+		case PREPARE_NOT_A_FOLDER: return "cannot be created, or is not a folder";
+		case PREPARE_NOT_WRITABLE: return "not writable";
+	}
+	return "unusable";
 }
