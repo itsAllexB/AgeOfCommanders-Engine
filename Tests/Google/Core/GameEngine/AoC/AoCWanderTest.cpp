@@ -1,0 +1,397 @@
+/*
+**	Command & Conquer Generals Zero Hour(tm)
+**	Copyright 2026 Age of Commanders contributors
+**
+**	This program is free software: you can redistribute it and/or modify
+**	it under the terms of the GNU General Public License as published by
+**	the Free Software Foundation, either version 3 of the License, or
+**	(at your option) any later version.
+**
+**	This program is distributed in the hope that it will be useful,
+**	but WITHOUT ANY WARRANTY; without even the implied warranty of
+**	MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+**	GNU General Public License for more details.
+**
+**	You should have received a copy of the GNU General Public License
+**	along with this program.  If not, see <http://www.gnu.org/licenses/>.
+*/
+
+// AoC F9: the pure parts of bounded wander (design D11 section 2.9): the module data defaults and parse table at both
+// simulation rates, the point picker (inside the ring for every direction and many injected draws, a pure function of
+// the draws), the pause range at 30 and 60 Hz, the in-flight look interval, the reach test, and the runtime state's
+// save round trip and CRC.
+
+#include <math.h>
+#include <stdio.h>
+#include <string.h>
+#include <random>
+#include <string>
+#include <vector>
+#include <gtest/gtest.h>
+
+#include "AoC/AoCSimRate.h"
+#include "AoC/AoCWander.h"
+#include "Common/GameCommon.h"
+#include "Common/INI.h"
+#include "Common/Snapshot.h"
+#include "Common/XferCRC.h"
+#include "Common/XferLoad.h"
+#include "Common/XferSave.h"
+
+namespace
+{
+
+// Draws from a seeded std::mt19937: the injected random source for the many-draws tests.
+class SeededRandom : public AoCWanderRandom
+{
+public:
+	explicit SeededRandom( unsigned int seed ) : m_gen( seed ) {}
+	virtual Int randomInt( Int lo, Int hi ) override { std::uniform_int_distribution<Int> d( lo, hi ); return d( m_gen ); }
+	virtual Real randomReal( Real lo, Real hi ) override
+	{
+		if (lo >= hi)
+			return hi;
+		std::uniform_real_distribution<Real> d( lo, hi );
+		return d( m_gen );
+	}
+private:
+	std::mt19937 m_gen;
+};
+
+// Returns scripted values and records every call, to check which draws a pick makes and in what order.
+class ScriptedRandom : public AoCWanderRandom
+{
+public:
+	std::vector<Int> ints;
+	std::vector<Real> reals;
+	std::string calls;
+	size_t nextInt = 0;
+	size_t nextReal = 0;
+	virtual Int randomInt( Int lo, Int hi ) override
+	{
+		calls += "i";
+		Int v = nextInt < ints.size() ? ints[nextInt++] : lo;
+		return v < lo ? lo : (v > hi ? hi : v);
+	}
+	virtual Real randomReal( Real lo, Real hi ) override
+	{
+		calls += "r";
+		Real v = nextReal < reals.size() ? reals[nextReal++] : lo;
+		return v < lo ? lo : (v > hi ? hi : v);
+	}
+};
+
+// The runtime state inside a module's versioned block, as AoCWanderAIUpdate::xfer writes it (version 1, the stock AI's
+// block first, here one Int standing in for it), and its crc.
+class StateHolder : public Snapshot
+{
+public:
+	StateHolder() : stockBefore( 0 ) {}
+	AoCWanderState state;
+	Int stockBefore;
+protected:
+	virtual void crc( Xfer *xfer ) override { state.crc(xfer); }
+	virtual void xfer( Xfer *xfer ) override
+	{
+		XferVersion currentVersion = 1;
+		XferVersion version = currentVersion;
+		xfer->xferVersion( &version, currentVersion );
+		xfer->xferInt( &stockBefore );
+		state.xfer( xfer );
+	}
+	virtual void loadPostProcess() override {}
+};
+
+Real distance2D( const Coord3D &a, const Coord3D &b )
+{
+	const double dx = (double)b.x - (double)a.x;
+	const double dy = (double)b.y - (double)a.y;
+	return (Real)sqrt(dx * dx + dy * dy);
+}
+
+class AoCWanderTest : public ::testing::Test
+{
+protected:
+	void SetUp() override { m_startRate = AoCSimRate::g_framesPerSecond; }
+	// The rate is fixed once startup has read it (AoCSimRate::lock) and the test process has locked it, so the tests set
+	// the live value the conversions read directly, and put it back.
+	void TearDown() override { AoCSimRate::g_framesPerSecond = m_startRate; }
+
+	// Drives one row of the module's parse table the way the INI loader does: the key token is consumed, the rest of the
+	// line is read with the static INI tokenizer.
+	static void parseLine( AoCWanderData &data, const char *line )
+	{
+		char buffer[256];
+		strncpy(buffer, line, sizeof(buffer) - 1);
+		buffer[sizeof(buffer) - 1] = '\0';
+		const char *key = ::strtok(buffer, INI::getSeps());
+		ASSERT_NE(key, nullptr);
+		for (const FieldParse *f = AoCWanderData::getFieldParse(); f->token != nullptr; ++f)
+		{
+			if (strcmp(f->token, key) == 0)
+			{
+				f->parse(nullptr, &data, (char *)&data + f->offset, f->userData);
+				return;
+			}
+		}
+		FAIL() << "no parse row for " << key;
+	}
+
+	static UnsignedInt crcOf( StateHolder &holder )
+	{
+		XferCRC xfer;
+		xfer.open("lightCRC");
+		xfer.xferSnapshot(&holder);
+		UnsignedInt value = xfer.getCRC();
+		xfer.close();
+		return value;
+	}
+
+	Int m_startRate;
+};
+
+TEST_F(AoCWanderTest, DefaultsAreTheDesignValuesAtBothRates)
+{
+	AoCSimRate::g_framesPerSecond = 30;
+	AoCWanderData at30;
+	EXPECT_FLOAT_EQ(at30.wanderRadius, 60.0f);
+	EXPECT_EQ(at30.minPauseFrames, 60u) << "2000 ms at 30 Hz";
+	EXPECT_EQ(at30.maxPauseFrames, 240u) << "8000 ms at 30 Hz";
+	EXPECT_TRUE(at30.anchorToProducer);
+
+	AoCSimRate::g_framesPerSecond = 60;
+	AoCWanderData at60;
+	EXPECT_EQ(at60.minPauseFrames, 120u) << "2000 ms at 60 Hz";
+	EXPECT_EQ(at60.maxPauseFrames, 480u) << "8000 ms at 60 Hz";
+}
+
+TEST_F(AoCWanderTest, ParseTableReadsTheKeysWithTheIniDurationRule)
+{
+	AoCSimRate::g_framesPerSecond = 30;
+	AoCWanderData data;
+	parseLine(data, "WanderRadius = 45.5");
+	parseLine(data, "MinPause = 1000");
+	parseLine(data, "MaxPause = 3001");
+	parseLine(data, "AnchorToProducer = No");
+	EXPECT_FLOAT_EQ(data.wanderRadius, 45.5f);
+	EXPECT_EQ(data.minPauseFrames, 30u);
+	EXPECT_EQ(data.maxPauseFrames, 91u) << "a partial frame rounds up, as INI::parseDurationUnsignedInt does";
+	EXPECT_FALSE(data.anchorToProducer);
+
+	AoCSimRate::g_framesPerSecond = 60;
+	AoCWanderData at60;
+	parseLine(at60, "MinPause = 2000");
+	parseLine(at60, "MaxPause = 8000");
+	EXPECT_EQ(at60.minPauseFrames, 120u);
+	EXPECT_EQ(at60.maxPauseFrames, 480u);
+}
+
+TEST_F(AoCWanderTest, DirectionsAreUnitVectorsEvenlyAroundTheCircle)
+{
+	Real x, y;
+	AoCWander::direction(0, &x, &y);
+	EXPECT_FLOAT_EQ(x, 1.0f); EXPECT_FLOAT_EQ(y, 0.0f);
+	AoCWander::direction(16, &x, &y);
+	EXPECT_FLOAT_EQ(x, 0.0f); EXPECT_FLOAT_EQ(y, 1.0f);
+	AoCWander::direction(32, &x, &y);
+	EXPECT_FLOAT_EQ(x, -1.0f); EXPECT_FLOAT_EQ(y, 0.0f);
+	AoCWander::direction(48, &x, &y);
+	EXPECT_FLOAT_EQ(x, 0.0f); EXPECT_FLOAT_EQ(y, -1.0f);
+
+	const double step = 2.0 * 3.14159265358979323846 / (double)(Int)AOC_WANDER_DIRECTIONS;
+	for (Int d = 0; d < AOC_WANDER_DIRECTIONS; ++d)
+	{
+		AoCWander::direction(d, &x, &y);
+		EXPECT_NEAR(sqrt((double)x * x + (double)y * y), 1.0, 1e-6) << "direction " << d;
+		EXPECT_NEAR(x, cos(d * step), 1e-6) << "direction " << d;
+		EXPECT_NEAR(y, sin(d * step), 1e-6) << "direction " << d;
+	}
+
+	Real wx, wy;
+	AoCWander::direction(AOC_WANDER_DIRECTIONS + 5, &wx, &wy);
+	AoCWander::direction(5, &x, &y);
+	EXPECT_EQ(wx, x); EXPECT_EQ(wy, y);
+	AoCWander::direction(-1, &wx, &wy);
+	AoCWander::direction(AOC_WANDER_DIRECTIONS - 1, &x, &y);
+	EXPECT_EQ(wx, x); EXPECT_EQ(wy, y);
+}
+
+TEST_F(AoCWanderTest, PickerStaysInsideTheRingForEveryDirectionAndDraw)
+{
+	const Coord3D anchor = { 1234.5f, 678.25f, 12.0f };
+	const Real radius = 60.0f;
+	const Real clearances[] = { 0.0f, 92.19544f };
+	const Real draws[] = { -5.0f, 0.0f, 0.001f, 17.3f, 30.0f, 59.999f, 60.0f, 75.0f, 1.0e6f };
+	for (Real clearance : clearances)
+	{
+		for (Int d = 0; d < AOC_WANDER_DIRECTIONS; ++d)
+		{
+			for (Real draw : draws)
+			{
+				const Coord3D p = AoCWander::pickPoint(anchor, clearance, radius, d, draw);
+				const Real dist = distance2D(anchor, p);
+				EXPECT_LE(dist, clearance + radius + 1e-3f) << "direction " << d << " draw " << draw;
+				EXPECT_GE(dist, clearance - 1e-3f) << "direction " << d << " draw " << draw;
+				EXPECT_EQ(p.z, anchor.z);
+				EXPECT_TRUE(AoCWander::withinReach(anchor, AoCWander::outerRadius(clearance, radius), 0.01f, p));
+			}
+		}
+	}
+}
+
+TEST_F(AoCWanderTest, ManyInjectedDrawsStayInsideAndCoverTheRing)
+{
+	const Coord3D anchor = { 500.0f, 500.0f, 0.0f };
+	const Real radius = 60.0f;
+	const Real clearances[] = { 0.0f, 92.19544f };
+	for (Real clearance : clearances)
+	{
+		SeededRandom random( 20261101u );
+		const Real outer = AoCWander::outerRadius(clearance, radius);
+		Real maxDist = 0.0f;
+		Real minDist = 1.0e9f;
+		Int quadrants[4] = { 0, 0, 0, 0 };
+		for (Int n = 0; n < 100000; ++n)
+		{
+			const Coord3D p = AoCWander::drawPoint(anchor, clearance, radius, random);
+			const Real dist = distance2D(anchor, p);
+			ASSERT_LE(dist, outer + 1e-3f) << "draw " << n;
+			ASSERT_GE(dist, clearance - 1e-3f) << "draw " << n;
+			maxDist = dist > maxDist ? dist : maxDist;
+			minDist = dist < minDist ? dist : minDist;
+			quadrants[(p.x >= anchor.x ? 0 : 1) + (p.y >= anchor.y ? 0 : 2)]++;
+		}
+		EXPECT_GT(maxDist, outer - 0.5f) << "the outer edge is reached";
+		EXPECT_LT(minDist, clearance + 0.5f) << "the inner edge is reached";
+		for (Int q = 0; q < 4; ++q)
+			EXPECT_GT(quadrants[q], 20000) << "quadrant " << q;
+	}
+}
+
+TEST_F(AoCWanderTest, PickIsAPureFunctionOfTheTwoDraws)
+{
+	const Coord3D anchor = { 100.0f, 200.0f, 5.0f };
+	ScriptedRandom script;
+	script.ints.push_back(16);		// straight up (+y)
+	script.reals.push_back(25.0f);
+	const Coord3D p = AoCWander::drawPoint(anchor, 10.0f, 60.0f, script);
+	EXPECT_EQ(script.calls, "ir") << "a direction, then a distance, nothing else";
+	EXPECT_NEAR(p.x, 100.0f, 1e-4f);
+	EXPECT_NEAR(p.y, 235.0f, 1e-4f) << "clearance 10 plus the distance 25";
+
+	const Coord3D q = AoCWander::pickPoint(anchor, 10.0f, 60.0f, 16, 25.0f);
+	EXPECT_EQ(memcmp(&p, &q, sizeof(Coord3D)), 0) << "the same draws give the same point, bit for bit";
+
+	SeededRandom a( 7u ), b( 7u );
+	for (Int n = 0; n < 1000; ++n)
+	{
+		const Coord3D pa = AoCWander::drawPoint(anchor, 0.0f, 60.0f, a);
+		const Coord3D pb = AoCWander::drawPoint(anchor, 0.0f, 60.0f, b);
+		ASSERT_EQ(memcmp(&pa, &pb, sizeof(Coord3D)), 0) << "draw " << n;
+	}
+}
+
+TEST_F(AoCWanderTest, PausesLieInTheRangeAt30And60Hz)
+{
+	struct Case { Int rate; UnsignedInt lo; UnsignedInt hi; UnsignedInt look; };
+	const Case cases[] = { { 30, 60u, 240u, 15u }, { 60, 120u, 480u, 30u } };
+	for (const Case &c : cases)
+	{
+		AoCSimRate::g_framesPerSecond = c.rate;
+		AoCWanderData data;	// MinPause 2000, MaxPause 8000
+		EXPECT_EQ(data.minPauseFrames, c.lo) << c.rate << " Hz";
+		EXPECT_EQ(data.maxPauseFrames, c.hi) << c.rate << " Hz";
+
+		ScriptedRandom ends;
+		ends.ints.push_back(-1000);	// clamped to the low end by the scripted source
+		ends.ints.push_back(1000000);
+		EXPECT_EQ(AoCWander::drawPause(data.minPauseFrames, data.maxPauseFrames, ends), c.lo);
+		EXPECT_EQ(AoCWander::drawPause(data.minPauseFrames, data.maxPauseFrames, ends), c.hi);
+		EXPECT_EQ(ends.calls, "ii") << "one draw per pause";
+
+		SeededRandom random( 99u );
+		UnsignedInt seenLo = 1000000u, seenHi = 0u;
+		for (Int n = 0; n < 20000; ++n)
+		{
+			const UnsignedInt pause = AoCWander::drawPause(data.minPauseFrames, data.maxPauseFrames, random);
+			ASSERT_GE(pause, c.lo);
+			ASSERT_LE(pause, c.hi);
+			seenLo = pause < seenLo ? pause : seenLo;
+			seenHi = pause > seenHi ? pause : seenHi;
+		}
+		EXPECT_EQ(seenLo, c.lo);
+		EXPECT_EQ(seenHi, c.hi);
+		EXPECT_EQ(AoCWander::checkFrames(data.minPauseFrames), c.look) << "a quarter of MinPause while a move is in flight";
+	}
+
+	SeededRandom random( 3u );
+	EXPECT_EQ(AoCWander::drawPause(90u, 30u, random), 90u) << "a maximum below the minimum is the minimum";
+	EXPECT_EQ(AoCWander::drawPause(0u, 0u, random), 1u) << "never below one frame";
+	EXPECT_EQ(AoCWander::checkFrames(3u), 1u);
+	EXPECT_EQ(AoCWander::checkFrames(0u), 1u);
+}
+
+TEST_F(AoCWanderTest, ReachComparesSquaredDistancesWithTheSlack)
+{
+	const Coord3D anchor = { 0.0f, 0.0f, 0.0f };
+	const Coord3D onEdge = { 60.0f, 0.0f, 0.0f };
+	const Coord3D cellOut = { 0.0f, -69.5f, 0.0f };
+	const Coord3D tooFar = { 50.0f, 50.0f, 0.0f };	// 70.7 from the anchor
+	EXPECT_TRUE(AoCWander::withinReach(anchor, 60.0f, 0.0f, onEdge));
+	EXPECT_FALSE(AoCWander::withinReach(anchor, 60.0f, 0.0f, cellOut));
+	EXPECT_TRUE(AoCWander::withinReach(anchor, 60.0f, 10.0f, cellOut)) << "one pathfinder cell of slack";
+	EXPECT_FALSE(AoCWander::withinReach(anchor, 60.0f, 10.0f, tooFar));
+	EXPECT_EQ(AoCWander::distanceForLog(anchor, tooFar), 71);
+	EXPECT_EQ(AoCWander::distanceForLog(anchor, onEdge), 60);
+}
+
+TEST_F(AoCWanderTest, StateRoundTripsThroughASaveAndIsInTheCrc)
+{
+	const std::string path = ::testing::TempDir() + "AoCWanderStateRoundTrip.sav";
+	{
+		StateHolder holder;
+		holder.stockBefore = 4242;
+		holder.state.anchored = TRUE;
+		holder.state.anchor.set(1500.25f, 975.5f, 10.0f);
+		holder.state.clearance = 92.19544f;
+		holder.state.nextMoveFrame = 1937u;
+		holder.state.moving = TRUE;
+		XferSave save;
+		save.open(path.c_str());
+		save.xferSnapshot(&holder);
+		save.close();
+	}
+	{
+		StateHolder loaded;
+		XferLoad load;
+		load.setOptions(XO_NO_POST_PROCESSING);
+		load.open(path.c_str());
+		load.xferSnapshot(&loaded);
+		load.close();
+		EXPECT_EQ(loaded.stockBefore, 4242);
+		EXPECT_TRUE(loaded.state.anchored);
+		EXPECT_EQ(loaded.state.anchor.x, 1500.25f);
+		EXPECT_EQ(loaded.state.anchor.y, 975.5f);
+		EXPECT_EQ(loaded.state.anchor.z, 10.0f);
+		EXPECT_EQ(loaded.state.clearance, 92.19544f);
+		EXPECT_EQ(loaded.state.nextMoveFrame, 1937u);
+		EXPECT_TRUE(loaded.state.moving);
+	}
+	remove(path.c_str());
+
+	StateHolder base;
+	const UnsignedInt baseCrc = crcOf(base);
+	StateHolder a, b, c, d, e;
+	a.state.anchored = TRUE;
+	b.state.anchor.x = 1.0f;
+	c.state.clearance = 1.0f;
+	d.state.nextMoveFrame = 1u;
+	e.state.moving = TRUE;
+	EXPECT_NE(crcOf(a), baseCrc) << "anchored";
+	EXPECT_NE(crcOf(b), baseCrc) << "anchor";
+	EXPECT_NE(crcOf(c), baseCrc) << "clearance";
+	EXPECT_NE(crcOf(d), baseCrc) << "next move frame";
+	EXPECT_NE(crcOf(e), baseCrc) << "move in flight";
+}
+
+} // namespace
