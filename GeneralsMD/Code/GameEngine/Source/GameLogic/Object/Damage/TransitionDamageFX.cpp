@@ -388,13 +388,15 @@ void TransitionDamageFX::onBodyDamageStateChange( const DamageInfo* damageInfo,
 						getDamageTypeFlag( modData->m_damageParticleTypes, lastDamageInfo->in.m_damageType ) )
 				{
 
+					// get the what is the position we're going to played the effect at
+					// AoC @hook 01/11/2026 Before the client creates the system: a random bone is a logic random draw,
+					// taken whether or not a system is created (none in a headless game), so both modes draw alike (D11 F12).
+					pos = getLocalEffectPos( &modData->m_particleSystem[ newState ][ i ].locInfo, draw );
+
 					// create a new particle system based on the template provided
 					ParticleSystem* pSystem = TheParticleSystemManager->createParticleSystem( pSystemT );
 					if( pSystem )
 					{
-
-						// get the what is the position we're going to played the effect at
-						pos = getLocalEffectPos( &modData->m_particleSystem[ newState ][ i ].locInfo, draw );
 
 						//
 						// set position on system given any bone position provided, the bone position is
