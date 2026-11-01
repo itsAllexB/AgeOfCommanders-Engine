@@ -21,6 +21,7 @@
 
 #include "PreRTS.h"	// This must go first in EVERY cpp file in the GameEngine
 
+#include "AoC/AoCConverterUpdate.h"
 #include "AoC/AoCHarness.h"
 #include "AoC/AoCLobbyRules.h"
 #include "AoC/AoCPopulation.h"
@@ -545,6 +546,12 @@ void writeAiLog( UnsignedInt frame )
 			}
 			row.add("workers_idle", gatherers.idle);
 #endif
+			// AoC F3: converter modules running and idle, through AoCConverterInterface (what F6's steel tooltip will count)
+			Int convertersRunning = 0;
+			Int convertersIdle = 0;
+			AoCConverterUpdate::countForPlayer(p, convertersRunning, convertersIdle);
+			row.add("converters_running", convertersRunning);
+			row.add("converters_idle", convertersIdle);
 		}
 
 		std::string path = dir + fmt("ai_%d.csv", (int)p->getPlayerIndex());

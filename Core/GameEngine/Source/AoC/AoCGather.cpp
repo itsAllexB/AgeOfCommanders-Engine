@@ -27,6 +27,7 @@
 #include "Common/GameCommon.h"
 #include "Common/INI.h"
 #include "Common/Xfer.h"
+#include "GameClient/GameText.h"
 #include "GameLogic/GameLogic.h"
 #include "WWMath/wwmath.h"
 
@@ -290,6 +291,21 @@ const char *AoCGather::typeName( Int type )
 	if (type < 0 || type >= TheAoCRules->getTypeCount())
 		return "?";
 	return TheAoCRules->getTypeName(type).str();
+}
+
+// ------------------------------------------------------------------------------------------------
+UnicodeString AoCGather::depositText( Int type, UnsignedInt amount )
+{
+	UnicodeString label;
+	Bool exists = FALSE;
+	if (TheAoCRules && TheGameText && TheAoCRules->getDisplayLabel(type).isNotEmpty())
+		label = TheGameText->fetch(TheAoCRules->getDisplayLabel(type), &exists);
+	if (!exists)
+		label.translate(AsciiString(typeName(type)));
+	UnicodeString text;
+	text.format(L"+%u ", amount);
+	text.concat(label);
+	return text;
 }
 
 // ------------------------------------------------------------------------------------------------

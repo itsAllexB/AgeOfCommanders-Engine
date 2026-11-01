@@ -43,13 +43,19 @@
 //                                   initial payload included, e.g. ChinaVehicleTroopCrawler(9), up to 8
 //                                   names, |-separated), then (F2) workers_<Type> (gatherers whose assigned
 //                                   type is that type) and workers_idle (gatherers neither ferrying nor
-//                                   doing anything else). With -aiLog, stderr also gets each AI player's
+//                                   doing anything else), then (F3) converters_running and converters_idle (the
+//                                   player's AoCConverterUpdate modules by AoCConverterInterface::isRunning). With
+//                                   -aiLog, stderr also gets each AI player's
 //                                   population when -saveAtFrame saves and at the first frame of a loaded
 //                                   game, and, at a row where used + reserved is above the cap, what the
 //                                   population is made of (template x count).
 //   (any flag)                      F2: the typed gather path prints one stderr line per event while any harness
 //                                   flag is given, "[AoC gather] frame N <objectId> <event>": picked, deposited,
 //                                   dropped, depleted, refused. Nothing in a stock run; logic never reads it.
+//                                   F3: a converter prints "[AoC convert] frame N <objectId> ran <input> -> <output>
+//                                   bank <Type>=<n>... player <index> [<condition> on|off]" at each cycle end that converts
+//                                   and "... idle <reason> bank ..." (no-input, no-power, under-construction, sold, neutral, disabled)
+//                                   once per change of reason. Nothing in a stock run; logic never reads it.
 //   -saveAtFrame <N> <name>         F1: write the stock save game <name>.sav (the save menu's path,
 //                                   TheGameState->saveGame) once logic frame N (1 or more) has run, from the
 //                                   engine loop. Load it with the stock -loadsave <name>.sav at the same

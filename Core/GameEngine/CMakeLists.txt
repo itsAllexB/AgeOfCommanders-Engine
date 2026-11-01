@@ -1,4 +1,5 @@
 set(GAMEENGINE_SRC
+    Include/AoC/AoCConverterUpdate.h
     Include/AoC/AoCCost.h
     Include/AoC/AoCFolder.h
     Include/AoC/AoCGather.h
@@ -581,6 +582,7 @@ set(GAMEENGINE_SRC
     Include/GameNetwork/WOLBrowser/FEBDispatch.h
     Include/GameNetwork/WOLBrowser/WebBrowser.h
     Include/Precompiled/PreRTS.h
+    Source/AoC/AoCConverterUpdate.cpp
     Source/AoC/AoCCost.cpp
     Source/AoC/AoCFolder.cpp
     Source/AoC/AoCGather.cpp
