@@ -18,8 +18,9 @@
 
 // AoC F9: the pure parts of bounded wander (design D11 section 2.9): the module data defaults and parse table at both
 // simulation rates, the point picker (inside the ring for every direction and many injected draws, a pure function of
-// the draws), the pause range at 30 and 60 Hz, the in-flight look interval, the reach test, and the runtime state's
-// save round trip and CRC.
+// the draws), the pause range at 30 and 60 Hz, the in-flight look interval, the reach test, the runtime state's save
+// round trip through the module's own save block and its CRC; and from the review of PR #9: ClearProducerFootprint,
+// the update's transitions (walk, pause, walk; an interrupted stroll) and the watchdog.
 
 #include <math.h>
 #include <stdio.h>
@@ -81,23 +82,44 @@ public:
 	}
 };
 
-// The runtime state inside a module's versioned block, as AoCWanderAIUpdate::xfer writes it (version 1, the stock AI's
-// block first, here one Int standing in for it), and its crc.
+// The module's save block through the module's own helper, AoCWanderState::xferBlock, which AoCWanderAIUpdate::xfer
+// calls with AIUpdateInterface::xfer as the stock block; here the stock block is one Int standing in for it (review of
+// PR #9, finding 5: the layout is tested through the code the module runs).
 class StateHolder : public Snapshot
 {
 public:
 	StateHolder() : stockBefore( 0 ) {}
 	AoCWanderState state;
 	Int stockBefore;
+	static void stockBlock( Xfer *xfer, void *context ) { xfer->xferInt( &static_cast<StateHolder *>(context)->stockBefore ); }
 protected:
 	virtual void crc( Xfer *xfer ) override { state.crc(xfer); }
+	virtual void xfer( Xfer *xfer ) override { state.xferBlock( xfer, stockBlock, this ); }
+	virtual void loadPostProcess() override {}
+};
+
+// The same block written by hand in the documented order: the version byte, the stock block, then the eight fields.
+class HandWrittenBlock : public Snapshot
+{
+public:
+	HandWrittenBlock() : stockBefore( 0 ) {}
+	AoCWanderState state;
+	Int stockBefore;
+protected:
+	virtual void crc( Xfer *xfer ) override {}
 	virtual void xfer( Xfer *xfer ) override
 	{
-		XferVersion currentVersion = 1;
-		XferVersion version = currentVersion;
-		xfer->xferVersion( &version, currentVersion );
+		XferVersion version = 1;
+		xfer->xferVersion( &version, 1 );
 		xfer->xferInt( &stockBefore );
-		state.xfer( xfer );
+		xfer->xferBool( &state.anchored );
+		xfer->xferCoord3D( &state.anchor );
+		xfer->xferReal( &state.clearance );
+		xfer->xferUnsignedInt( &state.nextMoveFrame );
+		xfer->xferBool( &state.moving );
+		xfer->xferCoord3D( &state.dest );
+		xfer->xferCoord3D( &state.watchPos );
+		xfer->xferUnsignedInt( &state.watchFrame );
 	}
 	virtual void loadPostProcess() override {}
 };
@@ -158,6 +180,7 @@ TEST_F(AoCWanderTest, DefaultsAreTheDesignValuesAtBothRates)
 	EXPECT_EQ(at30.minPauseFrames, 60u) << "2000 ms at 30 Hz";
 	EXPECT_EQ(at30.maxPauseFrames, 240u) << "8000 ms at 30 Hz";
 	EXPECT_TRUE(at30.anchorToProducer);
+	EXPECT_TRUE(at30.clearProducerFootprint);
 
 	AoCSimRate::g_framesPerSecond = 60;
 	AoCWanderData at60;
@@ -173,10 +196,12 @@ TEST_F(AoCWanderTest, ParseTableReadsTheKeysWithTheIniDurationRule)
 	parseLine(data, "MinPause = 1000");
 	parseLine(data, "MaxPause = 3001");
 	parseLine(data, "AnchorToProducer = No");
+	parseLine(data, "ClearProducerFootprint = No");
 	EXPECT_FLOAT_EQ(data.wanderRadius, 45.5f);
 	EXPECT_EQ(data.minPauseFrames, 30u);
 	EXPECT_EQ(data.maxPauseFrames, 91u) << "a partial frame rounds up, as INI::parseDurationUnsignedInt does";
 	EXPECT_FALSE(data.anchorToProducer);
+	EXPECT_FALSE(data.clearProducerFootprint);
 
 	AoCSimRate::g_framesPerSecond = 60;
 	AoCWanderData at60;
@@ -345,9 +370,10 @@ TEST_F(AoCWanderTest, ReachComparesSquaredDistancesWithTheSlack)
 	EXPECT_EQ(AoCWander::distanceForLog(anchor, onEdge), 60);
 }
 
-TEST_F(AoCWanderTest, StateRoundTripsThroughASaveAndIsInTheCrc)
+TEST_F(AoCWanderTest, StateRoundTripsThroughTheModulesSaveBlockAndIsInTheCrc)
 {
 	const std::string path = ::testing::TempDir() + "AoCWanderStateRoundTrip.sav";
+	const std::string handPath = ::testing::TempDir() + "AoCWanderStateHand.sav";
 	{
 		StateHolder holder;
 		holder.stockBefore = 4242;
@@ -356,6 +382,9 @@ TEST_F(AoCWanderTest, StateRoundTripsThroughASaveAndIsInTheCrc)
 		holder.state.clearance = 92.19544f;
 		holder.state.nextMoveFrame = 1937u;
 		holder.state.moving = TRUE;
+		holder.state.dest.set(1610.5f, 1001.0f, 10.0f);
+		holder.state.watchPos.set(1550.75f, 980.25f, 10.0f);
+		holder.state.watchFrame = 1900u;
 		XferSave save;
 		save.open(path.c_str());
 		save.xferSnapshot(&holder);
@@ -368,7 +397,7 @@ TEST_F(AoCWanderTest, StateRoundTripsThroughASaveAndIsInTheCrc)
 		load.open(path.c_str());
 		load.xferSnapshot(&loaded);
 		load.close();
-		EXPECT_EQ(loaded.stockBefore, 4242);
+		EXPECT_EQ(loaded.stockBefore, 4242) << "the stock AI block comes first and stays in step";
 		EXPECT_TRUE(loaded.state.anchored);
 		EXPECT_EQ(loaded.state.anchor.x, 1500.25f);
 		EXPECT_EQ(loaded.state.anchor.y, 975.5f);
@@ -376,22 +405,218 @@ TEST_F(AoCWanderTest, StateRoundTripsThroughASaveAndIsInTheCrc)
 		EXPECT_EQ(loaded.state.clearance, 92.19544f);
 		EXPECT_EQ(loaded.state.nextMoveFrame, 1937u);
 		EXPECT_TRUE(loaded.state.moving);
+		EXPECT_EQ(loaded.state.dest.x, 1610.5f);
+		EXPECT_EQ(loaded.state.dest.y, 1001.0f);
+		EXPECT_EQ(loaded.state.watchPos.x, 1550.75f);
+		EXPECT_EQ(loaded.state.watchPos.y, 980.25f);
+		EXPECT_EQ(loaded.state.watchFrame, 1900u);
+	}
+	// The layout: what xferBlock writes is byte for byte the documented order (version 1, stock block, eight fields).
+	{
+		HandWrittenBlock hand;
+		hand.stockBefore = 4242;
+		hand.state.anchored = TRUE;
+		hand.state.anchor.set(1500.25f, 975.5f, 10.0f);
+		hand.state.clearance = 92.19544f;
+		hand.state.nextMoveFrame = 1937u;
+		hand.state.moving = TRUE;
+		hand.state.dest.set(1610.5f, 1001.0f, 10.0f);
+		hand.state.watchPos.set(1550.75f, 980.25f, 10.0f);
+		hand.state.watchFrame = 1900u;
+		XferSave save;
+		save.open(handPath.c_str());
+		save.xferSnapshot(&hand);
+		save.close();
+		FILE *a = fopen(path.c_str(), "rb");
+		FILE *b = fopen(handPath.c_str(), "rb");
+		ASSERT_NE(a, nullptr);
+		ASSERT_NE(b, nullptr);
+		std::vector<char> da, db;
+		for (int ch = fgetc(a); ch != EOF; ch = fgetc(a)) da.push_back((char)ch);
+		for (int ch = fgetc(b); ch != EOF; ch = fgetc(b)) db.push_back((char)ch);
+		fclose(a);
+		fclose(b);
+		EXPECT_FALSE(da.empty());
+		EXPECT_EQ(da, db) << "xferBlock writes the version byte, the stock block, then the fields in the documented order";
 	}
 	remove(path.c_str());
+	remove(handPath.c_str());
 
 	StateHolder base;
 	const UnsignedInt baseCrc = crcOf(base);
-	StateHolder a, b, c, d, e;
+	StateHolder a, b, c, d, e, f, g, h;
 	a.state.anchored = TRUE;
 	b.state.anchor.x = 1.0f;
 	c.state.clearance = 1.0f;
 	d.state.nextMoveFrame = 1u;
 	e.state.moving = TRUE;
+	f.state.dest.y = 1.0f;
+	g.state.watchPos.x = 1.0f;
+	h.state.watchFrame = 1u;
 	EXPECT_NE(crcOf(a), baseCrc) << "anchored";
 	EXPECT_NE(crcOf(b), baseCrc) << "anchor";
 	EXPECT_NE(crcOf(c), baseCrc) << "clearance";
 	EXPECT_NE(crcOf(d), baseCrc) << "next move frame";
 	EXPECT_NE(crcOf(e), baseCrc) << "move in flight";
+	EXPECT_NE(crcOf(f), baseCrc) << "destination";
+	EXPECT_NE(crcOf(g), baseCrc) << "watch position";
+	EXPECT_NE(crcOf(h), baseCrc) << "watch frame";
+}
+
+// Review of PR #9, finding 2: ClearProducerFootprint. Anchored to a producer the clearance is its bounding radius unless
+// the key is No; anchored to itself it is always 0.
+TEST_F(AoCWanderTest, ClearanceFollowsClearProducerFootprint)
+{
+	EXPECT_FLOAT_EQ(AoCWander::anchorClearance(TRUE, TRUE, 92.19544f), 92.19544f);
+	EXPECT_FLOAT_EQ(AoCWander::anchorClearance(TRUE, FALSE, 92.19544f), 0.0f) << "an ox pen: the ring sits on the centre";
+	EXPECT_FLOAT_EQ(AoCWander::anchorClearance(FALSE, TRUE, 92.19544f), 0.0f) << "anchored to itself";
+	EXPECT_FLOAT_EQ(AoCWander::anchorClearance(TRUE, TRUE, -1.0f), 0.0f);
+
+	AoCWanderState s;
+	const Coord3D centre = { 400.0f, 300.0f, 0.0f };
+	const Coord3D spawn = { 460.0f, 335.0f, 0.0f };
+	AoCWander::fixAnchor(s, 17u, centre, AoCWander::anchorClearance(TRUE, FALSE, 92.19544f), spawn);
+	EXPECT_TRUE(s.anchored);
+	EXPECT_EQ(s.anchor.x, 400.0f);
+	EXPECT_EQ(s.clearance, 0.0f);
+	EXPECT_EQ(s.nextMoveFrame, 17u) << "the first stroll is due at once";
+	EXPECT_EQ(s.watchFrame, 17u);
+	EXPECT_EQ(s.watchPos.x, 460.0f);
+	EXPECT_FLOAT_EQ(AoCWander::outerRadius(s.clearance, 60.0f), 60.0f);
+}
+
+// Review of PR #9, finding 5: the update's transitions, through the pure steps the module calls in order.
+TEST_F(AoCWanderTest, UpdateWalksThenPausesThenWalksAgain)
+{
+	AoCSimRate::g_framesPerSecond = 30;
+	AoCWanderData data;	// 60 to 240 frames, look every 15
+	AoCWanderState s;
+	const Coord3D anchor = { 0.0f, 0.0f, 0.0f };
+	const Coord3D here = { 100.0f, 0.0f, 0.0f };
+	const Coord3D dest = { 0.0f, 120.0f, 0.0f };
+	AoCWander::fixAnchor(s, 100u, anchor, 92.0f, here);
+
+	EXPECT_FALSE(AoCWander::wantsMove(s, 100u, FALSE, FALSE)) << "the stock AI is busy (the exit path)";
+	EXPECT_FALSE(AoCWander::wantsMove(s, 100u, TRUE, TRUE)) << "dead";
+	EXPECT_EQ(AoCWander::sleepFrames(s, 100u, data.minPauseFrames), 15u) << "due but busy: look again in a quarter of MinPause";
+	ASSERT_TRUE(AoCWander::wantsMove(s, 100u, TRUE, FALSE)) << "idle and due: walk";
+
+	AoCWander::moveStarted(s, 100u, here, dest);
+	EXPECT_TRUE(s.moving);
+	EXPECT_EQ(s.dest.y, 120.0f);
+	EXPECT_FALSE(AoCWander::wantsMove(s, 101u, TRUE, FALSE)) << "one stroll at a time";
+	EXPECT_FALSE(AoCWander::moveEnded(s, FALSE)) << "still walking";
+	EXPECT_EQ(AoCWander::sleepFrames(s, 101u, data.minPauseFrames), 15u) << "in flight: a quarter of MinPause";
+
+	ASSERT_TRUE(AoCWander::moveEnded(s, TRUE)) << "the stock AI is idle again: the stroll has ended";
+	AoCWander::pauseFor(s, 329u, 150u);
+	EXPECT_FALSE(s.moving);
+	EXPECT_EQ(s.nextMoveFrame, 479u);
+	EXPECT_FALSE(AoCWander::moveEnded(s, TRUE)) << "nothing in flight";
+	EXPECT_EQ(AoCWander::sleepFrames(s, 329u, data.minPauseFrames), 150u) << "pausing: sleep the rest of the pause";
+	EXPECT_EQ(AoCWander::sleepFrames(s, 400u, data.minPauseFrames), 79u);
+	EXPECT_FALSE(AoCWander::wantsMove(s, 478u, TRUE, FALSE));
+	EXPECT_TRUE(AoCWander::wantsMove(s, 479u, TRUE, FALSE)) << "the pause is over";
+
+	// No usable draw: a pause instead of a stroll, then due again.
+	AoCWander::pauseFor(s, 479u, 60u);
+	EXPECT_FALSE(s.moving);
+	EXPECT_TRUE(AoCWander::wantsMove(s, 539u, TRUE, FALSE));
+}
+
+TEST_F(AoCWanderTest, AnInterruptedStrollEndsWhenTheStockAIIsIdleAgain)
+{
+	AoCWanderState s;
+	const Coord3D anchor = { 0.0f, 0.0f, 0.0f };
+	Coord3D pos = { 100.0f, 0.0f, 0.0f };
+	AoCWander::fixAnchor(s, 0u, anchor, 92.0f, pos);
+	AoCWander::moveStarted(s, 10u, pos, anchor);
+	// Panic (AI_MOVE_AWAY_FROM_REPULSORS) or a push (AI_MOVE_OUT_OF_THE_WAY): not the stock move the watchdog watches,
+	// whatever the walker does, for longer than any MaxPause.
+	for (UnsignedInt frame = 11u; frame < 2000u; ++frame)
+	{
+		ASSERT_FALSE(AoCWander::watchStuck(s, frame, FALSE, pos, 240u)) << "frame " << frame;
+		ASSERT_FALSE(AoCWander::moveEnded(s, FALSE));
+	}
+	EXPECT_TRUE(s.moving) << "the stroll counts as in flight until the stock AI is idle";
+	EXPECT_TRUE(AoCWander::moveEnded(s, TRUE)) << "then it ends, and a pause follows";
+}
+
+TEST_F(AoCWanderTest, WatchdogTakesOverAWalkerLockedInAStockMove)
+{
+	struct Case { Int rate; UnsignedInt stuck; };
+	const Case cases[] = { { 30, 240u }, { 60, 480u } };
+	for (const Case &c : cases)
+	{
+		AoCSimRate::g_framesPerSecond = c.rate;
+		AoCWanderData data;
+		ASSERT_EQ(data.maxPauseFrames, c.stuck) << "MaxPause is the watchdog's patience";
+
+		// A stroll in flight that stops on one spot in AI_MOVE_TO (two units locked together).
+		AoCWanderState s;
+		const Coord3D anchor = { 0.0f, 0.0f, 0.0f };
+		const Coord3D locked = { 4205.0f, 1275.0f, 0.0f };
+		AoCWander::fixAnchor(s, 1000u, anchor, 92.0f, locked);
+		AoCWander::moveStarted(s, 1000u, locked, anchor);
+		EXPECT_FALSE(AoCWander::watchStuck(s, 1000u + c.stuck - 1u, TRUE, locked, data.maxPauseFrames)) << c.rate << " Hz";
+		ASSERT_TRUE(AoCWander::watchStuck(s, 1000u + c.stuck, TRUE, locked, data.maxPauseFrames)) << c.rate << " Hz";
+		EXPECT_FALSE(s.moving) << "ready for a fresh pick";
+		EXPECT_EQ(s.nextMoveFrame, 1000u + c.stuck) << "at once";
+		EXPECT_EQ(s.watchFrame, 1000u + c.stuck) << "the watch restarts";
+		EXPECT_TRUE(AoCWander::wantsMove(s, 1000u + c.stuck, TRUE, FALSE)) << "once the module has sent the stock AI idle";
+	}
+
+	AoCSimRate::g_framesPerSecond = 30;
+	const Coord3D anchor = { 0.0f, 0.0f, 0.0f };
+
+	// Progress restarts the watch: 1.1 units counts, 0.9 does not.
+	{
+		AoCWanderState s;
+		Coord3D pos = { 100.0f, 0.0f, 0.0f };
+		AoCWander::fixAnchor(s, 0u, anchor, 92.0f, pos);
+		AoCWander::moveStarted(s, 0u, pos, anchor);
+		pos.x += 0.9f;
+		EXPECT_FALSE(AoCWander::watchStuck(s, 100u, TRUE, pos, 240u));
+		EXPECT_EQ(s.watchFrame, 0u) << "0.9 units is no progress";
+		pos.x += 0.2f;
+		EXPECT_FALSE(AoCWander::watchStuck(s, 200u, TRUE, pos, 240u));
+		EXPECT_EQ(s.watchFrame, 200u) << "1.1 units since the watch began is progress";
+		EXPECT_FALSE(AoCWander::watchStuck(s, 439u, TRUE, pos, 240u));
+		EXPECT_TRUE(AoCWander::watchStuck(s, 440u, TRUE, pos, 240u)) << "240 frames after the last progress";
+	}
+
+	// A walker that walks normally is never stuck.
+	{
+		AoCWanderState s;
+		Coord3D pos = { 100.0f, 0.0f, 0.0f };
+		AoCWander::fixAnchor(s, 0u, anchor, 92.0f, pos);
+		AoCWander::moveStarted(s, 0u, pos, anchor);
+		for (UnsignedInt frame = 1u; frame < 1000u; ++frame)
+		{
+			pos.y += 0.67f;		// 20 units a second at 30 Hz
+			ASSERT_FALSE(AoCWander::watchStuck(s, frame, TRUE, pos, 240u)) << "frame " << frame;
+		}
+	}
+
+	// Pausing: a stock move then (the stock collision code separating two walkers) is left alone until the pause is
+	// over; then a walker that has been locked since is taken over at once. This is the walker the review saw lost
+	// mid-run (171 and 172), and the pairs spawned on one spot (nothing in flight, due at once, locked from the start).
+	{
+		AoCWanderState s;
+		const Coord3D pos = { 100.0f, 0.0f, 0.0f };
+		AoCWander::fixAnchor(s, 0u, anchor, 92.0f, pos);
+		AoCWander::pauseFor(s, 3003u, 200u);	// due at 3203
+		EXPECT_FALSE(AoCWander::watchStuck(s, 3003u, FALSE, pos, 240u)) << "idle at the end of the stroll: the watch restarts";
+		for (UnsignedInt frame = 3004u; frame < 3203u; ++frame)
+			ASSERT_FALSE(AoCWander::watchStuck(s, frame, TRUE, pos, 240u)) << "pausing, frame " << frame;
+		EXPECT_FALSE(AoCWander::watchStuck(s, 3242u, TRUE, pos, 240u)) << "the pause is over, but 239 frames only";
+		EXPECT_TRUE(AoCWander::watchStuck(s, 3243u, TRUE, pos, 240u)) << "locked for MaxPause: taken over";
+
+		AoCWanderState spawned;
+		AoCWander::fixAnchor(spawned, 17u, anchor, 92.0f, pos);	// due at once, the stock move from the spawn locked
+		EXPECT_FALSE(AoCWander::watchStuck(spawned, 18u, TRUE, pos, 240u));
+		EXPECT_TRUE(AoCWander::watchStuck(spawned, 257u, TRUE, pos, 240u)) << "locked since the spawn: taken over after MaxPause";
+	}
 }
 
 } // namespace
