@@ -32,6 +32,7 @@
 #define DEFINE_LOCOMOTORSET_NAMES					// for TheLocomotorSetNames[]
 #define DEFINE_AUTOACQUIRE_NAMES
 
+#include "AoC/AoCSaveFidelity.h"	// AoC @hook 01/11/2026 Attack sets named again after a load (D11 F14).
 #include "Common/ActionManager.h"
 #include "Common/GameState.h"
 #include "Common/CRCDebug.h"
@@ -5097,7 +5098,7 @@ void AIUpdateInterface::crc( Xfer *x )
 void AIUpdateInterface::xfer( Xfer *xfer )
 {
   // version
-#if RETAIL_COMPATIBLE_CRC || RETAIL_COMPATIBLE_XFER_SAVE
+#if RETAIL_COMPATIBLE_CRC || (RETAIL_COMPATIBLE_XFER_SAVE && !AOC_FULL_XFER_SAVE)	// AoC @hook 01/11/2026 Newest save version in the AoC build (AOC_FULL_XFER_SAVE, D11 F14).
 	const XferVersion currentVersion = 4;
 #else
 	const XferVersion currentVersion = 5;
@@ -5155,6 +5156,10 @@ void AIUpdateInterface::xfer( Xfer *xfer )
 	{
 		if (attackName.isNotEmpty()) {
 			m_attackInfo = TheScriptEngine->getAttackInfo(attackName);
+			// AoC @fix 01/11/2026 A set a script made during play loads with the script engine, after the objects: name it
+			// again once every block is in, instead of keeping the default set (D11 F14).
+			if (m_attackInfo == nullptr || m_attackInfo->getName() != attackName)
+				AoCSaveFidelity::deferAttackInfo(getObject()->getID(), attackName);
 		}
 	}
 
@@ -5348,22 +5353,29 @@ void AIUpdateInterface::loadPostProcess()
 		chooseLocomotorSet(lst);
 	}
 
-	if (!isMoving()) {
-		m_pathfindGoalCell.x = -1;
-		m_pathfindGoalCell.y = -1;
-		TheAI->pathfinder()->updateGoal(getObject(), getObject()->getPosition(), getObject()->getLayer());
-		m_pathfindCurCell.x = -1;
-		m_pathfindCurCell.y = -1;
-		TheAI->pathfinder()->updatePos(getObject(), getObject()->getPosition());
-	}	else {
-		if (m_pathfindGoalCell.x >= 0 && m_pathfindGoalCell.y >= 0) {
-			Coord3D goalPos;
-			goalPos.x = m_pathfindGoalCell.x * PATHFIND_CELL_SIZE_F + PATHFIND_CELL_SIZE_F*0.5f;
-			goalPos.y = m_pathfindGoalCell.y * PATHFIND_CELL_SIZE_F + PATHFIND_CELL_SIZE_F*0.5f;
-			m_pathfindGoalCell.x = -1;
-			m_pathfindGoalCell.y = -1;
-			TheAI->pathfinder()->updateGoal(getObject(), &goalPos, getObject()->getLayer());
-		}
+	// AoC @fix 01/11/2026 The saved goal and position cells are put back in the pathfinder as they were. Stock re-registered a
+	// unit at rest at the cells of its position, and a moving unit's goal at the cell centre, which a unit whose footprint
+	// is not centred in a cell rounds to the next cell (updateGoal and updatePos add half a cell for those); a quarter cell
+	// in maps back to the saved cell under both rules. A cell saved as -1 stays unregistered, as in the saving game (D11 F14).
+	const ICoord2D savedGoalCell = m_pathfindGoalCell;
+	const ICoord2D savedCurCell = m_pathfindCurCell;
+	m_pathfindGoalCell.x = -1;
+	m_pathfindGoalCell.y = -1;
+	m_pathfindCurCell.x = -1;
+	m_pathfindCurCell.y = -1;
+	if (savedGoalCell.x >= 0 && savedGoalCell.y >= 0) {
+		Coord3D goalPos;
+		goalPos.x = savedGoalCell.x * PATHFIND_CELL_SIZE_F + PATHFIND_CELL_SIZE_F*0.25f;
+		goalPos.y = savedGoalCell.y * PATHFIND_CELL_SIZE_F + PATHFIND_CELL_SIZE_F*0.25f;
+		goalPos.z = getObject()->getPosition()->z;
+		TheAI->pathfinder()->updateGoal(getObject(), &goalPos, getObject()->getLayer());
+	}
+	if (savedCurCell.x >= 0 && savedCurCell.y >= 0) {
+		Coord3D curPos;
+		curPos.x = savedCurCell.x * PATHFIND_CELL_SIZE_F + PATHFIND_CELL_SIZE_F*0.25f;
+		curPos.y = savedCurCell.y * PATHFIND_CELL_SIZE_F + PATHFIND_CELL_SIZE_F*0.25f;
+		curPos.z = getObject()->getPosition()->z;
+		TheAI->pathfinder()->updatePos(getObject(), &curPos);
 	}
 
 }

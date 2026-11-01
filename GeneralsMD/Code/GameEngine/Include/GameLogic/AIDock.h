@@ -178,7 +178,19 @@ public:
 protected:
 	// snapshot interface STUBBED.
 	virtual void crc( Xfer *xfer ) override {};
-	virtual void xfer( Xfer *xfer ) override {XferVersion cv = 1;	XferVersion v = cv; xfer->xferVersion( &v, cv );}
+	// AoC @fix 01/11/2026 Version 2 saves the next action frame and the drone: a docker loaded mid-dock took its next box at
+	// once, a frame or more before the saving game's did, and the bank and the dock parted (D11 F14).
+	virtual void xfer( Xfer *xfer ) override
+	{
+		XferVersion cv = 2;
+		XferVersion v = cv;
+		xfer->xferVersion( &v, cv );
+		if( v >= 2 )
+		{
+			xfer->xferUnsignedInt( &m_nextDockActionFrame );
+			xfer->xferObjectID( &m_droneID );
+		}
+	}
 	virtual void loadPostProcess() override {};
 
 private:

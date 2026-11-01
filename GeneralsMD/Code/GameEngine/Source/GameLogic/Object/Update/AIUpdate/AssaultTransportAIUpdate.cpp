@@ -499,7 +499,7 @@ void AssaultTransportAIUpdate::crc( Xfer *xfer )
 void AssaultTransportAIUpdate::xfer( Xfer *xfer )
 {
   // version
-#if RETAIL_COMPATIBLE_XFER_SAVE
+#if RETAIL_COMPATIBLE_XFER_SAVE && !AOC_FULL_XFER_SAVE	// AoC @hook 01/11/2026 Newest save version in the AoC build (AOC_FULL_XFER_SAVE, D11 F14).
   XferVersion currentVersion = 1;
 #else
   XferVersion currentVersion = 2;

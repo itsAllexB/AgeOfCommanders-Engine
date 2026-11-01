@@ -54,6 +54,7 @@
 #include "GameClient/GameText.h"
 #include "GameClient/MapUtil.h"
 #include "GameClient/MessageBox.h"
+#include "AoC/AoCSaveFidelity.h"	// AoC @hook 01/11/2026 The logic random generator is restored last (D11 F14).
 #include "AoC/AoCSimRate.h"
 #include "GameClient/InGameUI.h"
 #include "GameClient/ParticleSys.h"
@@ -1704,6 +1705,10 @@ void GameState::gameStatePostProcessLoad()
 
 	// evil... must ensure this is updated prior to the script engine running the first time.
 	ThePartitionManager->update();
+
+	// AoC @hook 01/11/2026 Last: the saved logic random generator, after every load-time draw, so the first logic frame draws
+	// what the saving game drew next (D11 F14).
+	AoCSaveFidelity::applyPendingLoad();
 
 }
 

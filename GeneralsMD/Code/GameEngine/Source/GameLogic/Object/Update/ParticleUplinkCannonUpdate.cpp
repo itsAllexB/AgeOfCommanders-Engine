@@ -1427,7 +1427,7 @@ void ParticleUplinkCannonUpdate::xfer( Xfer *xfer )
 	const ParticleUplinkCannonUpdateModuleData *data = getParticleUplinkCannonUpdateModuleData();
 
 	// version
-#if RETAIL_COMPATIBLE_XFER_SAVE
+#if RETAIL_COMPATIBLE_XFER_SAVE && !AOC_FULL_XFER_SAVE	// AoC @hook 01/11/2026 Newest save version in the AoC build (AOC_FULL_XFER_SAVE, D11 F14).
 	const XferVersion currentVersion = 3;
 #else
 	const XferVersion currentVersion = 4;

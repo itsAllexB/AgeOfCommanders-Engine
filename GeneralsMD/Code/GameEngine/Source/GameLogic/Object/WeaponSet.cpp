@@ -214,7 +214,7 @@ void WeaponSet::crc( Xfer *xfer )
 void WeaponSet::xfer( Xfer *xfer )
 {
 	// version
-#if RETAIL_COMPATIBLE_XFER_SAVE
+#if RETAIL_COMPATIBLE_XFER_SAVE && !AOC_FULL_XFER_SAVE	// AoC @hook 01/11/2026 Newest save version in the AoC build (AOC_FULL_XFER_SAVE, D11 F14).
 	const XferVersion currentVersion = 1;
 #else
 	const XferVersion currentVersion = 3;
@@ -281,6 +281,13 @@ void WeaponSet::xfer( Xfer *xfer )
 				m_weapons[i] = TheWeaponStore->allocateNewWeapon(wt, (WeaponSlotType)i);
 			}
 			xfer->xferSnapshot(m_weapons[i]);
+		}
+		else if (xfer->getXferMode() == XFER_LOAD && m_weapons[i] != nullptr)
+		{
+			// AoC @fix 01/11/2026 A slot saved empty stays empty: the weapon the constructor's set put there would be one the
+			// saving game did not have (a dozer or worker whose set had changed) (D11 F14).
+			deleteInstance(m_weapons[i]);
+			m_weapons[i] = nullptr;
 		}
 	}
 	xfer->xferUser(&m_curWeapon, sizeof(m_curWeapon));

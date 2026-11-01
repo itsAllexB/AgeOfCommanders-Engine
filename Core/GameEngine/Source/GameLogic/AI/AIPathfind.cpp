@@ -7505,3 +7505,30 @@ void Pathfinder::loadPostProcess()
 {
 
 }
+
+//-----------------------------------------------------------------------------
+// AoC @hook 01/11/2026 The request queue, its head and tail and the cell count, for the save game: the CRC covers them
+// (Pathfinder::crc) and stock saved none, so a loaded game started from an empty queue at slot 0. Also the frame of the
+// pending zone recalculation: a load recalculates the zones at once (newMap), while the saving game waits for that frame,
+// whose queue update then recalculates instead of serving requests (D11 F14).
+void Pathfinder::getAoCQueueState( ObjectID *requests, Int count, Int *head, Int *tail, Int *cells, UnsignedInt *zoneFrame ) const
+{
+	for (Int i = 0; i < count && i < PATHFIND_QUEUE_LEN; ++i)
+		requests[i] = m_queuedPathfindRequests[i];
+	*head = m_queuePRHead;
+	*tail = m_queuePRTail;
+	*cells = m_cumulativeCellsAllocated;
+	*zoneFrame = m_zoneManager.getAoCNextZoneFrame();
+}
+
+void Pathfinder::setAoCQueueState( const ObjectID *requests, Int count, Int head, Int tail, Int cells, UnsignedInt zoneFrame )
+{
+	if (count != PATHFIND_QUEUE_LEN || head < 0 || head >= PATHFIND_QUEUE_LEN || tail < 0 || tail >= PATHFIND_QUEUE_LEN)
+		return;	// a save from a build with another queue length: keep the queue as the load left it
+	for (Int i = 0; i < PATHFIND_QUEUE_LEN; ++i)
+		m_queuedPathfindRequests[i] = requests[i];
+	m_queuePRHead = head;
+	m_queuePRTail = tail;
+	m_cumulativeCellsAllocated = cells;
+	m_zoneManager.setAoCNextZoneFrame( zoneFrame );
+}

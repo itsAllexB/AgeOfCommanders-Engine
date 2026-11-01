@@ -75,6 +75,23 @@ UnsignedInt GetGameLogicRandomSeedCRC()
 	return c.get();
 }
 
+// AoC @hook 01/11/2026 Read and restore the logic generator's full state: GameLogic::xfer saves it, the load restores it once
+// every load-time draw is done, so a loaded game draws what the saving game would have drawn (D11 F14).
+void AoCGetGameLogicRandomState( UnsignedInt seed[6], UnsignedInt *baseSeed )
+{
+	static_assert(ARRAY_SIZE(theGameLogicSeed) == 6, "the save holds six words");
+	for (Int i = 0; i < 6; ++i)
+		seed[i] = theGameLogicSeed[i];
+	*baseSeed = theGameLogicBaseSeed;
+}
+
+void AoCSetGameLogicRandomState( const UnsignedInt seed[6], UnsignedInt baseSeed )
+{
+	for (Int i = 0; i < 6; ++i)
+		theGameLogicSeed[i] = seed[i];
+	theGameLogicBaseSeed = baseSeed;
+}
+
 static void seedRandom(UnsignedInt SEED, UnsignedInt (&seed)[6])
 {
 	UnsignedInt ax;

@@ -2,6 +2,7 @@ set(GAMEENGINE_SRC
     Include/AoC/AoCBuildSpeed.h
     Include/AoC/AoCConverterUpdate.h
     Include/AoC/AoCCost.h
+    Include/AoC/AoCCrcDump.h
     Include/AoC/AoCFolder.h
     Include/AoC/AoCGather.h
     Include/AoC/AoCHarness.h
@@ -10,6 +11,7 @@ set(GAMEENGINE_SRC
     Include/AoC/AoCPopulation.h
     Include/AoC/AoCResourceBank.h
     Include/AoC/AoCRules.h
+    Include/AoC/AoCSaveFidelity.h
     Include/AoC/AoCSimRate.h
     Include/AoC/AoCUserData.h
     Include/AoC/AoCWander.h
@@ -589,6 +591,7 @@ set(GAMEENGINE_SRC
     Source/AoC/AoCBuildSpeed.cpp
     Source/AoC/AoCConverterUpdate.cpp
     Source/AoC/AoCCost.cpp
+    Source/AoC/AoCCrcDump.cpp
     Source/AoC/AoCFolder.cpp
     Source/AoC/AoCGather.cpp
     Source/AoC/AoCHarness.cpp
@@ -597,6 +600,7 @@ set(GAMEENGINE_SRC
     Source/AoC/AoCPopulation.cpp
     Source/AoC/AoCResourceBank.cpp
     Source/AoC/AoCRules.cpp
+    Source/AoC/AoCSaveFidelity.cpp
     Source/AoC/AoCSimRate.cpp
     Source/AoC/AoCUserData.cpp
     Source/AoC/AoCWander.cpp

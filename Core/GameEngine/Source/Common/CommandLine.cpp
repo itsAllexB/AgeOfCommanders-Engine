@@ -1256,6 +1256,7 @@ static CommandLineParam paramsForEngineInit[] =
 	{ "-saveAtFrame", AoCHarness::parseSaveAtFrame },	// AoC @feature F1
 	{ "-aocUiScript", AoCHarness::parseAocUiScript },	// AoC @feature F5
 	{ "-aocOptions", AoCHarness::parseAocOptions },	// AoC @hook 01/11/2026 Lobby fields for -skirmish (D11 F7).
+	{ "-crcDump", AoCHarness::parseCrcDump },	// AoC @hook 01/11/2026 Per-object CRC dump for desync hunts (D11 F14).
 
 #if defined(RTS_DEBUG)
 	{ "-noaudio", parseNoAudio },
