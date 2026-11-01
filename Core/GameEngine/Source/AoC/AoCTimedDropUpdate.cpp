@@ -296,7 +296,11 @@ void AoCTimedDropUpdate::drop()
 		creationCoord = TheTerrainLogic->findClosestEdgePoint( obj->getPosition() );
 	else
 		creationCoord = *obj->getPosition();
-	ObjectCreationList::create( data->m_ocl, obj, &creationCoord, obj->getPosition(), obj->getOrientation() );
+#if RTS_ZEROHOUR
+	ObjectCreationList::create( data->m_ocl, obj, &creationCoord, obj->getPosition(), obj->getOrientation() );	// as OCLUpdate
+#else
+	ObjectCreationList::create( data->m_ocl, obj, &creationCoord, obj->getPosition() );	// base Generals has no angle overload
+#endif
 	if (AoCHarness::isActive())
 	{
 		// the owner's bank at the drop, before the crates land: the next drop line shows what they paid
