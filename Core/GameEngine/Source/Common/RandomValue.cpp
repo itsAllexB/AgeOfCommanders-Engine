@@ -28,6 +28,7 @@
 
 #include "PreRTS.h"	// This must go first in EVERY cpp file in the GameEngine
 
+#include "AoC/AoCHarness.h"	// AoC @hook 01/11/2026 -aocRandomTrace (D11 F12).
 #include "Common/RandomValue.h"
 #include "Common/crc.h"
 #include "Common/Debug.h"
@@ -301,6 +302,9 @@ Int GetGameLogicRandomValue( int lo, int hi, const char *file, int line )
 		TheGameLogic->getFrame(), rval, lo, hi, file, line ));
 #endif
 
+	// AoC @hook 01/11/2026 Harness -aocRandomTrace: one line per logic draw in its window; reads only (D11 F12).
+	AoCHarness::onLogicRandomInt('I', file, line, lo, hi, rval);
+
 	DEBUG_ASSERTCRASH(rval >= lo && rval <= hi, ("Bad random val"));
 	return rval;
 }
@@ -327,6 +331,9 @@ Real GetGameLogicRandomValueReal( Real lo, Real hi, const char *file, int line )
 	DEBUG_LOG(( "%d: GetGameLogicRandomValueReal = %f, %s line %d",
 		TheGameLogic->getFrame(), rval, file, line ));
 #endif
+
+	// AoC @hook 01/11/2026 Harness -aocRandomTrace: one line per logic draw in its window; reads only (D11 F12).
+	AoCHarness::onLogicRandomReal('R', file, line, lo, hi, rval);
 
 	DEBUG_ASSERTCRASH(rval >= lo && rval <= hi, ("Bad random val"));
 	return rval;
@@ -358,6 +365,9 @@ Int GetGameLogicRandomValueUnchanged( int lo, int hi, const char *file, int line
 		TheGameLogic->getFrame(), rval, lo, hi, file, line ));
 #endif
 
+	// AoC @hook 01/11/2026 Harness -aocRandomTrace: one line per logic draw in its window; reads only (D11 F12).
+	AoCHarness::onLogicRandomInt('u', file, line, lo, hi, rval);
+
 	DEBUG_ASSERTCRASH(rval >= lo && rval <= hi, ("Bad random val"));
 	return rval;
 }
@@ -387,6 +397,9 @@ Real GetGameLogicRandomValueRealUnchanged( Real lo, Real hi, const char *file, i
 	DEBUG_LOG(( "%d: GetGameLogicRandomValueRealUnchanged = %f, %s line %d",
 		TheGameLogic->getFrame(), rval, file, line ));
 #endif
+
+	// AoC @hook 01/11/2026 Harness -aocRandomTrace: one line per logic draw in its window; reads only (D11 F12).
+	AoCHarness::onLogicRandomReal('r', file, line, lo, hi, rval);
 
 	DEBUG_ASSERTCRASH(rval >= lo && rval <= hi, ("Bad random val"));
 	return rval;

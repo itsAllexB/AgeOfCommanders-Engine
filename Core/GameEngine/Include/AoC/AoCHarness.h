@@ -162,6 +162,19 @@
 //                                   fast as the CPU allows. Only wall-clock pacing changes: the logic counts 30 or 60
 //                                   frames per game second, the client's time scale is a windowed game's, and the CRC
 //                                   log equals a windowed run's.
+//   -crcEvery <n>                   F12b: -crcLog writes a line every n logic frames (multiples of n) instead of where the
+//                                   engine computes the CRC (every 100 frames); the CRC of a frame the engine does not
+//                                   compute is computed at the same point of the logic update (GameLogic::getCRC after
+//                                   the scripts and the terrain update, before the objects update). Inert without -crcLog.
+//   -crcWindow <from> <to>          F12b: -crcLog also writes every frame from <from> to <to>. With -crcEvery or -crcWindow
+//                                   every line is "frame,CRC,SEED", SEED the logic random seed's CRC
+//                                   (GetGameLogicRandomSeedCRC, inside the light CRC), so a diff shows whether the random
+//                                   stream parted first. tools/engine/crclog_diff.py compares two such logs.
+//   -aocRandomTrace <from> <to> <file>  F12b: one line per logic random draw while the logic frame is from <from> to
+//                                   <to>, "frame,L|C,kind,file:line,lo,hi,value" (L inside the logic update, C outside it;
+//                                   kind I or R, u or r for the ...Unchanged variants that do not advance the seed), and
+//                                   "#frame,crc-point,SEED" at each frame's CRC point. AoCTrace.h has the formats.
+//                                   Reads only; the logic never reads a trace.
 //
 // Exit codes: 0 normal, 2 CRC mismatch seen, 3 unsupported -simrate, 4 -skirmish could not start,
 // 5 a replay or save made at the other simulation rate was refused, 6 the -aocUserData folder is unusable.
@@ -191,6 +204,9 @@ public:
 	static Int parseAocOptions( char *args[], int num );	// AoC F7
 	static Int parseAocUserData( char *args[], int num );	// AoC F12a: in a pass of its own, before Options.ini is read
 	static Int parseCrcDump( char *args[], int num );	// AoC F14a
+	static Int parseCrcEvery( char *args[], int num );	// AoC F12b
+	static Int parseCrcWindow( char *args[], int num );	// AoC F12b
+	static Int parseAocRandomTrace( char *args[], int num );	// AoC F12b
 
 	/// TRUE when any harness flag was given on the command line.
 	static Bool isActive();
@@ -217,6 +233,11 @@ public:
 	static void startSkirmishIfRequested();
 	/// GameLogic::update, right after the stock MSG_LOGIC_CRC block: CRC log, AI log, quit request.
 	static void onLogicFrame( UnsignedInt frame, Bool crcGenerated, UnsignedInt crc );
+	/// F12b: Common/RandomValue.cpp, after each logic random draw: one -aocRandomTrace line while the logic frame is in its
+	/// window (kind I, or u for GetGameLogicRandomValueUnchanged). Reads only.
+	static void onLogicRandomInt( char kind, const char *file, Int line, Int lo, Int hi, Int value );
+	/// F12b: the same for a real draw (kind R, or r for GetGameLogicRandomValueRealUnchanged).
+	static void onLogicRandomReal( char kind, const char *file, Int line, Real lo, Real hi, Real value );
 	/// RecorderClass::handleCRCMessage, where a replay CRC mismatch is reported.
 	static void onCRCMismatch( UnsignedInt frame, UnsignedInt inGameCRC, UnsignedInt replayCRC );
 	/// GameEngine::execute, after each update(): runs due -aocUiScript lines, writes the save requested by -saveAtFrame, performs the clean quit requested by -quitAtFrame.

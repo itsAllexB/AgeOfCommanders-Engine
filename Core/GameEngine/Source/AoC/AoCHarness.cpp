@@ -29,6 +29,7 @@
 #include "AoC/AoCResourceBank.h"
 #include "AoC/AoCRules.h"
 #include "AoC/AoCSimRate.h"
+#include "AoC/AoCTrace.h"
 #include "AoC/AoCUserData.h"
 #include "AoC/AoCWanderAIUpdate.h"
 
@@ -114,6 +115,13 @@ struct HarnessState
 
 	char crcLogPath[1024];
 	FILE *crcLog;
+	AoCTrace::CrcSchedule crcSchedule;	///< F12b -crcEvery and -crcWindow; all 0 when unused (the stock interval)
+
+	UnsignedInt randomTraceFrom;	///< F12b -aocRandomTrace window; randomTraceTo 0 when unused
+	UnsignedInt randomTraceTo;
+	char randomTracePath[1024];
+	FILE *randomTrace;
+	Bool warnedRandomTrace;
 
 	// F14a -crcDump: the frames to dump (first == last for one frame), the file, open from the first dumped frame
 	UnsignedInt crcDumpFirst;	///< 0 when unused
@@ -227,6 +235,29 @@ void closeLogs()
 		fclose(s.crcDump);
 		s.crcDump = nullptr;
 	}
+	if (s.randomTrace)
+	{
+		fclose(s.randomTrace);
+		s.randomTrace = nullptr;
+	}
+}
+
+// F12b -aocRandomTrace: the open trace file while the logic frame is in the window, else nullptr (opened on first use).
+FILE *randomTraceFor( UnsignedInt frame )
+{
+	HarnessState &s = state();
+	if (!AoCTrace::inWindow(s.randomTraceFrom, s.randomTraceTo, frame))
+		return nullptr;
+	if (s.randomTrace == nullptr && !s.warnedRandomTrace)
+	{
+		s.randomTrace = fopen(s.randomTracePath, "w");
+		if (s.randomTrace == nullptr)
+		{
+			s.warnedRandomTrace = TRUE;
+			logLine("-aocRandomTrace: cannot open '%s' (the folder must exist)", s.randomTracePath);
+		}
+	}
+	return s.randomTrace;
 }
 
 void failSkirmish( const char *why )
@@ -1145,6 +1176,53 @@ Int AoCHarness::parseCrcDump( char *args[], int num )
 	return 3;
 }
 
+Int AoCHarness::parseCrcEvery( char *args[], int num )
+{
+	HarnessState &s = state();
+	UnsignedInt every = 0;
+	if (num < 2 || !AoCTrace::parseCount(args[1], every))
+	{
+		logLine("usage: -crcEvery <n> (n at least 1); flag ignored");
+		return num < 2 ? 1 : 2;
+	}
+	s.crcSchedule.every = every;
+	s.anyFlag = TRUE;
+	return 2;
+}
+
+Int AoCHarness::parseCrcWindow( char *args[], int num )
+{
+	HarnessState &s = state();
+	UnsignedInt from = 0;
+	UnsignedInt to = 0;
+	if (num < 3 || !AoCTrace::parseWindow(args[1], args[2], from, to))
+	{
+		logLine("usage: -crcWindow <from> <to> (frames, from at least 1, to at least from); flag ignored");
+		return num < 3 ? num : 3;
+	}
+	s.crcSchedule.windowFrom = from;
+	s.crcSchedule.windowTo = to;
+	s.anyFlag = TRUE;
+	return 3;
+}
+
+Int AoCHarness::parseAocRandomTrace( char *args[], int num )
+{
+	HarnessState &s = state();
+	UnsignedInt from = 0;
+	UnsignedInt to = 0;
+	if (num < 4 || !AoCTrace::parseWindow(args[1], args[2], from, to) || args[3][0] == '\0')
+	{
+		logLine("usage: -aocRandomTrace <from> <to> <file> (frames, from at least 1, to at least from); flag ignored");
+		return num < 4 ? num : 4;
+	}
+	s.randomTraceFrom = from;
+	s.randomTraceTo = to;
+	copyArg(s.randomTracePath, sizeof(s.randomTracePath), args[3]);
+	s.anyFlag = TRUE;
+	return 4;
+}
+
 Int AoCHarness::parseAiLog( char *args[], int num )
 {
 	if (num > 1)
@@ -1452,7 +1530,8 @@ void AoCHarness::onLogicFrame( UnsignedInt frame, Bool crcGenerated, UnsignedInt
 	s.sawLogicFrame = TRUE;	// F5 -aocUiScript runs a line once its frame has run
 	s.lastLogicFrame = frame;
 
-	if (crcGenerated && s.crcLogPath[0] != '\0')
+	// F12b: -crcEvery and -crcWindow add frames; without them a line where the engine computed the CRC (F1)
+	if (s.crcLogPath[0] != '\0' && AoCTrace::crcLineDue(s.crcSchedule, frame, crcGenerated))
 	{
 		if (s.crcLog == nullptr)
 		{
@@ -1465,8 +1544,15 @@ void AoCHarness::onLogicFrame( UnsignedInt frame, Bool crcGenerated, UnsignedInt
 		}
 		if (s.crcLog)
 		{
-			fprintf(s.crcLog, "%u,%08X\n", frame, crc);
-			fflush(s.crcLog);
+			// The engine's own CRC where it computed one; else the same light CRC at the same point of the update
+			// (this hook runs right after the stock MSG_LOGIC_CRC block, before the objects update)
+			const UnsignedInt lineCrc = crcGenerated ? crc : TheGameLogic->getCRC(CRC_RECALC);
+			char line[64];
+			if (AoCTrace::formatCrcLine(line, sizeof(line), s.crcSchedule, frame, lineCrc, GetGameLogicRandomSeedCRC()) > 0)
+			{
+				fputs(line, s.crcLog);
+				fflush(s.crcLog);
+			}
 		}
 	}
 
@@ -1493,6 +1579,15 @@ void AoCHarness::onLogicFrame( UnsignedInt frame, Bool crcGenerated, UnsignedInt
 				logLine("crcDump: frames %u to %u written to '%s'", s.crcDumpFirst, s.crcDumpLast, s.crcDumpPath);
 			}
 		}
+	}
+
+	// F12b: the CRC point of a traced frame, so the draws before it (scripts) and after it (objects) can be told apart
+	if (FILE *trace = randomTraceFor(frame))
+	{
+		char line[64];
+		if (AoCTrace::formatCrcPoint(line, sizeof(line), frame, GetGameLogicRandomSeedCRC()) > 0)
+			fputs(line, trace);
+		fflush(trace);	// the previous frame's draws are on disk even if the process dies
 	}
 
 	// F4: a game whose first logic frame is past 1 was loaded from a save
@@ -1558,6 +1653,32 @@ void AoCHarness::onLobbyGameStart( Int richnessPerMille, Int warehousesScaled, I
 			p->getPlayerType() == PLAYER_COMPUTER ? "AI" : "human", bank.c_str());
 	}
 	fflush(stderr);
+}
+
+void AoCHarness::onLogicRandomInt( char kind, const char *file, Int line, Int lo, Int hi, Int value )
+{
+	HarnessState &s = state();
+	if (s.randomTraceTo == 0 || TheGameLogic == nullptr)
+		return;
+	if (FILE *trace = randomTraceFor(TheGameLogic->getFrame()))
+	{
+		char buf[512];
+		if (AoCTrace::formatRandomInt(buf, sizeof(buf), TheGameLogic->getFrame(), TheGameLogic->isInGameLogicUpdate(), kind, file, line, lo, hi, value) > 0)
+			fputs(buf, trace);
+	}
+}
+
+void AoCHarness::onLogicRandomReal( char kind, const char *file, Int line, Real lo, Real hi, Real value )
+{
+	HarnessState &s = state();
+	if (s.randomTraceTo == 0 || TheGameLogic == nullptr)
+		return;
+	if (FILE *trace = randomTraceFor(TheGameLogic->getFrame()))
+	{
+		char buf[512];
+		if (AoCTrace::formatRandomReal(buf, sizeof(buf), TheGameLogic->getFrame(), TheGameLogic->isInGameLogicUpdate(), kind, file, line, lo, hi, value) > 0)
+			fputs(buf, trace);
+	}
 }
 
 void AoCHarness::onCRCMismatch( UnsignedInt frame, UnsignedInt inGameCRC, UnsignedInt replayCRC )
