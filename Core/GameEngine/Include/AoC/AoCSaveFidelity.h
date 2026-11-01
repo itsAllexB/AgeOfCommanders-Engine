@@ -38,13 +38,16 @@
 //
 // GameLogic::xfer version 15 writes, after the stock and earlier AoC fields (xfer below):
 //   - the generator: six UnsignedInt words and the base seed (AoCLogicRandomState::xfer);
-//   - the heap: the slot count (UnsignedInt), then for each slot in array order the object id (ObjectID) and the
-//     module's index in its object's behaviour module list (UnsignedShort), six bytes per sleepy module;
+//   - the heap, keyed as stock Object::xfer keys module data, by the module's tag: the tag names the slots use (count as
+//     UnsignedShort, then each name), the slot count (UnsignedInt), then for each slot in array order the object id
+//     (ObjectID) and its module's index in that tag list (UnsignedShort), six bytes per sleepy module;
 //   - the groups (xferGroups) and the pathfind queue (xferPathfindQueue).
 // On load all of it is held here until the restore points:
 //   - GameLogic::loadPostProcess calls restoreSleepyLayout instead of heapifying: every update module goes back to its
-//     saved slot, the heap property is checked, and the stock rebuild runs only when the saved layout does not match
-//     the loaded modules (a template changed since the save) or is not a heap;
+//     saved slot (found by object id and module tag, so a template whose module list changed order still matches) and
+//     the heap property is checked. When the saved layout does not match the loaded modules (a module added to or
+//     removed from a template since the save) the stock rebuild runs on the object order; when it matches but is not a
+//     heap, the stock heapify runs on the saved order. Either fallback is deterministic;
 //   - GameState::gameStatePostProcessLoad calls applyPendingLoad at its very end, after every other restore and every
 //     load-time draw (object constructors, loadPostProcess functions): the attack sets, the pathfind queue, the groups,
 //     then the generator, so the first logic frame of the loaded game draws exactly what the saving game drew next.
@@ -68,18 +71,18 @@
 #pragma once
 
 #include "Lib/BaseType.h"
+#include "Common/AsciiString.h"
 #include "Common/GameType.h"
 
 #include <vector>
 
-class AsciiString;
 class Xfer;
 class UpdateModule;
 
 enum
 {
 	AOC_LOGIC_RANDOM_WORDS = 6,			///< words of the logic generator's state, besides the base seed
-	AOC_SLEEPY_SLOT_NO_MODULE = 0xFFFF,	///< module index written for a heap entry not found in its object's list
+	AOC_SLEEPY_SLOT_NO_MODULE = 0,		///< module key of a heap entry without an object or a tag (NAMEKEY_INVALID)
 };
 
 /// The logic random generator's full state.
@@ -98,19 +101,37 @@ struct AoCLogicRandomState
 	void xfer( Xfer *xfer );				///< the six words, then the base seed
 };
 
-/// One heap slot: which module of which object.
+/// One heap slot: which module of which object. The module is named by its tag, as stock Object::xfer names module data:
+/// in memory by the tag's name key (Module::getModuleTagNameKey), in a save block's AoCSleepyLayout by the index of the
+/// tag's name in the layout's tag list.
 struct AoCSleepySlot
 {
 	ObjectID objectID;
-	UnsignedShort moduleIndex;		///< index in the object's behaviour module list (Object::getBehaviorModules)
+	UnsignedInt moduleKey;
 
-	AoCSleepySlot() : objectID( INVALID_ID ), moduleIndex( 0 ) {}
-	AoCSleepySlot( ObjectID id, UnsignedShort index ) : objectID( id ), moduleIndex( index ) {}
-	Bool operator==( const AoCSleepySlot &o ) const { return objectID == o.objectID && moduleIndex == o.moduleIndex; }
+	AoCSleepySlot() : objectID( INVALID_ID ), moduleKey( AOC_SLEEPY_SLOT_NO_MODULE ) {}
+	AoCSleepySlot( ObjectID id, UnsignedInt key ) : objectID( id ), moduleKey( key ) {}
+	Bool operator==( const AoCSleepySlot &o ) const { return objectID == o.objectID && moduleKey == o.moduleKey; }
 	Bool operator<( const AoCSleepySlot &o ) const
 	{
-		return objectID != o.objectID ? (Int)objectID < (Int)o.objectID : moduleIndex < o.moduleIndex;
+		return objectID != o.objectID ? (Int)objectID < (Int)o.objectID : moduleKey < o.moduleKey;
 	}
+};
+
+/// The heap layout as a save block holds it: the tag names, and the slots in heap-array order, each slot's moduleKey the
+/// index of its tag in 'tags'.
+struct AoCSleepyLayout
+{
+	std::vector<AsciiString> tags;
+	std::vector<AoCSleepySlot> slots;
+};
+
+/// What restoring a saved heap layout comes to (AoCSaveFidelity::planLayout).
+enum AoCLayoutPlan
+{
+	AOC_LAYOUT_NOT_MATCHED,		///< the saved slots and the loaded modules differ: the stock rebuild in object order
+	AOC_LAYOUT_NOT_A_HEAP,		///< every module found, but in the saved order the array is no heap: heapify that order
+	AOC_LAYOUT_RESTORED,		///< every module in its saved slot, a valid heap
 };
 
 /// One AI group as the save holds it (AIGroup has no save block of its own; AI::xfer writes nothing).
@@ -152,8 +173,15 @@ namespace AoCSaveFidelity
 	/// sleepy-update scheduler keeps, ties allowed.
 	Bool isMinHeap( const std::vector<UnsignedInt> &priorities );
 
-	/// The slot list of a save block: count, then (object id, module index) per slot. Load replaces 'slots'.
-	void xferSlots( Xfer *xfer, std::vector<AoCSleepySlot> &slots );
+	/// The restore decision for a saved heap layout: 'saved' and 'live' keyed alike (object id, module tag key),
+	/// 'livePriorities' the loaded modules' wake priorities in 'live' order. 'order' gets, for each saved slot, the index in
+	/// 'live' of its module (empty when not matched). Keeps the scheduler's tie order exactly when it returns RESTORED.
+	AoCLayoutPlan planLayout( const std::vector<AoCSleepySlot> &saved, const std::vector<AoCSleepySlot> &live,
+		const std::vector<UnsignedInt> &livePriorities, std::vector<Int> &order );
+
+	/// The heap layout of a save block: the tag count (UnsignedShort) and names, the slot count (UnsignedInt), then per
+	/// slot the object id and the tag index (UnsignedShort). Load replaces 'layout'.
+	void xferSlots( Xfer *xfer, AoCSleepyLayout &layout );
 
 	/// The AI groups of a save block: the group id counter, the count, then per group its id, speed, dirty bit, member
 	/// count and member ids. Load replaces both.
@@ -184,9 +212,10 @@ namespace AoCSaveFidelity
 	void deferAttackInfo( ObjectID id, const AsciiString &name );
 
 	/// GameLogic::loadPostProcess, with 'heap' holding every update module in object order (the stock collection pass).
-	/// With a held layout that matches those modules, reorders 'heap' to the saved slots and sets each module's index;
-	/// returns TRUE when the result is a valid heap. FALSE when there is no held layout, when it does not match ('heap'
-	/// untouched) or when the saved order is not a heap ('heap' left in the saved order): the caller then heapifies.
+	/// With a held layout that matches those modules (by object id and module tag), reorders 'heap' to the saved slots and
+	/// sets each module's index; returns TRUE when the result is a valid heap. FALSE when there is no held layout or it
+	/// does not match ('heap' untouched, in object order), or when the saved order is not a heap ('heap' left in the saved
+	/// order): the caller then heapifies what 'heap' holds.
 	Bool restoreSleepyLayout( std::vector<UpdateModule *> &heap );
 
 	/// GameState::gameStatePostProcessLoad, last: the deferred attack sets, the AI groups, then the generator.

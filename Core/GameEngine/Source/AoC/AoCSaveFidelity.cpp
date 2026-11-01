@@ -25,6 +25,7 @@
 #include "AoC/AoCSaveFidelity.h"
 #include "AoC/AoCHarness.h"
 #include "Common/crc.h"
+#include "Common/NameKeyGenerator.h"
 #include "Common/RandomValue.h"
 #include "Common/Xfer.h"
 #include "GameLogic/AI.h"
@@ -37,6 +38,7 @@
 #include "GameLogic/Module/UpdateModule.h"
 
 #include <algorithm>
+#include <map>
 #include <utility>
 #include <stdarg.h>
 #include <stdio.h>
@@ -143,29 +145,52 @@ Bool AoCSaveFidelity::isMinHeap( const std::vector<UnsignedInt> &priorities )
 	return TRUE;
 }
 
-void AoCSaveFidelity::xferSlots( Xfer *xfer, std::vector<AoCSleepySlot> &slots )
+AoCLayoutPlan AoCSaveFidelity::planLayout( const std::vector<AoCSleepySlot> &saved, const std::vector<AoCSleepySlot> &live,
+	const std::vector<UnsignedInt> &livePriorities, std::vector<Int> &order )
 {
-	UnsignedInt count = (UnsignedInt)slots.size();
+	if (livePriorities.size() != live.size() || !matchSlots(saved, live, order))
+	{
+		order.clear();
+		return AOC_LAYOUT_NOT_MATCHED;
+	}
+	std::vector<UnsignedInt> priorities(order.size());
+	for (size_t i = 0; i < order.size(); ++i)
+		priorities[i] = livePriorities[order[i]];
+	return isMinHeap(priorities) ? AOC_LAYOUT_RESTORED : AOC_LAYOUT_NOT_A_HEAP;
+}
+
+void AoCSaveFidelity::xferSlots( Xfer *xfer, AoCSleepyLayout &layout )
+{
+	UnsignedShort tagCount = (UnsignedShort)layout.tags.size();
+	xfer->xferUnsignedShort( &tagCount );
+	if (xfer->getXferMode() == XFER_LOAD)
+		layout.tags.assign(tagCount, AsciiString::TheEmptyString);
+	for (UnsignedShort t = 0; t < tagCount; ++t)
+		xfer->xferAsciiString( &layout.tags[t] );
+
+	UnsignedInt count = (UnsignedInt)layout.slots.size();
 	xfer->xferUnsignedInt( &count );
 	if (xfer->getXferMode() == XFER_LOAD)
 	{
-		slots.clear();
-		slots.reserve(count);
+		layout.slots.clear();
+		layout.slots.reserve(count);
 		for (UnsignedInt i = 0; i < count; ++i)
 		{
-			AoCSleepySlot slot;
-			xfer->xferObjectID( &slot.objectID );
-			xfer->xferUnsignedShort( &slot.moduleIndex );
-			slots.push_back(slot);
+			ObjectID id = INVALID_ID;
+			UnsignedShort tag = 0;
+			xfer->xferObjectID( &id );
+			xfer->xferUnsignedShort( &tag );
+			layout.slots.push_back(AoCSleepySlot(id, tag));
 		}
 	}
 	else
 	{
 		for (UnsignedInt i = 0; i < count; ++i)
 		{
-			AoCSleepySlot slot = slots[i];
-			xfer->xferObjectID( &slot.objectID );
-			xfer->xferUnsignedShort( &slot.moduleIndex );
+			ObjectID id = layout.slots[i].objectID;
+			UnsignedShort tag = (UnsignedShort)layout.slots[i].moduleKey;
+			xfer->xferObjectID( &id );
+			xfer->xferUnsignedShort( &tag );
 		}
 	}
 }
@@ -227,7 +252,7 @@ namespace
 		Bool hasRandom;
 		AoCLogicRandomState random;
 		Bool hasLayout;
-		std::vector<AoCSleepySlot> layout;
+		AoCSleepyLayout layout;
 		Bool hasGroups;
 		UnsignedInt lastGroupID;
 		std::vector<AoCSavedGroup> groups;
@@ -333,20 +358,52 @@ namespace
 		return p;
 	}
 
-	/// The heap key of one update module: its object's id and its index in the object's behaviour module list.
+	/// The heap key of one update module: its object's id and its module tag's name key, the key stock Object::xfer
+	/// finds module data by, so a template whose module list changed order still matches.
 	AoCSleepySlot slotOf( UpdateModule *u )
 	{
 		const Object *obj = u->friend_getObject();
 		if (obj == nullptr)
 			return AoCSleepySlot(INVALID_ID, AOC_SLEEPY_SLOT_NO_MODULE);
-		UnsignedShort index = 0;
-		for (BehaviorModule **b = obj->getBehaviorModules(); *b; ++b, ++index)
+		return AoCSleepySlot(obj->getID(), (UnsignedInt)u->getModuleTagNameKey());
+	}
+
+	/// The heap's keyed slots as a save block's layout: each distinct tag once, by name, in first-use order.
+	void packLayout( const std::vector<AoCSleepySlot> &keyed, AoCSleepyLayout &layout )
+	{
+		layout.tags.clear();
+		layout.slots.clear();
+		layout.slots.reserve(keyed.size());
+		std::map<UnsignedInt, UnsignedShort> tagIndex;
+		for (size_t i = 0; i < keyed.size(); ++i)
 		{
-			// The cast GameLogic::registerObject makes (DIRECT_UPDATEMODULE_ACCESS).
-			if ((UpdateModule *)((*b)->getUpdate()) == u)
-				return AoCSleepySlot(obj->getID(), index);
+			std::map<UnsignedInt, UnsignedShort>::const_iterator it = tagIndex.find(keyed[i].moduleKey);
+			if (it == tagIndex.end())
+			{
+				const UnsignedShort index = (UnsignedShort)layout.tags.size();
+				it = tagIndex.insert(std::make_pair(keyed[i].moduleKey, index)).first;
+				layout.tags.push_back(keyed[i].moduleKey == AOC_SLEEPY_SLOT_NO_MODULE
+					? AsciiString::TheEmptyString : TheNameKeyGenerator->keyToName((NameKeyType)keyed[i].moduleKey));
+			}
+			layout.slots.push_back(AoCSleepySlot(keyed[i].objectID, it->second));
 		}
-		return AoCSleepySlot(obj->getID(), AOC_SLEEPY_SLOT_NO_MODULE);
+	}
+
+	/// A loaded layout's slots keyed as slotOf keys the live modules (a tag index out of range or an empty name keys to
+	/// AOC_SLEEPY_SLOT_NO_MODULE, which matches no module).
+	void unpackLayout( const AoCSleepyLayout &layout, std::vector<AoCSleepySlot> &keyed )
+	{
+		std::vector<UnsignedInt> keys(layout.tags.size(), AOC_SLEEPY_SLOT_NO_MODULE);
+		for (size_t t = 0; t < layout.tags.size(); ++t)
+			if (!layout.tags[t].isEmpty())
+				keys[t] = (UnsignedInt)TheNameKeyGenerator->nameToKey(layout.tags[t]);
+		keyed.clear();
+		keyed.reserve(layout.slots.size());
+		for (size_t i = 0; i < layout.slots.size(); ++i)
+		{
+			const UnsignedInt tag = layout.slots[i].moduleKey;
+			keyed.push_back(AoCSleepySlot(layout.slots[i].objectID, tag < keys.size() ? keys[tag] : (UnsignedInt)AOC_SLEEPY_SLOT_NO_MODULE));
+		}
 	}
 
 	void harnessLine( const char *format, ... )
@@ -382,10 +439,12 @@ void AoCSaveFidelity::xfer( Xfer *xfer, std::vector<UpdateModule *> &heap )
 	// Save (or a deep CRC in save mode): read only.
 	AoCLogicRandomState random = AoCLogicRandomState::live();
 	random.xfer(xfer);
-	std::vector<AoCSleepySlot> layout;
-	layout.reserve(heap.size());
+	std::vector<AoCSleepySlot> keyed;
+	keyed.reserve(heap.size());
 	for (size_t i = 0; i < heap.size(); ++i)
-		layout.push_back(slotOf(heap[i]));
+		keyed.push_back(slotOf(heap[i]));
+	AoCSleepyLayout layout;
+	packLayout(keyed, layout);
 	xferSlots(xfer, layout);
 	UnsignedInt lastGroupID = 0;
 	std::vector<AoCSavedGroup> groups;
@@ -400,8 +459,8 @@ void AoCSaveFidelity::xfer( Xfer *xfer, std::vector<UpdateModule *> &heap )
 	}
 	xferPathfindQueue(xfer, queue);
 	if (xfer->getXferMode() == XFER_SAVE)
-		harnessLine("wrote the logic random state (seed CRC %08X), the heap layout (%u modules), %u AI groups (last group id %u) and the pathfind queue (head %d tail %d)",
-			random.seedCRC(), (UnsignedInt)layout.size(), (UnsignedInt)groups.size(), lastGroupID, queue.head, queue.tail);
+		harnessLine("wrote the logic random state (seed CRC %08X), the heap layout (%u modules, %u tags), %u AI groups (last group id %u) and the pathfind queue (head %d tail %d)",
+			random.seedCRC(), (UnsignedInt)layout.slots.size(), (UnsignedInt)layout.tags.size(), (UnsignedInt)groups.size(), lastGroupID, queue.head, queue.tail);
 }
 
 void AoCSaveFidelity::beginObjectLoad()
@@ -419,7 +478,7 @@ void AoCSaveFidelity::clearPending()
 	Pending &p = pending();
 	p.hasRandom = FALSE;
 	p.hasLayout = FALSE;
-	p.layout.clear();
+	p.layout = AoCSleepyLayout();
 	p.hasGroups = FALSE;
 	p.groups.clear();
 	p.hasQueue = FALSE;
@@ -440,34 +499,37 @@ Bool AoCSaveFidelity::restoreSleepyLayout( std::vector<UpdateModule *> &heap )
 		return FALSE;
 	p.hasLayout = FALSE;
 
+	std::vector<AoCSleepySlot> saved;
+	unpackLayout(p.layout, saved);
+	p.layout = AoCSleepyLayout();
 	std::vector<AoCSleepySlot> live;
+	std::vector<UnsignedInt> priorities;
 	live.reserve(heap.size());
+	priorities.reserve(heap.size());
 	for (size_t i = 0; i < heap.size(); ++i)
+	{
 		live.push_back(slotOf(heap[i]));
+		priorities.push_back(heap[i]->friend_getPriority());
+	}
 
 	std::vector<Int> order;
-	if (!matchSlots(p.layout, live, order))
+	const AoCLayoutPlan plan = planLayout(saved, live, priorities, order);
+	if (plan == AOC_LAYOUT_NOT_MATCHED)
 	{
-		harnessLine("heap layout not restored: %u saved slots against %u loaded modules; rebuilt in object order", (UnsignedInt)p.layout.size(), (UnsignedInt)heap.size());
-		p.layout.clear();
+		harnessLine("heap layout not restored: %u saved slots do not match the %u loaded modules; rebuilt in object order", (UnsignedInt)saved.size(), (UnsignedInt)heap.size());
 		return FALSE;
 	}
-	p.layout.clear();
 
 	std::vector<UpdateModule *> arranged(heap.size());
-	std::vector<UnsignedInt> priorities(heap.size());
 	for (size_t i = 0; i < order.size(); ++i)
-	{
 		arranged[i] = heap[order[i]];
-		priorities[i] = arranged[i]->friend_getPriority();
-	}
 	heap.swap(arranged);
 	for (size_t i = 0; i < heap.size(); ++i)
 		heap[i]->friend_setIndexInLogic((Int)i);
 
-	if (!isMinHeap(priorities))
+	if (plan == AOC_LAYOUT_NOT_A_HEAP)
 	{
-		harnessLine("heap layout restored but not a heap (%u modules); heapified", (UnsignedInt)heap.size());
+		harnessLine("heap layout restored but not a heap (%u modules); heapified from the saved order", (UnsignedInt)heap.size());
 		return FALSE;
 	}
 	harnessLine("heap layout restored: %u modules in their saved slots", (UnsignedInt)heap.size());

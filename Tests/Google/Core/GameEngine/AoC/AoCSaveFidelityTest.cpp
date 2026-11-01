@@ -394,24 +394,33 @@ TEST(AoCSaveFidelityTest, SavedLayoutKeepsTheOrderOfTiesWhereARebuildDoesNot)
 	}
 	ASSERT_TRUE(AoCSaveFidelity::isMinHeap(game.priorities()));
 
-	// The save: the layout through its block.
+	// The save: the layout through its block, every module named by its one tag (key 1, tag index 0).
 	const std::string path = ::testing::TempDir() + "AoCSaveFidelityLayout.sav";
 	{
-		std::vector<AoCSleepySlot> slots = game.keys();
+		AoCSleepyLayout layout;
+		layout.tags.push_back(AsciiString("ModuleTag_Update"));
+		const std::vector<AoCSleepySlot> keys = game.keys();
+		for (size_t i = 0; i < keys.size(); ++i)
+			layout.slots.push_back(AoCSleepySlot(keys[i].objectID, 0));
 		XferSave save;
 		save.open(path.c_str());
-		AoCSaveFidelity::xferSlots(&save, slots);
+		AoCSaveFidelity::xferSlots(&save, layout);
 		save.close();
-		EXPECT_EQ(readFile(path).size(), sizeof(UnsignedInt) + 12 * (sizeof(ObjectID) + sizeof(UnsignedShort)));
+		EXPECT_EQ(readFile(path).size(), sizeof(UnsignedShort) + 1 + 16 + sizeof(UnsignedInt) + 12 * (sizeof(ObjectID) + sizeof(UnsignedShort)));
 	}
-	std::vector<AoCSleepySlot> loadedSlots;
+	AoCSleepyLayout loadedLayout;
 	{
 		XferLoad load;
 		load.open(path.c_str());
-		AoCSaveFidelity::xferSlots(&load, loadedSlots);
+		AoCSaveFidelity::xferSlots(&load, loadedLayout);
 		load.close();
 	}
 	remove(path.c_str());
+	ASSERT_EQ(loadedLayout.tags.size(), 1u);
+	EXPECT_STREQ(loadedLayout.tags[0].str(), "ModuleTag_Update");
+	std::vector<AoCSleepySlot> loadedSlots;
+	for (size_t i = 0; i < loadedLayout.slots.size(); ++i)
+		loadedSlots.push_back(AoCSleepySlot(loadedLayout.slots[i].objectID, 1));	// the tag's name key
 	ASSERT_EQ(loadedSlots, game.keys());
 
 	// The load: the modules come back in object order (GameLogic::loadPostProcess's collection pass).
@@ -448,4 +457,106 @@ TEST(AoCSaveFidelityTest, SavedLayoutKeepsTheOrderOfTiesWhereARebuildDoesNot)
 			rebuiltDiffers = TRUE;
 	}
 	EXPECT_TRUE(rebuiltDiffers) << "the stock rebuild runs ties in another order (the effect decision 2 removes)";
+}
+
+// Decision 2, review finding 6: the layout names modules by tag, so a template whose module list changed order since the
+// save still restores every slot; the tag list holds each name once and a slot's tag index comes back unchanged.
+TEST(AoCSaveFidelityTest, HeapLayoutRoundTripsByModuleTag)
+{
+	const std::string path = ::testing::TempDir() + "AoCSaveFidelityTags.sav";
+	AoCSleepyLayout written;
+	written.tags.push_back(AsciiString("ModuleTag_03_AoCF2"));
+	written.tags.push_back(AsciiString("ModuleTag_AI"));
+	written.slots.push_back(AoCSleepySlot((ObjectID)7, 1));
+	written.slots.push_back(AoCSleepySlot((ObjectID)7, 0));
+	written.slots.push_back(AoCSleepySlot((ObjectID)3, 1));
+	{
+		XferSave save;
+		save.open(path.c_str());
+		AoCSaveFidelity::xferSlots(&save, written);
+		save.close();
+	}
+	EXPECT_EQ(readFile(path).size(), sizeof(UnsignedShort) + (1 + 18) + (1 + 12) + sizeof(UnsignedInt) + 3 * (sizeof(ObjectID) + sizeof(UnsignedShort)));
+	AoCSleepyLayout loaded;
+	loaded.tags.push_back(AsciiString("stale"));	// replaced, not appended to
+	{
+		XferLoad load;
+		load.open(path.c_str());
+		AoCSaveFidelity::xferSlots(&load, loaded);
+		load.close();
+	}
+	remove(path.c_str());
+	ASSERT_EQ(loaded.tags.size(), 2u);
+	EXPECT_STREQ(loaded.tags[0].str(), "ModuleTag_03_AoCF2");
+	EXPECT_STREQ(loaded.tags[1].str(), "ModuleTag_AI");
+	EXPECT_EQ(loaded.slots, written.slots);
+
+	// Keyed by tag (keys 501 and 502 for the two names), the saved slots find their modules although the live object 7
+	// lists its modules in the other order now; keyed by list index they would have swapped.
+	std::vector<AoCSleepySlot> saved;
+	saved.push_back(AoCSleepySlot((ObjectID)7, 502));
+	saved.push_back(AoCSleepySlot((ObjectID)7, 501));
+	saved.push_back(AoCSleepySlot((ObjectID)3, 502));
+	std::vector<AoCSleepySlot> live;
+	live.push_back(AoCSleepySlot((ObjectID)3, 502));
+	live.push_back(AoCSleepySlot((ObjectID)7, 502));
+	live.push_back(AoCSleepySlot((ObjectID)7, 501));
+	std::vector<Int> order;
+	ASSERT_TRUE(AoCSaveFidelity::matchSlots(saved, live, order));
+	const Int expected[] = { 1, 2, 0 };
+	EXPECT_EQ(order, std::vector<Int>(expected, expected + 3));
+}
+
+// Decision 2, review finding 9: the restore decision. A layout that matches and is a heap restores; one whose modules
+// match but whose saved order is no heap for the loaded priorities is heapified from that order; one that does not match
+// (a module added to or removed from a template, an unknown tag) leaves the stock rebuild in object order.
+TEST(AoCSaveFidelityTest, PlanLayoutFallsBackWhenTheSavedLayoutCannotStand)
+{
+	std::vector<AoCSleepySlot> live;	// object order
+	live.push_back(AoCSleepySlot((ObjectID)3, 501));
+	live.push_back(AoCSleepySlot((ObjectID)7, 501));
+	live.push_back(AoCSleepySlot((ObjectID)7, 502));
+	live.push_back(AoCSleepySlot((ObjectID)12, 501));
+	std::vector<AoCSleepySlot> saved;	// heap order in the saving game
+	saved.push_back(AoCSleepySlot((ObjectID)7, 502));
+	saved.push_back(AoCSleepySlot((ObjectID)12, 501));
+	saved.push_back(AoCSleepySlot((ObjectID)3, 501));
+	saved.push_back(AoCSleepySlot((ObjectID)7, 501));
+	std::vector<UnsignedInt> priorities(4);	// live order: 3, 7/501, 7/502, 12
+	priorities[0] = 50; priorities[1] = 60; priorities[2] = 40; priorities[3] = 44;
+
+	std::vector<Int> order;
+	EXPECT_EQ(AoCSaveFidelity::planLayout(saved, live, priorities, order), AOC_LAYOUT_RESTORED);
+	const Int expected[] = { 2, 3, 0, 1 };	// saved order 40, 44, 50, 60
+	EXPECT_EQ(order, std::vector<Int>(expected, expected + 4));
+
+	priorities[2] = 70;	// the saved root now wakes after its children
+	EXPECT_EQ(AoCSaveFidelity::planLayout(saved, live, priorities, order), AOC_LAYOUT_NOT_A_HEAP);
+	EXPECT_EQ(order, std::vector<Int>(expected, expected + 4)) << "the saved order, which the caller heapifies";
+	ModelHeap fallback;
+	for (size_t i = 0; i < order.size(); ++i)
+	{
+		Entry e;
+		e.key = live[order[i]];
+		e.priority = priorities[order[i]];
+		fallback.a.push_back(e);
+	}
+	fallback.remake();
+	EXPECT_TRUE(AoCSaveFidelity::isMinHeap(fallback.priorities())) << "heapified, a valid heap again";
+
+	priorities[2] = 40;
+	std::vector<AoCSleepySlot> grown = live;
+	grown.push_back(AoCSleepySlot((ObjectID)12, 503));	// a module the template gained since the save
+	std::vector<UnsignedInt> grownPriorities = priorities;
+	grownPriorities.push_back(80);
+	EXPECT_EQ(AoCSaveFidelity::planLayout(saved, grown, grownPriorities, order), AOC_LAYOUT_NOT_MATCHED);
+	EXPECT_TRUE(order.empty());
+
+	std::vector<AoCSleepySlot> renamed = live;
+	renamed[3] = AoCSleepySlot((ObjectID)12, 509);	// the module's tag changed
+	EXPECT_EQ(AoCSaveFidelity::planLayout(saved, renamed, priorities, order), AOC_LAYOUT_NOT_MATCHED);
+	EXPECT_TRUE(order.empty());
+
+	std::vector<UnsignedInt> short3(priorities.begin(), priorities.end() - 1);
+	EXPECT_EQ(AoCSaveFidelity::planLayout(saved, live, short3, order), AOC_LAYOUT_NOT_MATCHED) << "a priority per module";
 }
