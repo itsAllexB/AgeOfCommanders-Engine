@@ -159,6 +159,78 @@ TEST(AoCBuildSpeedTest, PerMilleParsesAWholeNumberOfAtLeastOne)
 	EXPECT_EQ(value, 600) << "a refused line leaves the field as it was";
 }
 
+// Review F8, finding 6 (c): a value that is not a number, or no value, is an INI error too.
+TEST(AoCBuildSpeedTest, PerMilleRefusesANonNumericOrMissingValue)
+{
+	char buffer[256];
+	Int value = 600;
+	startLine(buffer, sizeof(buffer), "AoCBuildSpeedPerMille = fast");
+	EXPECT_THROW(AoCBuildSpeed::parsePerMille(nullptr, nullptr, &value, nullptr), decltype(INI_INVALID_DATA)) << "not a number";
+	startLine(buffer, sizeof(buffer), "AoCBuildSpeedPerMille =");
+	EXPECT_THROW(AoCBuildSpeed::parsePerMille(nullptr, nullptr, &value, nullptr), decltype(INI_INVALID_DATA)) << "no value";
+	EXPECT_EQ(value, 600) << "a refused line leaves the field as it was";
+}
+
+// Review F8, finding 2: GameData.ini AoCBackToWorkRange, a whole number of at least 0 (default 150).
+TEST(AoCBuildSpeedTest, BackToWorkRangeParsesAWholeNumberOfAtLeastZero)
+{
+	char buffer[256];
+	Int range = AOC_BACK_TO_WORK_DEFAULT_RANGE;
+	EXPECT_EQ(range, 150);
+	startLine(buffer, sizeof(buffer), "AoCBackToWorkRange = 700");
+	AoCBuildSpeed::parseRange(nullptr, nullptr, &range, nullptr);
+	EXPECT_EQ(range, 700);
+	startLine(buffer, sizeof(buffer), "AoCBackToWorkRange = 0");
+	AoCBuildSpeed::parseRange(nullptr, nullptr, &range, nullptr);
+	EXPECT_EQ(range, 0);
+	startLine(buffer, sizeof(buffer), "AoCBackToWorkRange = -1");
+	EXPECT_THROW(AoCBuildSpeed::parseRange(nullptr, nullptr, &range, nullptr), decltype(INI_INVALID_DATA)) << "negative";
+	startLine(buffer, sizeof(buffer), "AoCBackToWorkRange = near");
+	EXPECT_THROW(AoCBuildSpeed::parseRange(nullptr, nullptr, &range, nullptr), decltype(INI_INVALID_DATA)) << "not a number";
+	EXPECT_EQ(range, 0) << "a refused line leaves the field as it was";
+}
+
+// Review F8, findings 2 and 6 (a): the back-to-work decision when a worker's build task ends through
+// internalTaskComplete. That is both the completion of the structure and the stock end of a builder that finds another
+// builder at work on its target ("can't double up", DozerActionMoveToActionPosState), so the refused builder decides the
+// same way. A cancelled task (the scaffold sold or destroyed, the player's order elsewhere) ends through
+// internalCancelTask, which never asks, so the worker idles as in stock.
+TEST(AoCBuildSpeedTest, BackToWorkDecision)
+{
+	const Int wood = 2;
+	// completed (or refused at a busy scaffold), assigned, nothing else queued, a node of the type in range: back to work
+	EXPECT_EQ(AoCBuildSpeed::backToWork(wood, FALSE, TRUE), AOC_BACK_TO_WORK_GO);
+	// cash is a type too (a player's dock on a stock warehouse assigns it)
+	EXPECT_EQ(AoCBuildSpeed::backToWork(0, FALSE, TRUE), AOC_BACK_TO_WORK_GO);
+	// never assigned (every AI worker in B1, every worker with stock data): idle, whatever else holds
+	EXPECT_EQ(AoCBuildSpeed::backToWork(-1, FALSE, TRUE), AOC_BACK_TO_WORK_UNASSIGNED);
+	EXPECT_EQ(AoCBuildSpeed::backToWork(-1, TRUE, FALSE), AOC_BACK_TO_WORK_UNASSIGNED);
+	// a repair queued behind the build runs first
+	EXPECT_EQ(AoCBuildSpeed::backToWork(wood, TRUE, TRUE), AOC_BACK_TO_WORK_TASK_PENDING);
+	EXPECT_EQ(AoCBuildSpeed::backToWork(wood, TRUE, FALSE), AOC_BACK_TO_WORK_TASK_PENDING);
+	// no node of the type within AoCBackToWorkRange of the site: idle, no walk home
+	EXPECT_EQ(AoCBuildSpeed::backToWork(wood, FALSE, FALSE), AOC_BACK_TO_WORK_NONE_IN_RANGE);
+}
+
+// The range test: 2D, squares compared, the boundary included, height ignored.
+TEST(AoCBuildSpeedTest, WithinRangeIsTwoDimensionalAndInclusive)
+{
+	Coord3D site;
+	site.x = 4120.0f; site.y = 4580.0f; site.z = 12.5f;
+	Coord3D node;
+	node.x = 4210.0f; node.y = 4700.0f; node.z = 40.0f;	// 90, 120: exactly 150 away in 2D
+	EXPECT_TRUE(AoCBuildSpeed::withinRange(site, node, 150.0f));
+	EXPECT_FALSE(AoCBuildSpeed::withinRange(site, node, 149.0f));
+	EXPECT_TRUE(AoCBuildSpeed::withinRange(node, site, 150.0f)) << "symmetric";
+	EXPECT_TRUE(AoCBuildSpeed::withinRange(site, site, 0.0f)) << "range 0 is the spot itself";
+	Coord3D far;
+	far.x = 4080.0f; far.y = 4180.0f; far.z = 0.0f;
+	Coord3D tree;
+	tree.x = 4232.2f; tree.y = 4519.5f; tree.z = 0.0f;	// the F8 gate's far site and its nearest tree, about 372 apart
+	EXPECT_FALSE(AoCBuildSpeed::withinRange(far, tree, 150.0f));
+	EXPECT_TRUE(AoCBuildSpeed::withinRange(far, tree, 700.0f));
+}
+
 // The harness build log's bookkeeping: start lines, distinct builders, frames from the first start line to completion.
 TEST(AoCBuildSpeedTest, BuildLogCountsStartsBuildersAndFrames)
 {
