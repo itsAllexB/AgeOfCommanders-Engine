@@ -30,6 +30,7 @@
 // USER INCLUDES //////////////////////////////////////////////////////////////////////////////////
 #include "PreRTS.h"	// This must go first in EVERY cpp file in the GameEngine
 
+#include "AoC/AoCRules.h"	// AoC @feature F8
 #include "Common/ActionManager.h"
 #include "Common/Team.h"
 #include "Common/StateMachine.h"
@@ -645,6 +646,10 @@ void WorkerAIUpdate::newTask( DozerTask task, Object* target )
 	if( target == nullptr )
 		return;
 
+	// AoC @hook 02/11/2026 A dozer task wins over a pending back-to-work latch, so the next build is not walked away from (D11 F8).
+	if( AoCRules::enabled() )
+		setForceWantingState( FALSE );
+
 	m_preferredDock = INVALID_ID; // If we are dozing, we don't want any supply truck stuff going on. jba.
 
 	//
@@ -1100,6 +1105,11 @@ void WorkerAIUpdate::aiDoCommand(const AICommandParms* parms)
 
 	if (!isAllowedToRespondToAiCommands(parms))
 		return;
+
+	// AoC @hook 02/11/2026 A player's order wins over a pending back-to-work latch; a dock order is supply work itself, and
+	// the skirmish AI sends its gatherers' docks as CMD_FROM_PLAYER right after setting the latch (AIPlayer.cpp) (D11 F8).
+	if( AoCRules::enabled() && parms->m_cmdSource == CMD_FROM_PLAYER && parms->m_cmd != AICMD_DOCK )
+		setForceWantingState( FALSE );
 
 	// create our machines if they don't yet exist
 	createMachines();
